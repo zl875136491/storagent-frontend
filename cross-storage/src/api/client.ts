@@ -41,6 +41,34 @@ export interface SimpleRegion {
   name: string
 }
 
+export interface ApplicationAuthor {
+  id: string
+  username: string
+  name: string
+}
+
+export interface Application {
+  id: string
+  name: string
+  description: string
+  created_at: string
+  updated_at: string
+  enabled: boolean
+  enabled_at: string | null
+  author: ApplicationAuthor
+  regions: Region[]
+}
+
+export interface ApplicationListResponse {
+  data: Application[]
+}
+
+export interface ApplicationCreateRequest {
+  name: string
+  description: string
+  regions: string[]
+}
+
 export interface MinioServer {
   id: string
   region: SimpleRegion
@@ -154,4 +182,22 @@ export async function createMinioServerApi(
     accessToken,
   )
 }
+
+export async function fetchApplicationsApi(
+  accessToken?: string,
+): Promise<ApplicationListResponse> {
+  return apiGet<ApplicationListResponse>("/api/public/application", accessToken)
+}
+
+export async function createApplicationApi(
+  payload: ApplicationCreateRequest,
+  accessToken?: string,
+): Promise<Application> {
+  return apiPost<ApplicationCreateRequest, Application>(
+    "/api/public/application",
+    payload,
+    accessToken,
+  )
+}
+
 

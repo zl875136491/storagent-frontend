@@ -47,6 +47,13 @@ function AppShell() {
                   </SidebarMenuButton>
                 )}
               </NavLink>
+              <NavLink to="/data/basic/application">
+                {({ isActive }) => (
+                  <SidebarMenuButton active={isActive} icon="A">
+                    应用管理
+                  </SidebarMenuButton>
+                )}
+              </NavLink>
             </SidebarMenu>
           </div>
 

@@ -5,6 +5,7 @@ import AppLayout from "./layouts/AppLayout"
 import LoginPage from "./pages/LoginPage"
 import RegionPage from "./pages/data/RegionPage"
 import MinioPage from "./pages/data/MinioPage"
+import ApplicationPage from "./pages/data/ApplicationPage"
 
 export function App() {
   return (
@@ -19,6 +20,7 @@ export function App() {
               <Route path="data">
                 <Route path="basic">
                   <Route path="region" element={<RegionPage />} />
+                  <Route path="application" element={<ApplicationPage />} />
                 </Route>
                 <Route path="minio" element={<MinioPage />} />
               </Route>
