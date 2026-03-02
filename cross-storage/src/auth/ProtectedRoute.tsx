@@ -7,10 +7,10 @@ export default function ProtectedRoute() {
 
   if (initializing) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-300 border-t-sky-500" />
-          <div className="text-sm text-slate-500">正在加载用户信息...</div>
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-border/70 border-t-primary" />
+          <div>正在加载用户信息...</div>
         </div>
       </div>
     )

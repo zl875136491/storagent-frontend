@@ -1,79 +1,85 @@
 import { NavLink, Outlet } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
+import { Button } from "../components/ui/button"
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarSectionTitle,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarTrigger,
+} from "../components/ui/sidebar"
+import { ModeToggle } from "../components/mode-toggle"
 
 export default function AppLayout() {
+  return (
+    <SidebarProvider>
+      <AppShell />
+    </SidebarProvider>
+  )
+}
+
+function AppShell() {
   const { user, logout } = useAuth()
 
   return (
-    <div className="flex min-h-screen bg-slate-50 text-slate-900">
-      <aside className="hidden w-64 flex-shrink-0 border-r border-slate-200 bg-white/80 px-4 py-6 backdrop-blur md:block">
-        <div className="mb-8">
-          <div className="text-xs font-semibold uppercase tracking-wide text-sky-500">
+    <div className="flex min-h-screen bg-background text-foreground">
+      <Sidebar className="backdrop-blur">
+        <SidebarHeader>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
             Cross Storage
           </div>
-          <div className="mt-1 text-base font-semibold text-slate-900">
+          <div className="text-sm font-semibold text-sidebar-foreground">
             跨区域存储系统
           </div>
-        </div>
+        </SidebarHeader>
 
-        <nav className="space-y-6 text-sm">
+        <SidebarContent>
           <div>
-            <div className="mb-2 text-xs font-semibold text-slate-500">
-              基础数据管理
-            </div>
-            <NavLink
-              to="/data/basic/region"
-              className={({ isActive }) =>
-                [
-                  "flex items-center rounded-lg px-3 py-2 transition-colors",
-                  isActive
-                    ? "bg-sky-50 text-sky-600"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                ].join(" ")
-              }
-            >
-              <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-sky-100 text-xs text-sky-600">
-                R
-              </span>
-              区域管理
-            </NavLink>
+            <SidebarSectionTitle>基础数据管理</SidebarSectionTitle>
+            <SidebarMenu>
+              <NavLink to="/data/basic/region">
+                {({ isActive }) => (
+                  <SidebarMenuButton active={isActive} icon="R">
+                    区域管理
+                  </SidebarMenuButton>
+                )}
+              </NavLink>
+            </SidebarMenu>
           </div>
 
           <div>
-            <div className="mb-2 text-xs font-semibold text-slate-500">
-              存储服务
-            </div>
-            <NavLink
-              to="/data/minio"
-              className={({ isActive }) =>
-                [
-                  "flex items-center rounded-lg px-3 py-2 transition-colors",
-                  isActive
-                    ? "bg-sky-50 text-sky-600"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                ].join(" ")
-              }
-            >
-              <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-emerald-100 text-xs text-emerald-600">
-                M
-              </span>
-              MinIO 服务管理
-            </NavLink>
+            <SidebarSectionTitle>存储服务</SidebarSectionTitle>
+            <SidebarMenu>
+              <NavLink to="/data/minio">
+                {({ isActive }) => (
+                  <SidebarMenuButton active={isActive} icon="M">
+                    MinIO 服务管理
+                  </SidebarMenuButton>
+                )}
+              </NavLink>
+            </SidebarMenu>
           </div>
-        </nav>
-      </aside>
+        </SidebarContent>
+      </Sidebar>
 
       <div className="flex min-h-screen flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur md:px-6">
+        <header className="flex h-16 items-center justify-between border-b border-border/70 bg-background/80 px-4 backdrop-blur md:px-6">
           <div className="flex items-center gap-3 md:hidden">
-            <div className="text-base font-semibold text-slate-900">Cross Storage</div>
+            <SidebarTrigger />
+            <div className="text-base font-semibold">Cross Storage</div>
           </div>
-          <div className="flex flex-1 items-center justify-end gap-4">
+          <div className="flex flex-1 items-center justify-end gap-3">
+            <ModeToggle />
             {user && (
-              <div className="hidden items-center gap-3 text-sm text-slate-700 md:flex">
+              <div className="hidden items-center gap-3 text-xs text-muted-foreground md:flex">
                 <div className="flex flex-col text-right">
-                  <span className="font-medium">{user.name || user.username}</span>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-sm font-medium text-foreground">
+                    {user.name || user.username}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
                     {user.roles && user.roles.length > 0
                       ? user.roles.join(" / ")
                       : "未分配角色"}
@@ -81,15 +87,15 @@ export default function AppLayout() {
                 </div>
               </div>
             )}
-            <button
-              type="button"
+            <Button
+              size="md"
+              variant="default"
               onClick={() => {
                 void logout()
               }}
-              className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-slate-800"
             >
               退出登录
-            </button>
+            </Button>
           </div>
         </header>
 

@@ -7,6 +7,11 @@ import {
   type RegionCreateRequest,
 } from "../../api/client"
 import { Modal } from "../../components/Modal"
+import { Button } from "../../components/ui/button"
+import { Card, CardContent } from "../../components/ui/card"
+import { Input } from "../../components/ui/input"
+import { Label } from "../../components/ui/label"
+import { Alert } from "../../components/ui/alert"
 
 export default function RegionPage() {
   const { accessToken } = useAuth()
@@ -64,69 +69,66 @@ export default function RegionPage() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">区域管理</h1>
-          <p className="mt-1 text-xs text-slate-500">
+          <h1 className="text-lg font-semibold">区域管理</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
             维护系统中的区域信息，供 MinIO 服务等模块进行关联选择。
           </p>
         </div>
         <div className="sticky top-3">
-          <button
-            type="button"
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center rounded-full bg-sky-500 px-4 py-2 text-xs font-semibold text-white shadow-sm shadow-sky-500/30 hover:bg-sky-400"
-          >
+          <Button size="md" onClick={() => setShowCreateModal(true)}>
             新建区域
-          </button>
+          </Button>
         </div>
       </div>
 
       {loading ? (
         <div className="flex min-h-[200px] items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-sky-500" />
-            <div className="text-xs text-slate-500">正在加载区域列表...</div>
+          <div className="flex flex-col items-center gap-3 text-xs text-muted-foreground">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
+            <div>正在加载区域列表...</div>
           </div>
         </div>
       ) : error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+        <Alert variant="destructive" className="text-xs">
           {error}
-        </div>
+        </Alert>
       ) : regions.length === 0 ? (
-        <div className="flex min-h-[160px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white">
-          <div className="mb-2 text-sm font-medium text-slate-700">
-            暂无区域数据
-          </div>
-          <div className="mb-3 text-xs text-slate-400">
-            点击右上角「新建区域」按钮，创建第一个区域。
-          </div>
-        </div>
+        <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
+          <CardContent className="flex flex-col items-center gap-2 pt-0">
+            <div className="text-sm font-medium text-foreground">
+              暂无区域数据
+            </div>
+            <div className="text-xs text-muted-foreground">
+              点击右上角「新建区域」按钮，创建第一个区域。
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {regions.map((region) => (
-            <div
-              key={region.id}
-              className="flex flex-col rounded-2xl border border-slate-100 bg-white p-4 shadow-sm shadow-slate-100"
-            >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-sky-50 text-xs font-semibold text-sky-600">
-                    R 
+            <Card key={region.id} className="flex flex-col">
+              <CardContent className="pt-4">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary/10 text-[11px] font-semibold text-primary">
+                      R
+                    </div>
+                    <div className="text-sm font-semibold text-foreground">
+                      {region.name}
+                    </div>
                   </div>
-                  <div className="text-sm font-semibold text-slate-900">
-                    {region.name}
+                  <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {region.nickname}
+                  </span>
+                </div>
+                <div className="mt-2 border-t border-dashed border-border/70 pt-2">
+                  <div className="text-[11px] text-muted-foreground">区域 ID</div>
+                  <div className="mt-0.5 truncate text-xs text-foreground/80">
+                    {region.id}
                   </div>
                 </div>
-                <span className="inline-flex rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                  {region.nickname}
-                </span>
-              </div>
-              <div className="mt-2 border-t border-dashed border-slate-100 pt-2">
-                <div className="text-[11px] text-slate-400">区域 ID</div>
-                <div className="mt-0.5 truncate text-xs text-slate-700">
-                  {region.id}
-                </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
@@ -135,58 +137,59 @@ export default function RegionPage() {
         <Modal title="新建区域" onClose={() => setShowCreateModal(false)}>
           <div className="space-y-4 text-sm">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">
+              <Label className="mb-1 block text-xs" htmlFor="region-name">
                 区域名称
-              </label>
-              <input
+              </Label>
+              <Input
+                id="region-name"
                 type="text"
                 value={createForm.name}
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, name: e.target.value }))
                 }
-                className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-400 focus:bg-white"
                 placeholder="例如：华东区域"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">
+              <Label className="mb-1 block text-xs" htmlFor="region-nickname">
                 区域简称
-              </label>
-              <input
+              </Label>
+              <Input
+                id="region-nickname"
                 type="text"
                 value={createForm.nickname}
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, nickname: e.target.value }))
                 }
-                className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-sky-400 focus:bg-white"
                 placeholder="例如：华东"
               />
             </div>
 
             {createError && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              <Alert variant="destructive" className="text-xs">
                 {createError}
-              </div>
+              </Alert>
             )}
 
             <div className="flex justify-end gap-2 pt-2">
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setShowCreateModal(false)}
-                className="inline-flex items-center rounded-full bg-slate-100 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-200"
               >
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
                 disabled={creating}
                 onClick={() => {
                   void handleCreate()
                 }}
-                className="inline-flex items-center rounded-full bg-sky-500 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-sky-300"
               >
                 {creating ? "创建中..." : "确认创建"}
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>

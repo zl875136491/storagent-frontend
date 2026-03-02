@@ -1,4 +1,12 @@
 import type { ReactNode } from "react"
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog"
+import { Button } from "./ui/button"
 
 interface ModalProps {
   title: string
@@ -8,22 +16,24 @@ interface ModalProps {
 
 export function Modal({ title, onClose, children }: ModalProps) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur">
-      <div className="relative w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-          <button
+    <Dialog open>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <Button
             type="button"
-            onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            size="icon"
+            variant="ghost"
             aria-label="关闭"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
           >
-            <span className="text-xl leading-none">&times;</span>
-          </button>
-        </div>
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">{children}</div>
-      </div>
-    </div>
+            ×
+          </Button>
+        </DialogHeader>
+        <DialogBody>{children}</DialogBody>
+      </DialogContent>
+    </Dialog>
   )
 }
 
