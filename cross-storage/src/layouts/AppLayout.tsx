@@ -88,7 +88,7 @@ function AppShell() {
                   </span>
                   <span className="text-[11px] text-muted-foreground">
                     {user.roles && user.roles.length > 0
-                      ? user.roles.join(" / ")
+                      ? user.roles.map(role => role.name).join(" / ")
                       : "未分配角色"}
                   </span>
                 </div>

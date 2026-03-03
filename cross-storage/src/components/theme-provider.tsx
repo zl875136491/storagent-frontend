@@ -19,21 +19,27 @@ const STORAGE_KEY = "cross_storage_theme"
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
+function getInitialTheme(): Theme {
+  if (typeof window === "undefined") {
+    return "light"
+  }
+
+  const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null
+  if (stored === "light" || stored === "dark") {
+    return stored
+  }
+
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches
+  return prefersDark ? "dark" : "light"
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light")
+  const [theme, setTheme] = useState<Theme>(getInitialTheme)
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null
-    if (stored === "light" || stored === "dark") {
-      setTheme(stored)
+    if (typeof window === "undefined") {
       return
     }
-
-    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches
-    setTheme(prefersDark ? "dark" : "light")
-  }, [])
-
-  useEffect(() => {
     const root = document.documentElement
     if (theme === "dark") {
       root.classList.add("dark")

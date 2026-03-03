@@ -17,11 +17,16 @@ export interface TokenResponse {
   token_type: string
 }
 
+export interface Role {
+  id: string
+  name: string
+}
+
 export interface UserProfile {
   id: string
   username: string
   name: string
-  roles: string[]
+  roles: Role[]
   created_at: string
   updated_at: string
   system_time: string

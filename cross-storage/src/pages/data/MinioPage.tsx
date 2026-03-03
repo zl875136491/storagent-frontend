@@ -307,7 +307,7 @@ export default function MinioPage() {
                 onChange={(e) =>
                   setCreateForm((prev) => ({ ...prev, host: e.target.value }))
                 }
-                placeholder="例如：http://10.0.0.1"
+                placeholder="例如：10.0.0.1"
               />
             </div>
 
