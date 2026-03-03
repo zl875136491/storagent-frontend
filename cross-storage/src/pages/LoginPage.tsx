@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
+import { showErrorToast } from "../api/toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Button } from "../components/ui/button"
-import { Alert } from "../components/ui/alert"
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -15,13 +15,11 @@ export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
     e.preventDefault()
-    setError(null)
     if (!username || !password) {
-      setError("请输入用户名和密码")
+      showErrorToast("请输入用户名和密码")
       return
     }
 
@@ -30,10 +28,8 @@ export default function LoginPage() {
       await login({ username, password })
       const redirectTo = location.state?.from?.pathname || "/data/basic/region"
       navigate(redirectTo, { replace: true })
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "登录失败，请检查用户名和密码是否正确",
-      )
+    } catch {
+      // 接口错误已由 api client 通过 toast 展示
     } finally {
       setSubmitting(false)
     }
@@ -76,12 +72,6 @@ export default function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
-
-            {error && (
-              <Alert variant="destructive">
-                <span>{error}</span>
-              </Alert>
-            )}
 
             <Button
               type="submit"

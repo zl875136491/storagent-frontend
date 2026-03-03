@@ -1,3 +1,9 @@
+import {
+  showApiErrorToast,
+  showNetworkErrorToast,
+  showSuccessToast,
+} from "./toast"
+
 const API_BASE_URL = "http://10.32.12.110:6783"
 
 export interface LoginRequest {
@@ -93,15 +99,23 @@ export interface MinioServerCreateRequest {
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
+  const text = await response.text().catch(() => "")
+
   if (!response.ok) {
-    const text = await response.text().catch(() => "")
+    showApiErrorToast(text, `请求失败，状态码 ${response.status}`)
     throw new Error(text || `请求失败，状态码 ${response.status}`)
   }
+
   if (response.status === 204) {
     // @ts-expect-error - no body
     return undefined
   }
-  return (await response.json()) as T
+
+  const data = text ? (JSON.parse(text) as T & { message?: string }) : undefined
+  if (data && typeof (data as { message?: string }).message === "string") {
+    showSuccessToast((data as { message: string }).message)
+  }
+  return data as T
 }
 
 export async function apiGet<T>(path: string, accessToken?: string): Promise<T> {
@@ -110,12 +124,18 @@ export async function apiGet<T>(path: string, accessToken?: string): Promise<T> 
     headers.Authorization = `Bearer ${accessToken}`
   }
 
-  const resp = await fetch(`${API_BASE_URL}${path}`, {
-    method: "GET",
-    headers,
-  })
-
-  return handleResponse<T>(resp)
+  try {
+    const resp = await fetch(`${API_BASE_URL}${path}`, {
+      method: "GET",
+      headers,
+    })
+    return await handleResponse<T>(resp)
+  } catch (e) {
+    if (e instanceof TypeError) {
+      showNetworkErrorToast()
+    }
+    throw e
+  }
 }
 
 export async function apiPost<TRequest, TResponse>(
@@ -130,13 +150,19 @@ export async function apiPost<TRequest, TResponse>(
     headers.Authorization = `Bearer ${accessToken}`
   }
 
-  const resp = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  })
-
-  return handleResponse<TResponse>(resp)
+  try {
+    const resp = await fetch(`${API_BASE_URL}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    })
+    return await handleResponse<TResponse>(resp)
+  } catch (e) {
+    if (e instanceof TypeError) {
+      showNetworkErrorToast()
+    }
+    throw e
+  }
 }
 
 export async function loginApi(payload: LoginRequest): Promise<TokenResponse> {

@@ -8,23 +8,21 @@ import {
   type MinioServerCreateRequest,
   type Region,
 } from "../../api/client"
+import { showErrorToast } from "../../api/toast"
 import { Modal } from "../../components/Modal"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
-import { Alert } from "../../components/ui/alert"
 
 export default function MinioPage() {
   const { accessToken } = useAuth()
   const [servers, setServers] = useState<MinioServer[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [regions, setRegions] = useState<Region[]>([])
   const [regionsLoading, setRegionsLoading] = useState(false)
-  const [regionsError, setRegionsError] = useState<string | null>(null)
 
   const [createForm, setCreateForm] = useState<
     Omit<MinioServerCreateRequest, "port"> & { port: string }
@@ -37,16 +35,14 @@ export default function MinioPage() {
     secret_key: "",
   })
   const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
 
   const loadServers = async () => {
     setLoading(true)
-    setError(null)
     try {
       const resp = await fetchMinioServersApi(accessToken ?? undefined)
       setServers(resp.data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "加载 MinIO 服务列表失败")
+    } catch {
+      // 错误已由 api client toast 展示
     } finally {
       setLoading(false)
     }
@@ -60,13 +56,12 @@ export default function MinioPage() {
   const openCreateModal = () => {
     setShowCreateModal(true)
     setRegionsLoading(true)
-    setRegionsError(null)
     fetchRegionsApi(accessToken ?? undefined)
       .then((resp) => {
         setRegions(resp.data)
       })
-      .catch((err) => {
-        setRegionsError(err instanceof Error ? err.message : "加载区域列表失败")
+      .catch(() => {
+        // 错误已由 api client toast 展示
       })
       .finally(() => {
         setRegionsLoading(false)
@@ -75,17 +70,17 @@ export default function MinioPage() {
 
   const handleCreate = async () => {
     if (!createForm.region) {
-      setCreateError("请选择所属区域")
+      showErrorToast("请选择所属区域")
       return
     }
     if (!createForm.name || !createForm.host || !createForm.port) {
-      setCreateError("请至少填写名称、主机地址和端口")
+      showErrorToast("请至少填写名称、主机地址和端口")
       return
     }
 
     const portNumber = Number.parseInt(createForm.port, 10)
     if (Number.isNaN(portNumber) || portNumber <= 0) {
-      setCreateError("端口号必须为大于 0 的数字")
+      showErrorToast("端口号必须为大于 0 的数字")
       return
     }
 
@@ -99,7 +94,6 @@ export default function MinioPage() {
     }
 
     setCreating(true)
-    setCreateError(null)
     try {
       await createMinioServerApi(payload, accessToken ?? undefined)
       setShowCreateModal(false)
@@ -112,8 +106,8 @@ export default function MinioPage() {
         secret_key: "",
       })
       void loadServers()
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "创建 MinIO 服务失败")
+    } catch {
+      // 错误已由 api client toast 展示
     } finally {
       setCreating(false)
     }
@@ -147,10 +141,6 @@ export default function MinioPage() {
             <div>正在加载 MinIO 服务列表...</div>
           </div>
         </div>
-      ) : error ? (
-        <Alert variant="destructive" className="text-xs">
-          {error}
-        </Alert>
       ) : servers.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">
@@ -224,9 +214,9 @@ export default function MinioPage() {
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <Label className="text-xs font-medium">所属区域</Label>
-                <span className="text-[11px] text-muted-foreground">
-                  从现有区域中选择（Radio 形式）
-                </span>
+                {/* <span className="text-[11px] text-muted-foreground">
+                  从现有区域中选择
+                </span> */}
               </div>
 
               {regionsLoading ? (
@@ -234,10 +224,6 @@ export default function MinioPage() {
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
                   正在加载区域列表...
                 </div>
-              ) : regionsError ? (
-                <Alert variant="destructive" className="text-[11px]">
-                  {regionsError}
-                </Alert>
               ) : regions.length === 0 ? (
                 <Card className="border-dashed bg-muted/30">
                   <CardContent className="px-3 py-2 text-[11px] text-muted-foreground">
@@ -360,12 +346,6 @@ export default function MinioPage() {
                 />
               </div>
             </div>
-
-            {createError && (
-              <Alert variant="destructive" className="text-xs">
-                {createError}
-              </Alert>
-            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button
