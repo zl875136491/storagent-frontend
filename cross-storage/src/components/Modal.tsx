@@ -12,9 +12,10 @@ interface ModalProps {
   title: string
   onClose: () => void
   children: ReactNode
+  disableClose?: boolean
 }
 
-export function Modal({ title, onClose, children }: ModalProps) {
+export function Modal({ title, onClose, children, disableClose }: ModalProps) {
   return (
     <Dialog open>
       <DialogContent>
@@ -24,8 +25,12 @@ export function Modal({ title, onClose, children }: ModalProps) {
             type="button"
             size="icon"
             variant="secondary"
-            aria-label="关闭" 
-            onClick={onClose}
+            aria-label="关闭"
+            disabled={disableClose}
+            onClick={() => {
+              if (disableClose) return
+              onClose()
+            }}
             className="text-muted-foreground hover:text-foreground"
           >
             <XIcon className="h-4 w-4" />

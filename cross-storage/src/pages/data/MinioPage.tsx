@@ -210,7 +210,11 @@ export default function MinioPage() {
       )}
 
       {showCreateModal && (
-        <Modal title="新建 MinIO 服务" onClose={() => setShowCreateModal(false)}>
+        <Modal
+          title="新建 MinIO 服务"
+          onClose={() => setShowCreateModal(false)}
+          disableClose={creating}
+        >
           <div className="space-y-4 text-sm">
             <div>
               <div className="mb-1 flex items-center justify-between">
@@ -366,7 +370,14 @@ export default function MinioPage() {
                 }}
                 className="bg-emerald-500 text-emerald-50 hover:bg-emerald-400 disabled:bg-emerald-300"
               >
-                {creating ? "创建中..." : "确认创建"}
+                {creating ? (
+                  <span className="flex items-center gap-1">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-100/70 border-t-emerald-600" />
+                    <span>创建中...</span>
+                  </span>
+                ) : (
+                  "确认创建"
+                )}
               </Button>
             </div>
           </div>

@@ -4,6 +4,7 @@ import {
   fetchApplicationsApi,
   createApplicationApi,
   fetchRegionsApi,
+  approveApplicationApi,
   type Application,
   type ApplicationCreateRequest,
   type Region,
@@ -21,6 +22,8 @@ export default function ApplicationPage() {
 
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
+  const [approvalTarget, setApprovalTarget] = useState<Application | null>(null)
+  const [approving, setApproving] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [regions, setRegions] = useState<Region[]>([])
@@ -28,6 +31,7 @@ export default function ApplicationPage() {
 
   const [createForm, setCreateForm] = useState<ApplicationCreateRequest>({
     name: "",
+    nickname: "",
     description: "",
     regions: [],
   })
@@ -83,6 +87,11 @@ export default function ApplicationPage() {
       return
     }
 
+    if (!createForm.nickname.trim()) {
+      showErrorToast("请填写应用别名")
+      return
+    }
+
     if (!createForm.description.trim()) {
       showErrorToast("请填写应用描述")
       return
@@ -99,6 +108,7 @@ export default function ApplicationPage() {
       setShowCreateModal(false)
       setCreateForm({
         name: "",
+        nickname: "",
         description: "",
         regions: [],
       })
@@ -107,6 +117,21 @@ export default function ApplicationPage() {
       // 错误已由 api client toast 展示
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleApprove = async () => {
+    if (!approvalTarget || approving) return
+    setApproving(true)
+    try {
+      // 授权接口会通过全局 toast 展示成功或失败信息
+      await approveApplicationApi(approvalTarget.id, accessToken ?? undefined)
+      await loadApplications()
+      setApprovalTarget(null)
+    } catch {
+      // 错误已由 api client toast 展示
+    } finally {
+      setApproving(false)
     }
   }
 
@@ -157,6 +182,11 @@ export default function ApplicationPage() {
                         {app.name}
                       </div>
                     </div>
+                    {app.nickname && (
+                      <div className="text-[11px] text-muted-foreground">
+                        别名：{app.nickname}
+                      </div>
+                    )}
                     <div className="mt-1 text-[11px] text-muted-foreground">
                       {app.description}
                     </div>
@@ -166,13 +196,24 @@ export default function ApplicationPage() {
                       {app.id}
                     </span>
                     <span
-                      className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        app.enabled
-                          ? "bg-emerald-500/10 text-emerald-600"
-                          : "bg-muted text-muted-foreground"
-                      }`}
+                      className="inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-medium"
                     >
-                      {app.enabled ? "已启用" : "未启用"}
+                      {app.enabled ? (
+                        <span className="inline-flex items-center justify-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
+                          已授权
+                        </span>
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={approving}
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => setApprovalTarget(app)}
+                        >
+                          授权
+                        </Button>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -188,6 +229,18 @@ export default function ApplicationPage() {
                     <div className="text-muted-foreground/70">创建时间</div>
                     <div className="mt-0.5 text-xs text-foreground/80">
                       {app.created_at.replace("T", " ")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground/70">授权状态</div>
+                    <div className="mt-0.5 text-xs text-foreground/80">
+                      {app.enabled ? "已授权" : "未授权"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground/70">授权时间</div>
+                    <div className="mt-0.5 text-xs text-foreground/80">
+                      {app.enabled_at ? app.enabled_at.replace("T", " ") : "-"}
                     </div>
                   </div>
                   <div className="md:col-span-2">
@@ -227,6 +280,23 @@ export default function ApplicationPage() {
                     setCreateForm((prev) => ({ ...prev, name: e.target.value }))
                   }
                   placeholder="例如：CPL"
+                />
+              </div>
+              <div>
+                <Label className="mb-1 block text-xs" htmlFor="app-nickname">
+                  应用别名
+                </Label>
+                <Input
+                  id="app-nickname"
+                  type="text"
+                  value={createForm.nickname}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      nickname: e.target.value,
+                    }))
+                  }
+                  placeholder="例如：跨区域存储前端"
                 />
               </div>
               <div>
@@ -310,7 +380,104 @@ export default function ApplicationPage() {
                 disabled={creating || regions.length === 0}
                 onClick={() => void handleCreate()}
               >
-                {creating ? "创建中..." : "确认创建"}
+                {creating ? 
+                <span className="flex items-center gap-1">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-100/70 border-t-emerald-600" />
+                    <span>创建中</span>
+                  </span>
+                : "确认创建"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </Modal>
+      )}
+      {approvalTarget && (
+        <Modal
+          title="确认授权应用"
+          onClose={() => {
+            if (approving) return
+            setApprovalTarget(null)
+          }}
+          disableClose={approving}
+        >
+          <div className="space-y-4 text-sm">
+            <p className="text-[13px] text-muted-foreground">
+              确认要为以下应用执行授权操作？
+            </p>
+            <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
+              <div>
+                <div className="text-muted-foreground/70">应用名称</div>
+                <div className="mt-0.5 text-foreground/90">
+                  {approvalTarget.name}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground/70">应用别名</div>
+                <div className="mt-0.5 text-foreground/90">
+                  {approvalTarget.nickname || "-"}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground/70">创建人</div>
+                <div className="mt-0.5 text-foreground/90">
+                  {approvalTarget.author?.name || approvalTarget.author?.username}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground/70">创建时间</div>
+                <div className="mt-0.5 text-foreground/90">
+                  {approvalTarget.created_at.replace("T", " ")}
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-muted-foreground/70">关联区域</div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {approvalTarget.regions.length === 0 ? (
+                    <span className="text-[11px] text-muted-foreground">
+                      暂无关联区域
+                    </span>
+                  ) : (
+                    approvalTarget.regions.map((region) => (
+                      <span
+                        key={region.id}
+                        className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                      >
+                        {region.name}
+                        {region.nickname ? `（${region.nickname}）` : ""}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={approving}
+                onClick={() => {
+                  if (approving) return
+                  setApprovalTarget(null)
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={approving}
+                onClick={() => void handleApprove()}
+              >
+                {approving ? (
+                  <span className="flex items-center gap-1">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-100/70 border-t-emerald-600" />
+                    <span>授权中</span>
+                  </span>
+                ) : (
+                  "确认授权"
+                )}
               </Button>
             </DialogFooter>
           </div>

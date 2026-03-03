@@ -61,6 +61,7 @@ export interface ApplicationAuthor {
 export interface Application {
   id: string
   name: string
+  nickname: string
   description: string
   created_at: string
   updated_at: string
@@ -76,6 +77,7 @@ export interface ApplicationListResponse {
 
 export interface ApplicationCreateRequest {
   name: string
+  nickname: string
   description: string
   regions: string[]
 }
@@ -227,6 +229,21 @@ export async function createApplicationApi(
   return apiPost<ApplicationCreateRequest, Application>(
     "/api/public/application",
     payload,
+    accessToken,
+  )
+}
+
+export interface ApplicationApprovalResponse {
+  message: string
+}
+
+export async function approveApplicationApi(
+  applicationId: string,
+  accessToken?: string,
+): Promise<ApplicationApprovalResponse> {
+  return apiPost<Record<string, never>, ApplicationApprovalResponse>(
+    `/api/public/application/${applicationId}/approval`,
+    {} as Record<string, never>,
     accessToken,
   )
 }
