@@ -161,7 +161,8 @@ export default function MinioPage() {
                   <div>
                     <div className="mb-1 flex items-center gap-2">
                       <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500/10 text-[11px] font-semibold text-emerald-600">
-                        M
+                        {/* 获取 MinIO 服务名称的第一个字符 */}
+                        {server.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="text-sm font-semibold text-foreground">
                         {server.name}

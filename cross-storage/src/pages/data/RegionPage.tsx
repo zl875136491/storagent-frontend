@@ -103,7 +103,7 @@ export default function RegionPage() {
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary/10 text-[11px] font-semibold text-primary">
-                      R
+                      {region.nickname.charAt(0).toUpperCase()}
                     </div>
                     <div className="text-sm font-semibold text-foreground">
                       {region.name}

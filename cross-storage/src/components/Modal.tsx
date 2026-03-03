@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "./ui/dialog"
 import { Button } from "./ui/button"
-
+import { XIcon } from "lucide-react"
 interface ModalProps {
   title: string
   onClose: () => void
@@ -23,12 +23,12 @@ export function Modal({ title, onClose, children }: ModalProps) {
           <Button
             type="button"
             size="icon"
-            variant="ghost"
-            aria-label="关闭"
+            variant="secondary"
+            aria-label="关闭" 
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground"
           >
-            ×
+            <XIcon className="h-4 w-4" />
           </Button>
         </DialogHeader>
         <DialogBody>{children}</DialogBody>

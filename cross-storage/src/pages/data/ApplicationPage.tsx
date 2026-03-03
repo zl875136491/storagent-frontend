@@ -12,6 +12,7 @@ import { showErrorToast } from "../../api/toast"
 import { Modal } from "../../components/Modal"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
+import { DialogFooter } from "../../components/ui/dialog"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 
@@ -119,12 +120,7 @@ export default function ApplicationPage() {
           </p>
         </div>
         <div className="sticky top-3">
-          <Button
-            type="button"
-            size="md"
-            onClick={openCreateModal}
-            className="bg-sky-500 text-sky-50 hover:bg-sky-400"
-          >
+          <Button type="button" size="md" onClick={openCreateModal}>
             新建应用
           </Button>
         </div>
@@ -133,7 +129,7 @@ export default function ApplicationPage() {
       {loading ? (
         <div className="flex min-h-[200px] items-center justify-center">
           <div className="flex flex-col items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-sky-500" />
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
             <div>正在加载应用列表...</div>
           </div>
         </div>
@@ -154,8 +150,8 @@ export default function ApplicationPage() {
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div>
                     <div className="mb-1 flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-sky-500/10 text-[11px] font-semibold text-sky-600">
-                        A
+                      <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary/10 text-[11px] font-semibold text-primary">
+                        {app.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="text-sm font-semibold text-foreground">
                         {app.name}
@@ -283,7 +279,7 @@ export default function ApplicationPage() {
                         value={region.id}
                         checked={createForm.regions.includes(region.id)}
                         onChange={() => toggleRegion(region.id)}
-                        className="h-3.5 w-3.5 border-border text-sky-500 focus:ring-0"
+                        className="h-3.5 w-3.5 border-border text-primary focus:ring-0"
                       />
                       <div className="flex flex-col">
                         <span className="text-xs font-medium text-foreground">
@@ -299,7 +295,7 @@ export default function ApplicationPage() {
               )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
@@ -312,14 +308,11 @@ export default function ApplicationPage() {
                 type="button"
                 size="sm"
                 disabled={creating || regions.length === 0}
-                onClick={() => {
-                  void handleCreate()
-                }}
-                className="bg-sky-500 text-sky-50 hover:bg-sky-400 disabled:bg-sky-300"
+                onClick={() => void handleCreate()}
               >
                 {creating ? "创建中..." : "确认创建"}
               </Button>
-            </div>
+            </DialogFooter>
           </div>
         </Modal>
       )}

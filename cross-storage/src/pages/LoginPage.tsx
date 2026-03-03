@@ -16,8 +16,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
-  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
+    if (submitting) return
+    e?.preventDefault()
     if (!username || !password) {
       showErrorToast("请输入用户名和密码")
       return
@@ -70,6 +71,12 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="请输入密码"
                 autoComplete="current-password"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    void handleSubmit()
+                  }
+                }}
               />
             </div>
 
