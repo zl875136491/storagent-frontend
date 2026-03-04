@@ -215,7 +215,7 @@ export default function MinioPage() {
           onClose={() => setShowCreateModal(false)}
           disableClose={creating}
         >
-          <div className="space-y-4 text-sm">
+          <div className="space-y-4 p-1 text-sm">
             <div>
               <div className="mb-1 flex items-center justify-between">
                 <Label className="text-xs font-medium">所属区域</Label>

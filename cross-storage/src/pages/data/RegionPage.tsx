@@ -127,7 +127,7 @@ export default function RegionPage() {
 
       {showCreateModal && (
         <Modal title="新建区域" onClose={() => setShowCreateModal(false)}>
-          <div className="space-y-4 text-sm">
+          <div className="space-y-4 p-1 text-sm">
             <div>
               <Label className="mb-1 block text-xs" htmlFor="region-name">
                 区域名称

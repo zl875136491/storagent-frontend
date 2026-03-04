@@ -67,6 +67,13 @@ function AppShell() {
                   </SidebarMenuButton>
                 )}
               </NavLink>
+              <NavLink to="/data/storage/buckets">
+                {({ isActive }) => (
+                  <SidebarMenuButton active={isActive} icon="B">
+                    存储桶文件详情
+                  </SidebarMenuButton>
+                )}
+              </NavLink>
             </SidebarMenu>
           </div>
         </SidebarContent>

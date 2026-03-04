@@ -266,7 +266,7 @@ export default function ApplicationPage() {
 
       {showCreateModal && (
         <Modal title="新建应用" onClose={() => setShowCreateModal(false)}>
-          <div className="space-y-4 text-sm">
+          <div className="space-y-4 p-1 text-sm">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>
                 <Label className="mb-1 block text-xs" htmlFor="app-name">

@@ -6,6 +6,7 @@ import LoginPage from "./pages/LoginPage"
 import RegionPage from "./pages/data/RegionPage"
 import MinioPage from "./pages/data/MinioPage"
 import ApplicationPage from "./pages/data/ApplicationPage"
+import BucketPage from "./pages/data/BucketPage"
 
 export function App() {
   return (
@@ -23,6 +24,9 @@ export function App() {
                   <Route path="application" element={<ApplicationPage />} />
                 </Route>
                 <Route path="minio" element={<MinioPage />} />
+                <Route path="storage">
+                  <Route path="buckets" element={<BucketPage />} />
+                </Route>
               </Route>
             </Route>
           </Route>

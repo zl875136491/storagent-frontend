@@ -105,6 +105,24 @@ export interface MinioServerCreateRequest {
   secret_key: string
 }
 
+export interface BucketFileItem {
+  name: string
+  size: number
+  last_modified: string
+  children?: BucketFileItem[] | null
+}
+
+export interface BucketInfo {
+  name: string
+  total_size: number
+  created_at: string
+  files: BucketFileItem[]
+}
+
+export interface BucketsResponse {
+  data: BucketInfo[]
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   const text = await response.text().catch(() => "")
 
@@ -203,6 +221,13 @@ export async function fetchMinioServersApi(
   accessToken?: string,
 ): Promise<MinioServerListResponse> {
   return apiGet<MinioServerListResponse>("/api/storage/minio-server", accessToken)
+}
+
+export async function fetchBucketsApi(
+  minioServerId: string,
+  accessToken?: string,
+): Promise<BucketsResponse> {
+  return apiGet<BucketsResponse>(`/api/storage/${minioServerId}/buckets`, accessToken)
 }
 
 export async function createMinioServerApi(
