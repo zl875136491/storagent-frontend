@@ -72,7 +72,7 @@ export function SidebarContent({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("flex-1 space-y-6 text-xs", className)} {...props}>
+    <div className={cn("flex flex-1 flex-col space-y-6 text-xs", className)} {...props}>
       {children}
     </div>
   )

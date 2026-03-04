@@ -8,6 +8,7 @@ import MinioPage from "./pages/data/MinioPage"
 import APIKeyPage from "./pages/data/APIKeyPage"
 import ApplicationPage from "./pages/data/ApplicationPage"
 import BucketPage from "./pages/data/BucketPage"
+import DocsPage from "./pages/docs/DocsPage"
 
 export function App() {
   return (
@@ -30,6 +31,7 @@ export function App() {
                   <Route path="buckets" element={<BucketPage />} />
                 </Route>
               </Route>
+              <Route path="docs" element={<DocsPage />} />
             </Route>
           </Route>
 

@@ -41,7 +41,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-            Cross Storage
+            Storage Agent
           </div>
           <CardTitle className="text-lg">跨区域存储系统登录</CardTitle>
           <CardDescription>

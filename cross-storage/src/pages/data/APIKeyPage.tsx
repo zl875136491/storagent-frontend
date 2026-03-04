@@ -16,6 +16,7 @@ import { DialogFooter } from "../../components/ui/dialog"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { CheckIcon } from "lucide-react"
+import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
 
 export default function APIKeyPage() {
   const { accessToken } = useAuth()
@@ -102,40 +103,22 @@ export default function APIKeyPage() {
   }
 
   const handleCopySuccess = () => {
-    showSuccessToast("已复制 apikey 到剪贴板");
-    setCopySuccess(true);
-    window.setTimeout(() => setCopySuccess(false), 3000);
-  };
-  
-  const handleCopy = async () => {
-    // 兼容性处理, 因为没有 https 无法保证安全上下文, 无法使用 clipboard api
-    if (!createdApiKey?.key) return;
-    const textToCopy = createdApiKey.key;
-    try {
-      const textArea = document.createElement("textarea");
-      textArea.value = textToCopy;
-      
-      // 确保不可见但存在于 DOM 中
-      textArea.style.position = "fixed";
-      textArea.style.left = "-9999px";
-      textArea.style.top = "0";
-      document.body.appendChild(textArea);
-      
-      textArea.focus();
-      textArea.select();
-      
-      const successful = document.execCommand('copy');
-      document.body.removeChild(textArea);
+    showSuccessToast("已复制 apikey 到剪贴板")
+    setCopySuccess(true)
+    window.setTimeout(() => setCopySuccess(false), 3000)
+  }
 
-      if (successful) {
-        handleCopySuccess();
-      } else {
-        throw new Error("execCommand copy failed");
-      }
-    } catch (error) {
-        showErrorToast("复制到剪贴板失败,请手动选择并复制");
+  const handleCopy = async () => {
+    if (!createdApiKey?.key) return
+
+    const successful = await copyTextToClipboard(createdApiKey.key)
+
+    if (successful) {
+      handleCopySuccess()
+    } else {
+      showErrorToast("复制到剪贴板失败,请手动选择并复制")
     }
-  };
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
