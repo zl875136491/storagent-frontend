@@ -5,6 +5,7 @@ import AppLayout from "./layouts/AppLayout"
 import LoginPage from "./pages/LoginPage"
 import RegionPage from "./pages/data/RegionPage"
 import MinioPage from "./pages/data/MinioPage"
+import APIKeyPage from "./pages/data/APIKeyPage"
 import ApplicationPage from "./pages/data/ApplicationPage"
 import BucketPage from "./pages/data/BucketPage"
 
@@ -22,6 +23,7 @@ export function App() {
                 <Route path="basic">
                   <Route path="region" element={<RegionPage />} />
                   <Route path="application" element={<ApplicationPage />} />
+                  <Route path="api-key" element={<APIKeyPage />} />
                 </Route>
                 <Route path="minio" element={<MinioPage />} />
                 <Route path="storage">

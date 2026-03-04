@@ -54,6 +54,13 @@ function AppShell() {
                   </SidebarMenuButton>
                 )}
               </NavLink>
+              <NavLink to="/data/basic/api-key">
+                {({ isActive }) => (
+                  <SidebarMenuButton active={isActive} icon="K">
+                    APIKey 管理
+                  </SidebarMenuButton>
+                )}
+              </NavLink>
             </SidebarMenu>
           </div>
 

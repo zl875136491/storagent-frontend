@@ -299,7 +299,7 @@ export default function ApplicationPage() {
                   placeholder="例如：跨区域存储前端"
                 />
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <Label className="mb-1 block text-xs" htmlFor="app-desc">
                   应用描述
                 </Label>

@@ -273,4 +273,54 @@ export async function approveApplicationApi(
   )
 }
 
+export interface SimpleApplication {
+  id: string
+  name: string
+  nickname: string
+  /**
+   * 可选：部分接口可能返回应用描述
+   */
+  description?: string
+}
+
+export interface SimpleApplicationListResponse {
+  data: SimpleApplication[]
+}
+
+export interface APIKey {
+  id: string
+  key: string
+  application: SimpleApplication
+  expired_at: string | null
+}
+
+export interface APIKeyListResponse {
+  data: APIKey[]
+}
+
+export interface APIKeyCreateRequest {
+  application_id: string
+  /**
+   * 传递 ISO 日期字符串（例如 2026-03-04），后端按 datetime 解析；
+   * 为空或 null 时表示永久有效。
+   */
+  expired_at: string | null
+}
+
+export async function fetchEnabledApplicationsApi(
+  accessToken?: string,
+): Promise<SimpleApplicationListResponse> {
+  return apiGet<SimpleApplicationListResponse>("/api/public/application/enabled", accessToken)
+}
+
+export async function fetchApiKeysApi(accessToken?: string): Promise<APIKeyListResponse> {
+  return apiGet<APIKeyListResponse>("/api/public/api-key", accessToken)
+}
+
+export async function createApiKeyApi(
+  payload: APIKeyCreateRequest,
+  accessToken?: string,
+): Promise<APIKey> {
+  return apiPost<APIKeyCreateRequest, APIKey>("/api/public/api-key", payload, accessToken)
+}
 
