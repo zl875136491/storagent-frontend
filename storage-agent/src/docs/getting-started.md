@@ -1,5 +1,3 @@
-# Storage Agent 跨区域存储系统使用引导
-
 本系统用于统一管理 **区域（Region）**、**应用（Application）**、**MinIO 服务** 与 **存储桶（Bucket）**，并通过 **APIKey** 为调用方提供受控访问能力，帮助你快速搭建和运维跨区域对象存储能力。
 
 ## 核心概念
@@ -101,39 +99,4 @@
    - 设置合适的失效时间（如三个月后），并生成 APIKey。
    - 将生成的 Key 安全下发给对应业务方。
 5. 业务上线后，可通过「存储桶文件详情」观察不同 MinIO 服务及 Bucket 的空间占用情况，排查潜在容量风险。
-
-## 在 Python 中使用 APIKey 示例
-
-下面是一个在 Python 代码中调用 Storage Agent 后端接口的示例，演示如何通过 `Authorization` 请求头携带 APIKey：
-
-```python
-import os
-import requests
-
-# 建议从环境变量中读取 APIKey，而不是写死在代码中
-API_KEY = os.environ.get("CROSS_STORAGE_API_KEY", "<your-apikey-here>")
-
-BASE_URL = "https://your-cross-storage-domain.example.com"
-
-
-def list_buckets():
-    url = f"{BASE_URL}/api/buckets"
-    headers = {
-        # 约定使用 Bearer 形式传递 APIKey，如果你的后端使用的是其他格式，请调整这里
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()
-    return response.json()
-
-
-if __name__ == "__main__":
-    try:
-        data = list_buckets()
-        print("Buckets:", data)
-    except requests.HTTPError as exc:
-        print("调用 Storage Agent 接口失败:", exc.response.status_code, exc.response.text)
-```
 
