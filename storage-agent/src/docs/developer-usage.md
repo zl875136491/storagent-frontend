@@ -32,7 +32,7 @@
 1. 在 APIKey 管理页面，点击“新建 APIKey”按钮
 2. 选择已授权的应用
 3. 设置失效时间
-
+ 
 下面是一个在 Python 代码中调用 Storage Agent 后端接口的示例，演示如何通过 `Authorization` 请求头携带 APIKey：
 
 ```python

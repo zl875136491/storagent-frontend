@@ -12,6 +12,8 @@ import {
   SidebarTrigger,
 } from "../components/ui/sidebar"
 import { ModeToggle } from "../components/mode-toggle"
+import { PageAgent } from 'page-agent'
+import { showErrorToast } from "../api/toast"
 
 export default function AppLayout() {
   return (
@@ -21,8 +23,29 @@ export default function AppLayout() {
   )
 }
 
+type EnvKey =
+  | "VITE_PAGE_AGENT_MODEL"
+  | "VITE_PAGE_AGENT_BASE_URL"
+  | "VITE_PAGE_AGENT_API_KEY"
+
+function getEnvVar(key: EnvKey): string {
+  const value = import.meta.env[key]
+  if (!value) {
+    console.warn(`[pageAgentConfig] 环境变量 ${key} 未设置`)
+    return ""
+  }
+  return value
+}
+
 function AppShell() {
   const { user, logout } = useAuth()
+  const page_agent = new PageAgent({
+      model: getEnvVar("VITE_PAGE_AGENT_MODEL"),
+      baseURL: getEnvVar("VITE_PAGE_AGENT_BASE_URL"),
+      apiKey: getEnvVar("VITE_PAGE_AGENT_API_KEY"),
+      language: "zh-CN"
+    }
+  )
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
@@ -88,6 +111,22 @@ function AppShell() {
 
           <div className="mt-auto border-t border-sidebar-border/60 pt-6">
             <SidebarSectionTitle>文档中心</SidebarSectionTitle>
+            <SidebarMenu>
+              <SidebarMenuButton
+                icon="AI"
+                onClick={() => {
+                  if (!page_agent) {
+                    // toast error
+                    showErrorToast("PageAgent 未初始化，无法打开 AI 助手面板")
+                    console.error("PageAgent 未初始化，无法打开 AI 助手面板")
+                    return
+                  }
+                  void page_agent.panel.show()
+                }}
+              >
+                AI 助手
+              </SidebarMenuButton>
+            </SidebarMenu>
             <SidebarMenu>
               <NavLink to="/docs">
                 {({ isActive }) => (

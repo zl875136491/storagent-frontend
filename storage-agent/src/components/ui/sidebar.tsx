@@ -123,7 +123,7 @@ export function SidebarMenuButton({
       type="button"
       data-active={active ? "true" : "false"}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors",
+        "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 my-2 text-xs font-medium transition-colors",
         "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         "data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary",
         className,
