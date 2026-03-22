@@ -7,7 +7,9 @@ import {
   setApiBaseUrl,
   type PublicEndpointItem,
 } from "@/api/client"
+import { probeBackendEndpointReachable } from "@/api/backendResolver"
 import { setStoredApiBase } from "@/api/apiBaseStorage"
+import { showErrorToast } from "@/api/toast"
 import { cn } from "@/lib/utils"
 
 function normalizeEndpoint(url: string): string {
@@ -21,6 +23,7 @@ export function BackendEndpointSwitcher() {
   const [items, setItems] = useState<PublicEndpointItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [switching, setSwitching] = useState(false)
 
   const currentBase = normalizeEndpoint(getApiBaseUrl())
 
@@ -62,16 +65,26 @@ export function BackendEndpointSwitcher() {
 
   const selected = items.find((it) => normalizeEndpoint(it.endpoint) === currentBase)
 
-  const handlePick = (item: PublicEndpointItem) => {
+  const handlePick = async (item: PublicEndpointItem) => {
     const next = normalizeEndpoint(item.endpoint)
     if (next === currentBase) {
       setOpen(false)
       return
     }
-    setApiBaseUrl(next)
-    setStoredApiBase(next)
-    setOpen(false)
-    window.location.reload()
+    setSwitching(true)
+    try {
+      const ok = await probeBackendEndpointReachable(next)
+      if (!ok) {
+        showErrorToast("该后端不可达：无法访问 /api/public/endpoints，请检查网络或地址后重试")
+        return
+      }
+      setApiBaseUrl(next)
+      setStoredApiBase(next)
+      setOpen(false)
+      window.location.reload()
+    } finally {
+      setSwitching(false)
+    }
   }
 
   return (
@@ -81,13 +94,13 @@ export function BackendEndpointSwitcher() {
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listId : undefined}
-        disabled={loading && items.length === 0}
+        disabled={(loading && items.length === 0) || switching}
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "flex w-full min-w-0 items-center gap-2 rounded-xl border border-border/80 bg-muted/30 px-2.5 py-1.5 text-left transition-colors",
           "hover:border-primary/40 hover:bg-muted/50",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          (loading && items.length === 0) && "pointer-events-none opacity-60",
+          ((loading && items.length === 0) || switching) && "pointer-events-none opacity-60",
         )}
       >
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -136,13 +149,17 @@ export function BackendEndpointSwitcher() {
             <div className="mt-0.5 text-xs text-muted-foreground">未选择</div>
           )}
         </div>
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-            open && "rotate-180",
-          )}
-          aria-hidden
-        />
+        {switching ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+        ) : (
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180",
+            )}
+            aria-hidden
+          />
+        )}
       </button>
 
       {open && (
@@ -169,10 +186,11 @@ export function BackendEndpointSwitcher() {
                       type="button"
                       role="option"
                       aria-selected={active}
-                      onClick={() => handlePick(item)}
+                      disabled={switching}
+                      onClick={() => void handlePick(item)}
                       className={cn(
                         "grid w-full min-w-0 grid-cols-[minmax(0,auto)_minmax(0,auto)_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0 rounded-lg px-2 py-1.5 text-left transition-colors sm:gap-x-3",
-                        "hover:bg-accent/80",
+                        "hover:bg-accent/80 disabled:pointer-events-none disabled:opacity-50",
                         active && "bg-primary/10 ring-1 ring-primary/25",
                       )}
                     >

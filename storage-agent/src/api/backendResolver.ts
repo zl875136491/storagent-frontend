@@ -59,6 +59,12 @@ async function fetchEndpoints(
   }
 }
 
+/** 切换后端前探测：对目标基址请求 GET /api/public/endpoints，成功解析即视为可达 */
+export async function probeBackendEndpointReachable(baseUrl: string): Promise<boolean> {
+  const json = await fetchEndpoints(normalizeBase(baseUrl), 12_000)
+  return json != null
+}
+
 async function tryMasterEndpointFromProbeBase(baseUrl: string): Promise<string | null> {
   const json = await fetchEndpoints(baseUrl, 12_000)
   if (!json?.data?.length) return null
