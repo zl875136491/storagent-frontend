@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
 } from "../components/ui/sidebar"
+import { BackendEndpointSwitcher } from "../components/BackendEndpointSwitcher"
 import { ModeToggle } from "../components/mode-toggle"
 import { PageAgent } from 'page-agent'
 import { showErrorToast } from "../api/toast"
@@ -141,12 +142,15 @@ function AppShell() {
       </Sidebar>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-border/70 bg-background/80 px-4 backdrop-blur md:px-6">
-          <div className="flex items-center gap-3 md:hidden">
+        <header className="flex h-16 items-center gap-3 overflow-visible border-b border-border/70 bg-background/80 px-4 backdrop-blur md:px-6">
+          <div className="flex shrink-0 items-center gap-3 md:hidden">
             <SidebarTrigger />
             <div className="text-base font-semibold">Storage Agent</div>
           </div>
-          <div className="flex flex-1 items-center justify-end gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-visible">
+            <BackendEndpointSwitcher />
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
             <ModeToggle />
             {user && (
               <div className="hidden items-center gap-3 text-xs text-muted-foreground md:flex">

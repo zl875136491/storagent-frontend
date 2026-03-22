@@ -252,7 +252,7 @@ export default function ApplicationPage() {
                           className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
                         >
                           {region.name}
-                          {region.nickname ? `（${region.nickname}）` : ""}
+                          {region.shown_name ? `（${region.shown_name}）` : ""}
                         </span>
                       ))}
                     </div>
@@ -356,7 +356,7 @@ export default function ApplicationPage() {
                           {region.name}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
-                          简称：{region.nickname} · ID：{region.id}
+                          显示名：{region.shown_name} · ID：{region.id}
                         </span>
                       </div>
                     </label>
@@ -443,7 +443,7 @@ export default function ApplicationPage() {
                         className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
                       >
                         {region.name}
-                        {region.nickname ? `（${region.nickname}）` : ""}
+                        {region.shown_name ? `（${region.shown_name}）` : ""}
                       </span>
                     ))
                   )}

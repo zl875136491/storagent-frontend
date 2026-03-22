@@ -3,8 +3,24 @@ import {
   showNetworkErrorToast,
   showSuccessToast,
 } from "./toast"
+import type { PublicEndpointsResponse } from "./backendResolver"
 
-const API_BASE_URL = "http://10.32.12.110:6783"
+let apiBaseUrl = ""
+
+export function setApiBaseUrl(url: string): void {
+  apiBaseUrl = url.trim().replace(/\/$/, "")
+}
+
+export function getApiBaseUrl(): string {
+  return apiBaseUrl
+}
+
+function requireApiBaseUrl(): string {
+  if (!apiBaseUrl) {
+    throw new Error("后端地址尚未就绪")
+  }
+  return apiBaseUrl
+}
 
 export interface LoginRequest {
   username: string
@@ -35,7 +51,7 @@ export interface UserProfile {
 export interface Region {
   id: string
   name: string
-  nickname: string
+  shown_name: string
 }
 
 export interface RegionListResponse {
@@ -44,7 +60,7 @@ export interface RegionListResponse {
 
 export interface RegionCreateRequest {
   name: string
-  nickname: string
+  shown_name: string
 }
 
 export interface SimpleRegion {
@@ -150,7 +166,7 @@ export async function apiGet<T>(path: string, accessToken?: string): Promise<T> 
   }
 
   try {
-    const resp = await fetch(`${API_BASE_URL}${path}`, {
+    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
       method: "GET",
       headers,
     })
@@ -176,7 +192,7 @@ export async function apiPost<TRequest, TResponse>(
   }
 
   try {
-    const resp = await fetch(`${API_BASE_URL}${path}`, {
+    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -323,4 +339,12 @@ export async function createApiKeyApi(
 ): Promise<APIKey> {
   return apiPost<APIKeyCreateRequest, APIKey>("/api/public/api-key", payload, accessToken)
 }
+
+export async function fetchPublicEndpointsApi(
+  accessToken?: string,
+): Promise<PublicEndpointsResponse> {
+  return apiGet<PublicEndpointsResponse>("/api/public/endpoints", accessToken)
+}
+
+export type { PublicEndpointItem, PublicEndpointsResponse } from "./backendResolver"
 

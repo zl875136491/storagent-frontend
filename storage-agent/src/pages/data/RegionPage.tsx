@@ -21,7 +21,7 @@ export default function RegionPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createForm, setCreateForm] = useState<RegionCreateRequest>({
     name: "",
-    nickname: "",
+    shown_name: "",
   })
   const [creating, setCreating] = useState(false)
 
@@ -43,8 +43,8 @@ export default function RegionPage() {
   }, [])
 
   const handleCreate = async () => {
-    if (!createForm.name || !createForm.nickname) {
-      showErrorToast("请填写完整的区域名称和简称")
+    if (!createForm.name || !createForm.shown_name) {
+      showErrorToast("请填写完整的区域名称和显示名称")
       return
     }
 
@@ -52,7 +52,7 @@ export default function RegionPage() {
     try {
       await createRegionApi(createForm, accessToken ?? undefined)
       setShowCreateModal(false)
-      setCreateForm({ name: "", nickname: "" })
+      setCreateForm({ name: "", shown_name: "" })
       void loadRegions()
     } catch {
       // 错误已由 api client toast 展示
@@ -103,14 +103,14 @@ export default function RegionPage() {
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary/10 text-[11px] font-semibold text-primary">
-                      {region.nickname.charAt(0).toUpperCase()}
+                      {region.shown_name.charAt(0).toUpperCase()}
                     </div>
                     <div className="text-sm font-semibold text-foreground">
                       {region.name}
                     </div>
                   </div>
                   <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    {region.nickname}
+                    {region.shown_name}
                   </span>
                 </div>
                 <div className="mt-2 border-t border-dashed border-border/70 pt-2">
@@ -143,15 +143,15 @@ export default function RegionPage() {
               />
             </div>
             <div>
-              <Label className="mb-1 block text-xs" htmlFor="region-nickname">
-                区域简称
+              <Label className="mb-1 block text-xs" htmlFor="region-shown-name">
+                显示名称
               </Label>
               <Input
-                id="region-nickname"
+                id="region-shown-name"
                 type="text"
-                value={createForm.nickname}
+                value={createForm.shown_name}
                 onChange={(e) =>
-                  setCreateForm((prev) => ({ ...prev, nickname: e.target.value }))
+                  setCreateForm((prev) => ({ ...prev, shown_name: e.target.value }))
                 }
                 placeholder="例如：华东"
               />

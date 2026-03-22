@@ -260,7 +260,7 @@ export default function MinioPage() {
                           {region.name}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
-                          简称：{region.nickname} · ID：{region.id}
+                          显示名：{region.shown_name} · ID：{region.id}
                         </span>
                       </div>
                     </label>
