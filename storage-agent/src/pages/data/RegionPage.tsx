@@ -44,7 +44,7 @@ export default function RegionPage() {
 
   const handleCreate = async () => {
     if (!createForm.name || !createForm.shown_name) {
-      showErrorToast("请填写完整的区域名称和显示名称")
+      showErrorToast("请填写完整的 RID 和显示名称")
       return
     }
 
@@ -100,18 +100,20 @@ export default function RegionPage() {
           {regions.map((region) => (
             <Card key={region.id} className="flex flex-col">
               <CardContent className="pt-4">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary/10 text-[11px] font-semibold text-primary">
-                      {region.shown_name.charAt(0).toUpperCase()}
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-[11px] font-semibold text-primary">
+                        {(region.shown_name || region.name).charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 text-sm font-semibold text-foreground">
+                        {region.shown_name || region.name}
+                      </div>
                     </div>
-                    <div className="text-sm font-semibold text-foreground">
-                      {region.name}
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      RID：{region.name}
                     </div>
                   </div>
-                  <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    {region.shown_name}
-                  </span>
                 </div>
                 <div className="mt-2 border-t border-dashed border-border/70 pt-2">
                   <div className="text-[11px] text-muted-foreground">区域 ID</div>
@@ -129,20 +131,6 @@ export default function RegionPage() {
         <Modal title="新建区域" onClose={() => setShowCreateModal(false)}>
           <div className="space-y-4 p-1 text-sm">
             <div>
-              <Label className="mb-1 block text-xs" htmlFor="region-name">
-                区域名称
-              </Label>
-              <Input
-                id="region-name"
-                type="text"
-                value={createForm.name}
-                onChange={(e) =>
-                  setCreateForm((prev) => ({ ...prev, name: e.target.value }))
-                }
-                placeholder="例如：华东区域"
-              />
-            </div>
-            <div>
               <Label className="mb-1 block text-xs" htmlFor="region-shown-name">
                 显示名称
               </Label>
@@ -154,6 +142,20 @@ export default function RegionPage() {
                   setCreateForm((prev) => ({ ...prev, shown_name: e.target.value }))
                 }
                 placeholder="例如：华东"
+              />
+            </div>
+            <div>
+              <Label className="mb-1 block text-xs" htmlFor="region-name">
+                RID
+              </Label>
+              <Input
+                id="region-name"
+                type="text"
+                value={createForm.name}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, name: e.target.value }))
+                }
+                placeholder="例如：east-cn"
               />
             </div>
 

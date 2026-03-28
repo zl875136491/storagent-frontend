@@ -77,7 +77,7 @@ export interface ApplicationAuthor {
 export interface Application {
   id: string
   name: string
-  nickname: string
+  shown_name: string
   description: string
   created_at: string
   updated_at: string
@@ -93,7 +93,7 @@ export interface ApplicationListResponse {
 
 export interface ApplicationCreateRequest {
   name: string
-  nickname: string
+  shown_name: string
   description: string
   regions: string[]
 }
@@ -292,7 +292,7 @@ export async function approveApplicationApi(
 export interface SimpleApplication {
   id: string
   name: string
-  nickname: string
+  shown_name: string
   /**
    * 可选：部分接口可能返回应用描述
    */

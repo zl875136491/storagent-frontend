@@ -3,11 +3,9 @@ import { useAuth } from "../../auth/AuthContext"
 import {
   fetchApplicationsApi,
   createApplicationApi,
-  fetchRegionsApi,
   approveApplicationApi,
   type Application,
   type ApplicationCreateRequest,
-  type Region,
 } from "../../api/client"
 import { showErrorToast } from "../../api/toast"
 import { Modal } from "../../components/Modal"
@@ -26,12 +24,10 @@ export default function ApplicationPage() {
   const [approving, setApproving] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [regions, setRegions] = useState<Region[]>([])
-  const [regionsLoading, setRegionsLoading] = useState(false)
 
   const [createForm, setCreateForm] = useState<ApplicationCreateRequest>({
     name: "",
-    nickname: "",
+    shown_name: "",
     description: "",
     regions: [],
   })
@@ -56,49 +52,21 @@ export default function ApplicationPage() {
 
   const openCreateModal = () => {
     setShowCreateModal(true)
-    setRegionsLoading(true)
-    fetchRegionsApi(accessToken ?? undefined)
-      .then((resp) => {
-        setRegions(resp.data)
-      })
-      .catch(() => {
-        // 错误已由 api client toast 展示
-      })
-      .finally(() => {
-        setRegionsLoading(false)
-      })
-  }
-
-  const toggleRegion = (regionId: string) => {
-    setCreateForm((prev) => {
-      const exists = prev.regions.includes(regionId)
-      return {
-        ...prev,
-        regions: exists
-          ? prev.regions.filter((id) => id !== regionId)
-          : [...prev.regions, regionId],
-      }
-    })
   }
 
   const handleCreate = async () => {
-    if (!createForm.name.trim()) {
-      showErrorToast("请填写应用名称")
+    if (!createForm.shown_name.trim()) {
+      showErrorToast("请填写显示名称")
       return
     }
 
-    if (!createForm.nickname.trim()) {
-      showErrorToast("请填写应用别名")
+    if (!createForm.name.trim()) {
+      showErrorToast("请填写 APPID")
       return
     }
 
     if (!createForm.description.trim()) {
       showErrorToast("请填写应用描述")
-      return
-    }
-
-    if (createForm.regions.length === 0) {
-      showErrorToast("请至少选择一个关联区域")
       return
     }
 
@@ -108,7 +76,7 @@ export default function ApplicationPage() {
       setShowCreateModal(false)
       setCreateForm({
         name: "",
-        nickname: "",
+        shown_name: "",
         description: "",
         regions: [],
       })
@@ -141,7 +109,7 @@ export default function ApplicationPage() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">应用管理</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            管理业务应用，并与区域等基础数据建立关联。
+            管理业务应用与授权状态。
           </p>
         </div>
         <div className="sticky top-3">
@@ -176,17 +144,15 @@ export default function ApplicationPage() {
                   <div>
                     <div className="mb-1 flex items-center gap-2">
                       <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-primary/10 text-[11px] font-semibold text-primary">
-                        {app.name.charAt(0).toUpperCase()}
+                        {(app.shown_name || app.name).charAt(0).toUpperCase()}
                       </div>
                       <div className="text-sm font-semibold text-foreground">
-                        {app.name}
+                        {app.shown_name || app.name}
                       </div>
                     </div>
-                    {app.nickname && (
-                      <div className="text-[11px] text-muted-foreground">
-                        别名：{app.nickname}
-                      </div>
-                    )}
+                    <div className="text-[11px] text-muted-foreground">
+                      APPID：{app.name}
+                    </div>
                     <div className="mt-1 text-[11px] text-muted-foreground">
                       {app.description}
                     </div>
@@ -243,20 +209,6 @@ export default function ApplicationPage() {
                       {app.enabled_at ? app.enabled_at.replace("T", " ") : "-"}
                     </div>
                   </div>
-                  <div className="md:col-span-2">
-                    <div className="text-muted-foreground/70">关联区域</div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {app.regions.map((region) => (
-                        <span
-                          key={region.id}
-                          className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
-                        >
-                          {region.name}
-                          {region.shown_name ? `（${region.shown_name}）` : ""}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -269,8 +221,25 @@ export default function ApplicationPage() {
           <div className="space-y-4 p-1 text-sm">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>
+                <Label className="mb-1 block text-xs" htmlFor="app-shown_name">
+                  显示名称
+                </Label>
+                <Input
+                  id="app-shown_name"
+                  type="text"
+                  value={createForm.shown_name}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({
+                      ...prev,
+                      shown_name: e.target.value,
+                    }))
+                  }
+                  placeholder="例如：跨区域存储前端"
+                />
+              </div>
+              <div>
                 <Label className="mb-1 block text-xs" htmlFor="app-name">
-                  应用名称
+                  APPID
                 </Label>
                 <Input
                   id="app-name"
@@ -279,24 +248,7 @@ export default function ApplicationPage() {
                   onChange={(e) =>
                     setCreateForm((prev) => ({ ...prev, name: e.target.value }))
                   }
-                  placeholder="例如：CPL"
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs" htmlFor="app-nickname">
-                  应用别名
-                </Label>
-                <Input
-                  id="app-nickname"
-                  type="text"
-                  value={createForm.nickname}
-                  onChange={(e) =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      nickname: e.target.value,
-                    }))
-                  }
-                  placeholder="例如：跨区域存储前端"
+                  placeholder="例如：cpl"
                 />
               </div>
               <div className="md:col-span-2">
@@ -318,53 +270,6 @@ export default function ApplicationPage() {
               </div>
             </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <Label className="text-xs font-medium">关联区域</Label>
-                <span className="text-[11px] text-muted-foreground">
-                  可多选，将应用关联到多个区域
-                </span>
-              </div>
-
-              {regionsLoading ? (
-                <div className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
-                  正在加载区域列表...
-                </div>
-              ) : regions.length === 0 ? (
-                <Card className="border-dashed bg-muted/30">
-                  <CardContent className="px-3 py-2 text-[11px] text-muted-foreground">
-                    尚未配置任何区域，请先在「区域管理」中创建区域。
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
-                  {regions.map((region) => (
-                    <label
-                      key={region.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-background"
-                    >
-                      <input
-                        type="checkbox"
-                        value={region.id}
-                        checked={createForm.regions.includes(region.id)}
-                        onChange={() => toggleRegion(region.id)}
-                        className="h-3.5 w-3.5 border-border text-primary focus:ring-0"
-                      />
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium text-foreground">
-                          {region.name}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">
-                          显示名：{region.shown_name} · ID：{region.id}
-                        </span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
             <DialogFooter>
               <Button
                 type="button"
@@ -377,7 +282,7 @@ export default function ApplicationPage() {
               <Button
                 type="button"
                 size="sm"
-                disabled={creating || regions.length === 0}
+                disabled={creating}
                 onClick={() => void handleCreate()}
               >
                 {creating ? 
@@ -406,15 +311,15 @@ export default function ApplicationPage() {
             </p>
             <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
               <div>
-                <div className="text-muted-foreground/70">应用名称</div>
+                <div className="text-muted-foreground/70">显示名称</div>
                 <div className="mt-0.5 text-foreground/90">
-                  {approvalTarget.name}
+                  {approvalTarget.shown_name || approvalTarget.name}
                 </div>
               </div>
               <div>
-                <div className="text-muted-foreground/70">应用别名</div>
+                <div className="text-muted-foreground/70">APPID</div>
                 <div className="mt-0.5 text-foreground/90">
-                  {approvalTarget.nickname || "-"}
+                  {approvalTarget.name}
                 </div>
               </div>
               <div>
@@ -427,26 +332,6 @@ export default function ApplicationPage() {
                 <div className="text-muted-foreground/70">创建时间</div>
                 <div className="mt-0.5 text-foreground/90">
                   {approvalTarget.created_at.replace("T", " ")}
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <div className="text-muted-foreground/70">关联区域</div>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {approvalTarget.regions.length === 0 ? (
-                    <span className="text-[11px] text-muted-foreground">
-                      暂无关联区域
-                    </span>
-                  ) : (
-                    approvalTarget.regions.map((region) => (
-                      <span
-                        key={region.id}
-                        className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
-                      >
-                        {region.name}
-                        {region.shown_name ? `（${region.shown_name}）` : ""}
-                      </span>
-                    ))
-                  )}
                 </div>
               </div>
             </div>

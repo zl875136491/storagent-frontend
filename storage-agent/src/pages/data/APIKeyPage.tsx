@@ -184,7 +184,7 @@ export default function APIKeyPage() {
                       </div>
                       <div className="flex flex-col">
                         <div className="text-xs font-medium text-foreground">
-                          {item.application.nickname || item.application.name}
+                          {item.application.shown_name || item.application.name}
                         </div>
                         <div className="text-[10px] text-muted-foreground">
                           {item.application.name} · ID：{item.application.id}
@@ -221,7 +221,8 @@ export default function APIKeyPage() {
               ) : applications.length === 0 ? (
                 <Card className="border-dashed bg-muted/30">
                   <CardContent className="px-3 py-2 text-[11px] text-muted-foreground">
-                    当前没有任何已授权的应用，请先在「应用管理」中创建并授权应用。
+                    <p>· 当前没有任何已授权的应用，请先在「应用管理」中创建应用。</p>
+                    <p>· 如果应用已存在, 但未授权, 请联系存储管理员进行授权。</p>
                   </CardContent>
                 </Card>
               ) : (
@@ -242,7 +243,7 @@ export default function APIKeyPage() {
                       <div className="flex flex-col">
                         <span className="text-xs font-medium text-foreground">{app.name}</span>
                         <span className="text-[10px] text-muted-foreground">
-                          别名：{app.nickname} · ID：{app.id}
+                          显示名：{app.shown_name} · ID：{app.id}
                         </span>
                       </div>
                     </label>
