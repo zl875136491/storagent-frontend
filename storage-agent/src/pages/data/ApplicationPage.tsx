@@ -234,7 +234,7 @@ export default function ApplicationPage() {
                       shown_name: e.target.value,
                     }))
                   }
-                  placeholder="例如：跨区域存储前端"
+                  placeholder="例如：部件信息管理系统"
                 />
               </div>
               <div>
@@ -265,7 +265,7 @@ export default function ApplicationPage() {
                       description: e.target.value,
                     }))
                   }
-                  placeholder="例如：CPL 的测试环境"
+                  placeholder="例如：CPL 的生产环境后端服务器"
                 />
               </div>
             </div>

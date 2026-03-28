@@ -66,6 +66,7 @@ export interface RegionCreateRequest {
 export interface SimpleRegion {
   id: string
   name: string
+  shown_name: string
 }
 
 export interface ApplicationAuthor {
@@ -103,9 +104,12 @@ export interface MinioServer {
   region: SimpleRegion
   name: string
   host: string
-  port: number
+  /** 对外服务 / 代理端口 */
+  server_port: number
+  /** MinIO 进程监听端口 */
+  minio_port: number
   access_key: string
-  secret_key: string
+  // secret_key: string
 }
 
 export interface MinioServerListResponse {

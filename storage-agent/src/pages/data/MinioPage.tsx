@@ -35,6 +35,10 @@ export default function MinioPage() {
     secret_key: "",
   })
   const [creating, setCreating] = useState(false)
+  /** 列表中已展开 Secret Key 的服务 id（默认掩码，点击切换） */
+  const [revealedSecretIds, setRevealedSecretIds] = useState<Set<string>>(
+    () => new Set(),
+  )
 
   const loadServers = async () => {
     setLoading(true)
@@ -122,7 +126,7 @@ export default function MinioPage() {
             管理 MinIO 存储服务实例，并与基础区域数据建立关联。
           </p>
         </div>
-        <div className="sticky top-3">
+        {/* <div className="sticky top-3">
           <Button
             type="button"
             size="md"
@@ -131,7 +135,7 @@ export default function MinioPage() {
           >
             新建 MinIO 服务
           </Button>
-        </div>
+        </div> */}
       </div>
 
       {loading ? (
@@ -169,7 +173,7 @@ export default function MinioPage() {
                       </div>
                     </div>
                     <div className="text-[11px] text-muted-foreground">
-                      所属区域：{server.region.name}
+                      所属区域：{server.region.shown_name} ({server.region.name})
                     </div>
                   </div>
                   <span className="inline-flex max-w-[140px] items-center justify-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
@@ -185,9 +189,15 @@ export default function MinioPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground/70">端口</div>
-                    <div className="mt-0.5 text-xs text-foreground/80">
-                      {server.port}
+                    <div className="text-muted-foreground/70">服务端口</div>
+                    <div className="mt-0.5 font-mono text-xs text-foreground/80">
+                      {server.server_port}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground/70">MinIO 端口</div>
+                    <div className="mt-0.5 font-mono text-xs text-foreground/80">
+                      {server.minio_port}
                     </div>
                   </div>
                   <div>
@@ -196,12 +206,30 @@ export default function MinioPage() {
                       {server.access_key}
                     </div>
                   </div>
-                  <div>
+                  {/* <div className="col-span-2">
                     <div className="text-muted-foreground/70">Secret Key</div>
-                    <div className="mt-0.5 truncate text-xs text-foreground/80">
-                      {server.secret_key}
-                    </div>
-                  </div>
+                    <button
+                      type="button"
+                      title={
+                        revealedSecretIds.has(server.id)
+                          ? "点击隐藏"
+                          : "点击显示"
+                      }
+                      onClick={() =>
+                        setRevealedSecretIds((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(server.id)) next.delete(server.id)
+                          else next.add(server.id)
+                          return next
+                        })
+                      }
+                      className="mt-0.5 max-w-full cursor-pointer select-none truncate text-left text-xs text-foreground/80 hover:text-foreground"
+                    >
+                      {revealedSecretIds.has(server.id)
+                        ? server.secret_key || "—"
+                        : "*****"}
+                    </button>
+                  </div> */}
                 </div>
               </CardContent>
             </Card>
