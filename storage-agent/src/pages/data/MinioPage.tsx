@@ -35,10 +35,6 @@ export default function MinioPage() {
     secret_key: "",
   })
   const [creating, setCreating] = useState(false)
-  /** 列表中已展开 Secret Key 的服务 id（默认掩码，点击切换） */
-  const [revealedSecretIds, setRevealedSecretIds] = useState<Set<string>>(
-    () => new Set(),
-  )
 
   const loadServers = async () => {
     setLoading(true)
@@ -126,7 +122,7 @@ export default function MinioPage() {
             管理 MinIO 存储服务实例，并与基础区域数据建立关联。
           </p>
         </div>
-        {/* <div className="sticky top-3">
+        <div className="sticky top-3">
           <Button
             type="button"
             size="md"
@@ -135,7 +131,7 @@ export default function MinioPage() {
           >
             新建 MinIO 服务
           </Button>
-        </div> */}
+        </div>
       </div>
 
       {loading ? (

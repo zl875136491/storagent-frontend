@@ -108,7 +108,26 @@ export function showApiErrorToast(body: string, fallbackMessage: string): void {
       getString(json, "error_type") ??
       getString(json, "name") ??
       "error"
-    const description = extractDescription(json) ?? firstLine(raw) ?? msg
+
+    // 适配后端错误格式：{ msg: string, data?: object | string }
+    // 若同时存在 msg 和 data，则 data 优先作为内容展示
+    let description: string | undefined
+    // 但若存在 reason（含 data.reason），则优先以 reason 作为描述展示
+    const reason =
+      getString(json, "reason") ??
+      (json && typeof json === "object"
+        ? getString((json as Record<string, unknown>)["data"], "reason")
+        : undefined)
+    if (reason && reason.trim()) {
+      description = reason
+    } else if (json && typeof json === "object" && "msg" in json && "data" in json) {
+      const data = (json as Record<string, unknown>)["data"]
+      const formatted = formatErrorData(data)
+      if (formatted.trim()) {
+        description = formatted
+      }
+    }
+    description = description ?? extractDescription(json) ?? firstLine(raw) ?? msg
 
     let traceback = extractTraceback(json)
     if (!traceback) {
