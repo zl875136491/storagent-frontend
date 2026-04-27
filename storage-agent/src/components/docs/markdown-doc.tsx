@@ -46,11 +46,20 @@ interface CodeProps {
   children: ReactNode
 }
 
+function normalizeLanguageLabel(lang: string) {
+  const l = (lang || "").toLowerCase()
+  if (l === "js" || l === "mjs" || l === "cjs") return "javascript"
+  if (l === "ts") return "typescript"
+  if (l === "jsx") return "javascript"
+  if (l === "tsx") return "typescript"
+  return l
+}
+
 function CodeBlock({ className, children }: CodeProps) {
   const [copied, setCopied] = useState(false)
 
   const languageMatch = /language-(\w+)/.exec(className || "")
-  const language = languageMatch?.[1] ?? ""
+  const language = normalizeLanguageLabel(languageMatch?.[1] ?? "")
   const text = String(children ?? "").replace(/\n$/, "")
 
   const handleCopy = async () => {
@@ -77,7 +86,7 @@ function CodeBlock({ className, children }: CodeProps) {
         </button>
       </div>
       <pre className="overflow-x-auto bg-muted/40 p-4">
-        <code className={cn("font-mono text-sm", className)}>
+        <code className={cn("hljs font-mono text-sm", className)}>
           {children}
         </code>
       </pre>

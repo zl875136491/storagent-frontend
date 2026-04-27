@@ -1,3 +1,4 @@
+import type { ReactElement } from "react"
 import { useEffect, useMemo } from "react"
 import { useSearchParams } from "react-router-dom"
 import { MarkdownDoc } from "@/components/docs/markdown-doc"
@@ -8,6 +9,17 @@ import { cn } from "@/lib/utils"
 // eslint-disable-next-line import/no-unresolved
 import gettingStartedContent from "@/docs/getting-started.md?raw"
 import developerUsageContent from "@/docs/developer-usage.md?raw"
+import FileComponentsGuidePage from "@/pages/docs/FileComponentsGuidePage"
+
+type DocItem = {
+  id: string
+  title: string
+  description: string
+  section: string
+} & (
+  | { content: string; element?: never }
+  | { element: ReactElement; content?: never }
+)
 
 const docs = [
   {
@@ -24,13 +36,21 @@ const docs = [
     content: developerUsageContent as string,
     section: "指南",
   },
-]
+  {
+    id: "file-components",
+    title: "功能组件引导",
+    description: "提供文件上传/下载的可拷贝 Demo，供其他前端应用集成。",
+    element: <FileComponentsGuidePage />,
+    section: "指南",
+  },
+] as const satisfies readonly DocItem[]
 
 const DOC_PARAM = "doc"
 
 export default function DocsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const docId = searchParams.get(DOC_PARAM) ?? docs[0].id
+  const defaultDocId = docs[0]?.id ?? "getting-started"
+  const docId = searchParams.get(DOC_PARAM) ?? defaultDocId
   const currentDoc = useMemo(
     () => docs.find((d) => d.id === docId) ?? docs[0],
     [docId],
@@ -94,13 +114,19 @@ export default function DocsPage() {
                 {currentDoc.description}
               </p>
             </div>
-            <MarkdownDoc content={currentDoc.content} />
+            {"content" in currentDoc ? (
+              <MarkdownDoc content={currentDoc.content} />
+            ) : (
+              currentDoc.element
+            )}
           </div>
         </section>
 
         {/* 右侧：本页导航（固定宽度，项多时本列内滚动） */}
         <aside className="hidden min-h-0 overflow-y-auto pl-2 docs-scroll lg:block">
-          <TableOfContents content={currentDoc.content} />
+          {"content" in currentDoc ? (
+            <TableOfContents content={currentDoc.content} />
+          ) : null}
         </aside>
       </div>
     </div>
