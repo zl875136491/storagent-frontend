@@ -1,12 +1,13 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
+import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 
 type Props = {
-  baseURL: string
   apiKey: string
   defaultObjectKey?: string
 }
@@ -36,17 +37,27 @@ function filenameFromObjectKey(objectKey: string) {
   return seg || "download.bin"
 }
 
-export function FileDownloadDemo({ baseURL, apiKey, defaultObjectKey }: Props) {
+export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
+  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
+    useGuideDemoBackendSelection()
   const [objectKey, setObjectKey] = useState(defaultObjectKey ?? "")
   const [loading, setLoading] = useState(false)
   const [stat, setStat] = useState<ObjectStatResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [statOpen, setStatOpen] = useState(false)
 
-  const canCall = Boolean(baseURL && apiKey && objectKey && !loading)
+  useEffect(() => {
+    if (defaultObjectKey != null && defaultObjectKey !== "") {
+      setObjectKey(defaultObjectKey)
+    }
+  }, [defaultObjectKey])
+
+  const canCall = Boolean(
+    baseURL && apiKey && objectKey.trim() && !loading && !backendListLoading && !backendListError,
+  )
 
   const fetchStat = async () => {
-    if (!baseURL) throw new Error("baseURL 为空")
+    if (!baseURL) throw new Error("请先选择可达的后端服务")
     if (!apiKey) throw new Error("apiKey 为空")
     if (!objectKey.trim()) throw new Error("object_key 为空")
 
@@ -71,7 +82,7 @@ export function FileDownloadDemo({ baseURL, apiKey, defaultObjectKey }: Props) {
   }
 
   const download = async () => {
-    if (!baseURL) throw new Error("baseURL 为空")
+    if (!baseURL) throw new Error("请先选择可达的后端服务")
     if (!apiKey) throw new Error("apiKey 为空")
     if (!objectKey.trim()) throw new Error("object_key 为空")
 
@@ -114,6 +125,8 @@ export function FileDownloadDemo({ baseURL, apiKey, defaultObjectKey }: Props) {
         <CardTitle className="text-base">2. 下载组件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+
         <div className="space-y-2">
           <Label htmlFor="download-object-key">object_key</Label>
           <Input

@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react"
-import { getApiBaseUrl } from "@/api/client"
 import { ApiKeyProvider, useApiKey } from "@/components/guides/api-key-context"
 import { CodePreview } from "@/components/guides/code-preview"
 import { FileDownloadDemo } from "@/components/guides/file-download-demo"
 import { FileUploadDemo } from "@/components/guides/file-upload-demo"
+import { GuideEndpointsProvider } from "@/components/guides/guide-endpoints-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -79,7 +79,10 @@ function ApiKeyBox() {
 }
 
 function uploadCode() {
-  return `import { useMemo, useState } from "react"
+  return `
+import { useMemo, useState } from "react"
+import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
+import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -88,14 +91,14 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 
 type Props = {
-  baseURL: string
   apiKey: string
   chunkSizeBytes?: number
+  onUploaded?: (result: { bucket: string; objectKey: string }) => void
 }
 
 type InitResp = { upload_id: string; bucket: string; object_key: string }
 type PartResp = { part_number: number; etag: string }
-type CompleteResp = { bucket: string; object_key: string }
+type CompleteResp = { bucket: string; object_key: string; etag?: string | null; version_id?: string | null }
 
 function joinUrl(baseURL: string, path: string) {
   return \`\${baseURL.replace(/\\/$/, "")}\${path}\`
@@ -111,7 +114,9 @@ function sanitizeEtag(etag: string) {
   return etag.replace(/^"+|"+$/g, "")
 }
 
-export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes }: Props) {
+export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
+  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
+    useGuideDemoBackendSelection()
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -121,17 +126,26 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes }: Props) {
 
   const chunkSize = useMemo(() => chunkSizeBytes ?? 5 * 1024 * 1024, [chunkSizeBytes])
 
+  const canUpload = Boolean(baseURL && apiKey && file && !uploading && !backendListLoading && !backendListError)
+
   const upload = async () => {
     if (!file) return
+    if (!baseURL) throw new Error("请先选择可达的后端服务")
+    if (!apiKey) throw new Error("apiKey 为空")
+
     setUploading(true)
     setError(null)
     setResult(null)
     setProgress(null)
+
     try {
       const init = await jsonOrThrow<InitResp>(
         await fetch(joinUrl(baseURL, "/api/files/multipart/init"), {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
           body: JSON.stringify({ content_type: file.type || "application/octet-stream" }),
         }),
       )
@@ -158,6 +172,7 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes }: Props) {
             body: fd,
           }),
         )
+
         parts.push({ part_number: part.part_number, etag: sanitizeEtag(part.etag) })
         setProgress({ done: partNumber, total: totalParts })
       }
@@ -165,7 +180,10 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes }: Props) {
       const complete = await jsonOrThrow<CompleteResp>(
         await fetch(joinUrl(baseURL, "/api/files/multipart/complete"), {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
           body: JSON.stringify({
             upload_id: init.upload_id,
             object_key: init.object_key,
@@ -174,8 +192,10 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes }: Props) {
         }),
       )
 
-      setResult({ bucket: complete.bucket, objectKey: complete.object_key })
+      const finalResult = { bucket: complete.bucket, objectKey: complete.object_key }
+      setResult(finalResult)
       setResultOpen(true)
+      onUploaded?.(finalResult)
     } catch (e) {
       setError(e instanceof Error ? e.message : "上传失败")
     } finally {
@@ -189,19 +209,28 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes }: Props) {
         <CardTitle className="text-base">1. 上传组件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+
         <div className="space-y-2">
           <Label htmlFor="upload-file">选择文件</Label>
-          <Input id="upload-file" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <Input
+            id="upload-file"
+            type="file"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
         </div>
-        <Button disabled={!baseURL || !apiKey || !file || uploading} onClick={() => void upload()}>
+
+        <Button disabled={!canUpload} onClick={() => void upload()}>
           {uploading ? "上传中..." : "开始上传"}
         </Button>
+
         {progress ? (
           <div className="space-y-2">
             <div className="text-sm">进度：{progress.done}/{progress.total}</div>
             <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
           </div>
         ) : null}
+
         {error ? <div className="text-sm text-destructive">{error}</div> : null}
       </CardContent>
 
@@ -226,7 +255,10 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes }: Props) {
 }
 
 function downloadCode() {
-  return `import { useState } from "react"
+  return `
+import { useEffect, useState } from "react"
+import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
+import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -234,8 +266,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 type Props = {
-  baseURL: string
   apiKey: string
+  defaultObjectKey?: string
 }
 
 type ObjectStatResponse = {
@@ -244,6 +276,7 @@ type ObjectStatResponse = {
   size: number
   etag: string
   content_type?: string | null
+  last_modified?: string | null
 }
 
 function joinUrl(baseURL: string, path: string) {
@@ -262,14 +295,30 @@ function filenameFromObjectKey(objectKey: string) {
   return seg || "download.bin"
 }
 
-export function FileDownloadDemo({ baseURL, apiKey }: Props) {
-  const [objectKey, setObjectKey] = useState("")
+export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
+  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
+    useGuideDemoBackendSelection()
+  const [objectKey, setObjectKey] = useState(defaultObjectKey ?? "")
   const [loading, setLoading] = useState(false)
   const [stat, setStat] = useState<ObjectStatResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [statOpen, setStatOpen] = useState(false)
 
+  useEffect(() => {
+    if (defaultObjectKey != null && defaultObjectKey !== "") {
+      setObjectKey(defaultObjectKey)
+    }
+  }, [defaultObjectKey])
+
+  const canCall = Boolean(
+    baseURL && apiKey && objectKey.trim() && !loading && !backendListLoading && !backendListError,
+  )
+
   const fetchStat = async () => {
+    if (!baseURL) throw new Error("请先选择可达的后端服务")
+    if (!apiKey) throw new Error("apiKey 为空")
+    if (!objectKey.trim()) throw new Error("object_key 为空")
+
     setLoading(true)
     setError(null)
     try {
@@ -291,15 +340,27 @@ export function FileDownloadDemo({ baseURL, apiKey }: Props) {
   }
 
   const download = async () => {
+    if (!baseURL) throw new Error("请先选择可达的后端服务")
+    if (!apiKey) throw new Error("apiKey 为空")
+    if (!objectKey.trim()) throw new Error("object_key 为空")
+
     setLoading(true)
     setError(null)
     try {
-      const qs = new URLSearchParams({ object_key: objectKey.trim(), offset: "0", length: "0" })
+      const qs = new URLSearchParams({
+        object_key: objectKey.trim(),
+        offset: "0",
+        length: "0",
+      })
       const resp = await fetch(joinUrl(baseURL, \`/api/files/object/download?\${qs.toString()}\`), {
         method: "GET",
         headers: { "x-api-key": apiKey },
       })
-      if (!resp.ok) throw new Error((await resp.text().catch(() => "")) || \`下载失败: \${resp.status}\`)
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "")
+        throw new Error(text || \`下载失败: \${resp.status}\`)
+      }
+
       const blob = await resp.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -322,18 +383,27 @@ export function FileDownloadDemo({ baseURL, apiKey }: Props) {
         <CardTitle className="text-base">2. 下载组件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+
         <div className="space-y-2">
           <Label htmlFor="download-object-key">object_key</Label>
-          <Input id="download-object-key" value={objectKey} onChange={(e) => setObjectKey(e.target.value)} />
+          <Input
+            id="download-object-key"
+            placeholder="例如：path/to/file.bin"
+            value={objectKey}
+            onChange={(e) => setObjectKey(e.target.value)}
+          />
         </div>
+
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={!baseURL || !apiKey || !objectKey.trim() || loading} onClick={() => void fetchStat()}>
+          <Button variant="outline" disabled={!canCall} onClick={() => void fetchStat()}>
             获取元信息
           </Button>
-          <Button disabled={!baseURL || !apiKey || !objectKey.trim() || loading} onClick={() => void download()}>
+          <Button disabled={!canCall} onClick={() => void download()}>
             {loading ? "下载中..." : "下载"}
           </Button>
         </div>
+
         {error ? <div className="text-sm text-destructive">{error}</div> : null}
       </CardContent>
 
@@ -359,7 +429,6 @@ export function FileDownloadDemo({ baseURL, apiKey }: Props) {
 
 function InnerPage() {
   const { apiKey } = useApiKey()
-  const baseURL = getApiBaseUrl()
   const [lastUploadedObjectKey, setLastUploadedObjectKey] = useState<string | null>(null)
 
   const uploadSnippet = useMemo(() => uploadCode(), [])
@@ -375,39 +444,33 @@ function InnerPage() {
   }, [])
 
   return (
-    <div className="space-y-6">
-      <ApiKeyBox />
+    <GuideEndpointsProvider>
+      <div className="space-y-6">
+        <ApiKeyBox />
 
-      <div className="space-y-3">
-        <FileUploadDemo
-          baseURL={baseURL}
-          apiKey={apiKey}
-          onUploaded={(r) => setLastUploadedObjectKey(r.objectKey)}
-        />
-        <CodePreview
-          title="上传组件代码（可复制）"
-          installCommands={installCommands}
-          previewLines={16}
-          codeLanguage="tsx"
-          code={uploadSnippet}
-        />
-      </div>
+        <div className="space-y-3">
+          <FileUploadDemo apiKey={apiKey} onUploaded={(r) => setLastUploadedObjectKey(r.objectKey)} />
+          <CodePreview
+            title="上传组件代码（可复制）"
+            installCommands={installCommands}
+            previewLines={16}
+            codeLanguage="tsx"
+            code={uploadSnippet}
+          />
+        </div>
 
-      <div className="space-y-3">
-        <FileDownloadDemo
-          baseURL={baseURL}
-          apiKey={apiKey}
-          defaultObjectKey={lastUploadedObjectKey ?? undefined}
-        />
-        <CodePreview
-          title="下载组件代码（可复制）"
-          installCommands={installCommands}
-          previewLines={16}
-          codeLanguage="tsx"
-          code={downloadSnippet}
-        />
+        <div className="space-y-3">
+          <FileDownloadDemo apiKey={apiKey} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
+          <CodePreview
+            title="下载组件代码（可复制）"
+            installCommands={installCommands}
+            previewLines={16}
+            codeLanguage="tsx"
+            code={downloadSnippet}
+          />
+        </div>
       </div>
-    </div>
+    </GuideEndpointsProvider>
   )
 }
 

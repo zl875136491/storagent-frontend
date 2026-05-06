@@ -5,9 +5,10 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
+import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
+import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 
 type Props = {
-  baseURL: string
   apiKey: string
   chunkSizeBytes?: number
   onUploaded?: (result: { bucket: string; objectKey: string }) => void
@@ -31,7 +32,9 @@ function sanitizeEtag(etag: string) {
   return etag.replace(/^"+|"+$/g, "")
 }
 
-export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes, onUploaded }: Props) {
+export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
+  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
+    useGuideDemoBackendSelection()
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -41,11 +44,11 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes, onUploaded }: 
 
   const chunkSize = useMemo(() => chunkSizeBytes ?? 5 * 1024 * 1024, [chunkSizeBytes])
 
-  const canUpload = Boolean(baseURL && apiKey && file && !uploading)
+  const canUpload = Boolean(baseURL && apiKey && file && !uploading && !backendListLoading && !backendListError)
 
   const upload = async () => {
     if (!file) return
-    if (!baseURL) throw new Error("baseURL 为空")
+    if (!baseURL) throw new Error("请先选择可达的后端服务")
     if (!apiKey) throw new Error("apiKey 为空")
 
     setUploading(true)
@@ -124,6 +127,8 @@ export function FileUploadDemo({ baseURL, apiKey, chunkSizeBytes, onUploaded }: 
         <CardTitle className="text-base">1. 上传组件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+
         <div className="space-y-2">
           <Label htmlFor="upload-file">选择文件</Label>
           <Input

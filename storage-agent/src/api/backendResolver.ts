@@ -28,6 +28,40 @@ function normalizeBase(url: string): string {
   return url.trim().replace(/\/$/, "")
 }
 
+/** 公共 API 基址规范化（与列表项 `endpoint` 一致） */
+export function normalizePublicApiBase(url: string): string {
+  return normalizeBase(url)
+}
+
+const PUBLIC_ENDPOINT_TEST_PATH = "/api/public/endpoints/test"
+
+/**
+ * 对指定基址请求 `GET /api/public/endpoints/test`（约数百字节响应），
+ * 用于探测连通性；`latencyMs` 为从发起请求到完整读取响应体的耗时。
+ */
+export async function probePublicEndpointTest(
+  baseUrl: string,
+  timeoutMs = 20_000,
+): Promise<{ ok: true; latencyMs: number } | { ok: false; latencyMs: number }> {
+  const base = normalizeBase(baseUrl)
+  const url = `${base}${PUBLIC_ENDPOINT_TEST_PATH}`
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  const t0 = performance.now()
+  try {
+    const resp = await fetch(url, { method: "GET", signal: controller.signal })
+    if (!resp.ok) {
+      return { ok: false, latencyMs: performance.now() - t0 }
+    }
+    await resp.arrayBuffer()
+    return { ok: true, latencyMs: performance.now() - t0 }
+  } catch {
+    return { ok: false, latencyMs: performance.now() - t0 }
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 /** 从基址 URL 提取用于展示的 IP/主机与端口 */
 export function hostPortLabel(baseUrl: string): string {
   const raw = normalizeBase(baseUrl)
