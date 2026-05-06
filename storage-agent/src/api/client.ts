@@ -143,6 +143,21 @@ export interface BucketsResponse {
   data: BucketInfo[]
 }
 
+export interface StorageBucketAppInfo {
+  shown_name?: string
+  description?: string
+}
+
+export interface StorageBucketItem {
+  name: string
+  servers: string[]
+  app: StorageBucketAppInfo
+}
+
+export interface StorageBucketsResponse {
+  data: StorageBucketItem[]
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   const text = await response.text().catch(() => "")
 
@@ -247,7 +262,13 @@ export async function fetchBucketsApi(
   minioServerId: string,
   accessToken?: string,
 ): Promise<BucketsResponse> {
-  return apiGet<BucketsResponse>(`/api/storage/${minioServerId}/buckets`, accessToken)
+  return apiGet<BucketsResponse>(`/api/storage/${minioServerId}/details`, accessToken)
+}
+
+export async function fetchStorageBucketsApi(
+  accessToken?: string,
+): Promise<StorageBucketsResponse> {
+  return apiGet<StorageBucketsResponse>("/api/storage/buckets", accessToken)
 }
 
 export async function createMinioServerApi(

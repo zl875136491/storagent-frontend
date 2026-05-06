@@ -216,7 +216,7 @@ export default function BucketPage() {
     <div className="mx-auto max-w-6xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">存储桶文件详情</h1>
+          <h1 className="text-lg font-semibold text-foreground">服务器文件详情</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             按 MinIO 服务查看各存储桶的空间占用与目录结构，以树图方式直观展示。
           </p>

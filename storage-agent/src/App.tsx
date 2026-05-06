@@ -8,6 +8,7 @@ import MinioPage from "./pages/data/MinioPage"
 import APIKeyPage from "./pages/data/APIKeyPage"
 import ApplicationPage from "./pages/data/ApplicationPage"
 import BucketPage from "./pages/data/BucketPage"
+import StorageBucketManagePage from "./pages/data/StorageBucketManagePage"
 import DocsPage from "./pages/docs/DocsPage"
 
 export function App() {
@@ -29,6 +30,7 @@ export function App() {
                 <Route path="minio" element={<MinioPage />} />
                 <Route path="storage">
                   <Route path="buckets" element={<BucketPage />} />
+                  <Route path="bucket-manage" element={<StorageBucketManagePage />} />
                 </Route>
               </Route>
               <Route path="docs" element={<DocsPage />} />
