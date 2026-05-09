@@ -1,5 +1,6 @@
 import {
   showApiErrorToast,
+  showErrorToast,
   showNetworkErrorToast,
   showSuccessToast,
 } from "./toast"
@@ -299,19 +300,122 @@ export async function createApplicationApi(
   )
 }
 
-export interface ApplicationApprovalResponse {
+/** 授权 SSE 单条事件（与后端 data: JSON 一致） */
+export type ApplicationApprovalSseStatus = "running" | "ok" | "failed" | "success"
+
+export interface ApplicationApprovalSseEvent {
+  step: string
+  server_name: string | null
+  status: ApplicationApprovalSseStatus
   message: string
 }
 
-export async function approveApplicationApi(
-  applicationId: string,
-  accessToken?: string,
-): Promise<ApplicationApprovalResponse> {
-  return apiPost<Record<string, never>, ApplicationApprovalResponse>(
-    `/api/public/application/${applicationId}/approval`,
-    {} as Record<string, never>,
-    accessToken,
-  )
+export interface ApproveApplicationStreamParams {
+  applicationId: string
+  accessToken?: string
+  signal?: AbortSignal
+  onEvent: (event: ApplicationApprovalSseEvent) => void
+}
+
+function parseSseEventLine(line: string): ApplicationApprovalSseEvent | null {
+  const trimmed = line.replace(/\r$/, "").trim()
+  if (!trimmed.startsWith("data:")) return null
+  const json = trimmed.slice(5).trim()
+  if (!json) return null
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!parsed || typeof parsed !== "object") return null
+    const o = parsed as Record<string, unknown>
+    if (
+      typeof o.step !== "string" ||
+      typeof o.status !== "string" ||
+      typeof o.message !== "string"
+    ) {
+      return null
+    }
+    const serverName = o.server_name
+    return {
+      step: o.step,
+      server_name:
+        serverName === null || typeof serverName === "string" ? serverName : null,
+      status: o.status as ApplicationApprovalSseStatus,
+      message: o.message,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 应用授权（SSE）：POST 后读取 `text/event-stream` 风格正文，按行解析 `data: {...}`。
+ * 连接保持期间持续回调；流正常结束或中断后 resolve。
+ */
+export async function approveApplicationStream(
+  params: ApproveApplicationStreamParams,
+): Promise<void> {
+  const { applicationId, accessToken, signal, onEvent } = params
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  }
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  let response: Response
+  try {
+    response = await fetch(
+      `${requireApiBaseUrl()}/api/public/application/${applicationId}/approval`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+        signal,
+      },
+    )
+  } catch (e) {
+    if (e instanceof TypeError) {
+      showNetworkErrorToast()
+    }
+    throw e
+  }
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "")
+    showApiErrorToast(text, `请求失败，状态码 ${response.status}`)
+    throw new Error(text || `请求失败，状态码 ${response.status}`)
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    showErrorToast("无法读取授权响应流")
+    throw new Error("无法读取授权响应流")
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split("\n")
+      buffer = parts.pop() ?? ""
+      for (const part of parts) {
+        const ev = parseSseEventLine(part)
+        if (ev) onEvent(ev)
+      }
+    }
+    if (buffer.trim()) {
+      for (const part of buffer.split("\n")) {
+        const ev = parseSseEventLine(part)
+        if (ev) onEvent(ev)
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }
 
 export interface SimpleApplication {

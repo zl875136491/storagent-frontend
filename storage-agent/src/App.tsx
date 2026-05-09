@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { AuthProvider } from "./auth/AuthContext"
+import { NavigationLeaveBlockProvider } from "./contexts/NavigationLeaveBlockContext"
 import ProtectedRoute from "./auth/ProtectedRoute"
 import AppLayout from "./layouts/AppLayout"
 import LoginPage from "./pages/LoginPage"
@@ -15,6 +16,7 @@ export function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <NavigationLeaveBlockProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
 
@@ -39,6 +41,7 @@ export function App() {
 
           <Route path="*" element={<Navigate to="/data/basic/region" replace />} />
         </Routes>
+        </NavigationLeaveBlockProvider>
       </BrowserRouter>
     </AuthProvider>
   )

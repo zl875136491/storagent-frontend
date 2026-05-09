@@ -43,14 +43,35 @@ export interface ApiErrorToastProps {
   type: string
   description?: string | null
   traceback?: string | null
+  /** 无 traceback 但 data 过长时，点击「更多」展示全文 */
+  dataForModal?: string | null
 }
 
-export function ApiErrorToast({ msg, type, description, traceback }: ApiErrorToastProps) {
-  const [open, setOpen] = useState(false)
+type DetailModalKind = "traceback" | "data"
+
+export function ApiErrorToast({
+  msg,
+  type,
+  description,
+  traceback,
+  dataForModal,
+}: ApiErrorToastProps) {
+  const [modal, setModal] = useState<DetailModalKind | null>(null)
 
   const hasTraceback = useMemo(() => {
     return typeof traceback === "string" && traceback.trim().length > 0
   }, [traceback])
+
+  const hasDataModal = useMemo(() => {
+    return typeof dataForModal === "string" && dataForModal.trim().length > 0
+  }, [dataForModal])
+
+  const modalBody =
+    modal === "traceback" && hasTraceback
+      ? traceback!.trim()
+      : modal === "data" && hasDataModal
+        ? dataForModal!.trim()
+        : null
 
   return (
     <>
@@ -71,20 +92,31 @@ export function ApiErrorToast({ msg, type, description, traceback }: ApiErrorToa
             type="button"
             size="sm"
             variant="secondary"
-            onClick={() => setOpen(true)}
+            onClick={() => setModal("traceback")}
             className="shrink-0"
           >
             More
           </Button>
         )}
+        {!hasTraceback && hasDataModal && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => setModal("data")}
+            className="shrink-0"
+          >
+            更多
+          </Button>
+        )}
       </div>
 
-      {open && hasTraceback && typeof document !== "undefined" &&
+      {modal && modalBody && typeof document !== "undefined" &&
         createPortal(
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 p-6 backdrop-blur-sm"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setOpen(false)
+            if (e.target === e.currentTarget) setModal(null)
           }}
         >
           <div className="relative flex h-[86vh] w-[min(96vw,1200px)] flex-col overflow-hidden rounded-2xl bg-card shadow-2xl ring-1 ring-border/70">
@@ -93,21 +125,25 @@ export function ApiErrorToast({ msg, type, description, traceback }: ApiErrorToa
               size="icon"
               variant="secondary"
               aria-label="关闭"
-              onClick={() => setOpen(false)}
+              onClick={() => setModal(null)}
               className="absolute right-4 top-4 z-10"
             >
               <XIcon className="h-4 w-4" />
             </Button>
 
             <div className="border-b border-border/70 px-6 py-5 pr-16">
-              <div className="text-base font-semibold">Traceback</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {msg}
-              </div>
+              {modal === "traceback" ? (
+                <>
+                  <div className="text-base font-semibold">Traceback</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{msg}</div>
+                </>
+              ) : (
+                <div className="text-base font-semibold leading-snug">{msg}</div>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto bg-muted/30 p-5">
               <div className="docs-scroll h-full overflow-auto rounded-md border border-border/70 bg-muted/20 p-3">
-                {renderTracebackWithLineNumbers(traceback!)}
+                {renderTracebackWithLineNumbers(modalBody)}
               </div>
             </div>
           </div>

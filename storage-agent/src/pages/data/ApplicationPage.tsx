@@ -1,27 +1,79 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { Check, Loader2, XCircle } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
 import {
-  fetchApplicationsApi,
+  approveApplicationStream,
   createApplicationApi,
-  approveApplicationApi,
-  type Application,
-  type ApplicationCreateRequest,
+  fetchApplicationsApi,
 } from "../../api/client"
-import { showErrorToast } from "../../api/toast"
+import type {
+  Application,
+  ApplicationApprovalSseEvent,
+  ApplicationApprovalSseStatus,
+  ApplicationCreateRequest,
+} from "../../api/client"
+import { showErrorToast, showSuccessToast } from "../../api/toast"
+import { useNavigationLeaveBlock } from "../../contexts/NavigationLeaveBlockContext"
 import { Modal } from "../../components/Modal"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { DialogFooter } from "../../components/ui/dialog"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
+import { cn } from "../../lib/utils"
+
+type ApprovalPhase = "confirm" | "streaming" | "finished"
+
+function statusStyle(status: ApplicationApprovalSseStatus): string {
+  if (status === "running") {
+    return "border-l-amber-500 bg-amber-500/5 text-foreground"
+  }
+  if (status === "ok" || status === "success") {
+    return "border-l-emerald-500 bg-emerald-500/5 text-foreground"
+  }
+  if (status === "failed") {
+    return "border-l-destructive bg-destructive/5 text-destructive"
+  }
+  return "border-l-border bg-muted/40"
+}
+
+/** 仅 `isRunningActive` 为 true 时转动，表示当前仍在进行中的 running；历史 running 已结束，静止显示 */
+function StatusGlyph({
+  status,
+  isRunningActive,
+}: {
+  status: ApplicationApprovalSseStatus
+  isRunningActive: boolean
+}) {
+  if (status === "running") {
+    return (
+      <Loader2
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 text-amber-600",
+          isRunningActive && "animate-spin",
+        )}
+        aria-hidden
+      />
+    )
+  }
+  if (status === "ok" || status === "success") {
+    return <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+  }
+  if (status === "failed") {
+    return <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />
+  }
+  return null
+}
 
 export default function ApplicationPage() {
   const { accessToken } = useAuth()
+  const { beginBlock, endBlock } = useNavigationLeaveBlock()
 
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [approvalTarget, setApprovalTarget] = useState<Application | null>(null)
-  const [approving, setApproving] = useState(false)
+  const [approvalPhase, setApprovalPhase] = useState<ApprovalPhase>("confirm")
+  const [approvalEvents, setApprovalEvents] = useState<ApplicationApprovalSseEvent[]>([])
 
   const [showCreateModal, setShowCreateModal] = useState(false)
 
@@ -32,6 +84,12 @@ export default function ApplicationPage() {
     regions: [],
   })
   const [creating, setCreating] = useState(false)
+
+  const abortRef = useRef<AbortController | null>(null)
+  const logEndRef = useRef<HTMLDivElement | null>(null)
+
+  const isStreaming = approvalPhase === "streaming"
+  const streamLocksUi = approvalTarget !== null && isStreaming
 
   const loadApplications = async () => {
     setLoading(true)
@@ -49,6 +107,36 @@ export default function ApplicationPage() {
     void loadApplications()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!isStreaming) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [isStreaming])
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+  }, [approvalEvents])
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+      endBlock()
+    }
+  }, [endBlock])
+
+  const resetApprovalModal = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setApprovalTarget(null)
+    setApprovalPhase("confirm")
+    setApprovalEvents([])
+    endBlock()
+  }, [endBlock])
 
   const openCreateModal = () => {
     setShowCreateModal(true)
@@ -88,20 +176,63 @@ export default function ApplicationPage() {
     }
   }
 
+  const openApproval = (app: Application) => {
+    setApprovalTarget(app)
+    setApprovalPhase("confirm")
+    setApprovalEvents([])
+  }
+
   const handleApprove = async () => {
-    if (!approvalTarget || approving) return
-    setApproving(true)
+    if (!approvalTarget || isStreaming) return
+
+    const ac = new AbortController()
+    abortRef.current = ac
+    const finalSseEventCapture = { current: null as ApplicationApprovalSseEvent | null }
+    setApprovalPhase("streaming")
+    setApprovalEvents([])
+    beginBlock("授权流程进行中，确定要离开当前页面吗？离开将中断与服务器的授权连接。")
+
     try {
-      // 授权接口会通过全局 toast 展示成功或失败信息
-      await approveApplicationApi(approvalTarget.id, accessToken ?? undefined)
+      await approveApplicationStream({
+        applicationId: approvalTarget.id,
+        accessToken: accessToken ?? undefined,
+        signal: ac.signal,
+        onEvent: (ev: ApplicationApprovalSseEvent) => {
+          finalSseEventCapture.current = ev
+          setApprovalEvents((prev) => [...prev, ev])
+        },
+      })
+
       await loadApplications()
-      setApprovalTarget(null)
-    } catch {
-      // 错误已由 api client toast 展示
+
+      const finalSseEvent: ApplicationApprovalSseEvent | null = finalSseEventCapture.current
+      if (finalSseEvent?.step === "done" && finalSseEvent.status === "success") {
+        showSuccessToast(finalSseEvent.message || "授权成功")
+      } else if (finalSseEvent?.status === "failed") {
+        showErrorToast(finalSseEvent.message || "授权失败")
+      } else if (
+        finalSseEvent
+        && finalSseEvent.status !== "ok"
+        && finalSseEvent.status !== "success"
+      ) {
+        showErrorToast("授权流已结束，但未收到明确完成状态，请刷新列表确认。")
+      }
+    } catch (e) {
+      const aborted =
+        (e instanceof DOMException && e.name === "AbortError")
+        || (e instanceof Error && e.name === "AbortError")
+      if (!aborted) {
+        await loadApplications().catch(() => {})
+      }
     } finally {
-      setApproving(false)
+      endBlock()
+      setApprovalPhase("finished")
+      abortRef.current = null
     }
   }
+
+  const approvalModalTitle =
+    approvalPhase === "confirm" ? "确认授权应用" : "应用授权进度"
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -173,9 +304,9 @@ export default function ApplicationPage() {
                           type="button"
                           size="sm"
                           variant="outline"
-                          disabled={approving}
+                          disabled={streamLocksUi}
                           className="h-6 px-2 text-[10px]"
-                          onClick={() => setApprovalTarget(app)}
+                          onClick={() => openApproval(app)}
                         >
                           授权
                         </Button>
@@ -298,72 +429,140 @@ export default function ApplicationPage() {
       )}
       {approvalTarget && (
         <Modal
-          title="确认授权应用"
+          title={approvalModalTitle}
           onClose={() => {
-            if (approving) return
-            setApprovalTarget(null)
+            if (isStreaming) return
+            resetApprovalModal()
           }}
-          disableClose={approving}
+          disableClose={isStreaming}
+          contentClassName={
+            approvalPhase === "confirm"
+              ? undefined
+              : "flex h-[min(88vh,calc(100dvh-2.5rem))] flex-col overflow-hidden"
+          }
+          bodyClassName={
+            approvalPhase === "confirm"
+              ? undefined
+              : "flex min-h-0 flex-1 flex-col overflow-hidden !max-h-none py-0"
+          }
         >
-          <div className="space-y-4 text-sm">
-            <p className="text-[13px] text-muted-foreground">
-              确认要为以下应用执行授权操作？
-            </p>
-            <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
-              <div>
-                <div className="text-muted-foreground/70">显示名称</div>
-                <div className="mt-0.5 text-foreground/90">
-                  {approvalTarget.shown_name || approvalTarget.name}
+          <div
+            className={cn(
+              "text-sm",
+              approvalPhase === "confirm"
+                ? "space-y-4"
+                : "flex min-h-0 flex-1 flex-col gap-4",
+            )}
+          >
+            {approvalPhase === "confirm" ? (
+              <>
+                <p className="text-[13px] text-muted-foreground">
+                  确认要为以下应用执行授权操作？
+                </p>
+                <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
+                  <div>
+                    <div className="text-muted-foreground/70">显示名称</div>
+                    <div className="mt-0.5 text-foreground/90">
+                      {approvalTarget.shown_name || approvalTarget.name}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground/70">APPID</div>
+                    <div className="mt-0.5 text-foreground/90">
+                      {approvalTarget.name}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground/70">创建人</div>
+                    <div className="mt-0.5 text-foreground/90">
+                      {approvalTarget.author?.name || approvalTarget.author?.username}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground/70">创建时间</div>
+                    <div className="mt-0.5 text-foreground/90">
+                      {approvalTarget.created_at.replace("T", " ")}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground/70">APPID</div>
-                <div className="mt-0.5 text-foreground/90">
-                  {approvalTarget.name}
+              </>
+            ) : (
+              <>
+                <p className="shrink-0 text-[12px] text-muted-foreground">
+                  {isStreaming
+                    ? "正在与服务器建立授权流，请保持页面打开直至完成。"
+                    : "授权流程已结束，可关闭此窗口返回列表。"}
+                </p>
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-2 text-[11px]">
+                  {approvalEvents.length === 0 && isStreaming ? (
+                    <div className="flex items-center gap-2 py-6 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>等待服务器返回进度…</span>
+                    </div>
+                  ) : (
+                    approvalEvents.map((ev, i) => {
+                      const isActiveRunning =
+                        ev.status === "running" && i === approvalEvents.length - 1
+                      return (
+                        <div
+                          key={i}
+                          className={cn(
+                            "flex gap-2 rounded-md border-l-2 py-1.5 pl-2 pr-1",
+                            statusStyle(ev.status),
+                          )}
+                        >
+                          <StatusGlyph status={ev.status} isRunningActive={isActiveRunning} />
+                          <div className="min-w-0 flex-1 leading-snug">
+                            <div className="font-medium text-foreground/90">{ev.message}</div>
+                            {(ev.server_name || ev.step) && (
+                              <div className="mt-0.5 text-[10px] text-muted-foreground">
+                                {ev.step}
+                                {ev.server_name ? ` · ${ev.server_name}` : ""}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                  <div ref={logEndRef} />
                 </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground/70">创建人</div>
-                <div className="mt-0.5 text-foreground/90">
-                  {approvalTarget.author?.name || approvalTarget.author?.username}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground/70">创建时间</div>
-                <div className="mt-0.5 text-foreground/90">
-                  {approvalTarget.created_at.replace("T", " ")}
-                </div>
-              </div>
-            </div>
+              </>
+            )}
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={approving}
-                onClick={() => {
-                  if (approving) return
-                  setApprovalTarget(null)
-                }}
-              >
-                取消
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={approving}
-                onClick={() => void handleApprove()}
-              >
-                {approving ? (
-                  <span className="flex items-center gap-1">
-                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-100/70 border-t-emerald-600" />
-                    <span>授权中</span>
-                  </span>
-                ) : (
-                  "确认授权"
-                )}
-              </Button>
+            <DialogFooter className={approvalPhase === "confirm" ? undefined : "shrink-0"}>
+              {approvalPhase === "confirm" ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isStreaming}
+                    onClick={() => {
+                      if (isStreaming) return
+                      resetApprovalModal()
+                    }}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isStreaming}
+                    onClick={() => void handleApprove()}
+                  >
+                    确认授权
+                  </Button>
+                </>
+              ) : approvalPhase === "streaming" ? (
+                <p className="w-full text-right text-[11px] text-muted-foreground">
+                  流式连接进行中，关闭不可用
+                </p>
+              ) : (
+                <Button type="button" size="sm" onClick={() => resetApprovalModal()}>
+                  关闭
+                </Button>
+              )}
             </DialogFooter>
           </div>
         </Modal>
@@ -371,4 +570,3 @@ export default function ApplicationPage() {
     </div>
   )
 }
-

@@ -8,17 +8,29 @@ import {
 } from "./ui/dialog"
 import { Button } from "./ui/button"
 import { XIcon } from "lucide-react"
+
 interface ModalProps {
   title: string
   onClose: () => void
   children: ReactNode
   disableClose?: boolean
+  /** 合并到 DialogContent（如纵向 flex + max-h） */
+  contentClassName?: string
+  /** 合并到 DialogBody，用于单场景覆盖默认 max-h 等 */
+  bodyClassName?: string
 }
 
-export function Modal({ title, onClose, children, disableClose }: ModalProps) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  disableClose,
+  contentClassName,
+  bodyClassName,
+}: ModalProps) {
   return (
     <Dialog open>
-      <DialogContent>
+      <DialogContent className={contentClassName}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <Button
@@ -36,7 +48,7 @@ export function Modal({ title, onClose, children, disableClose }: ModalProps) {
             <XIcon className="h-4 w-4" />
           </Button>
         </DialogHeader>
-        <DialogBody>{children}</DialogBody>
+        <DialogBody className={bodyClassName}>{children}</DialogBody>
       </DialogContent>
     </Dialog>
   )

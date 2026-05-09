@@ -41,7 +41,7 @@ export function DialogHeader({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("mb-4 flex items-center justify-between gap-4", className)}
+      className={cn("mb-4 flex shrink-0 items-center justify-between gap-4", className)}
       {...props}
     >
       {children}

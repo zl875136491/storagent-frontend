@@ -3,7 +3,16 @@ import { toast as sonnerToast } from "sonner"
 import { ApiErrorToast } from "../components/ApiErrorToast"
 
 const TOAST_OPTIONS = { duration: 5000 } as const
-const TOAST_OPTIONS_WITH_TRACEBACK = { duration: 600_000 } as const // traceback modal 存活更久
+const TOAST_OPTIONS_WITH_TRACEBACK = { duration: 600_000 } as const // traceback / 长 data 模态存活更久
+
+/** data 超过此长度且无 traceback 时，toast 内缩略展示并提供「更多」查看全文 */
+const LONG_ERROR_DATA_THRESHOLD = 120
+
+function truncateForToastPreview(text: string, maxChars: number): string {
+  const t = text.trim()
+  if (t.length <= maxChars) return t
+  return `${t.slice(0, maxChars)}…`
+}
 
 /** 成功响应格式: { message: string } */
 export function showSuccessToast(message: string): void {
@@ -102,6 +111,11 @@ export function showApiErrorToast(body: string, fallbackMessage: string): void {
   try {
     const json = JSON.parse(raw) as unknown
 
+    const fullDataFormatted =
+      json && typeof json === "object" && "data" in json
+        ? formatErrorData((json as Record<string, unknown>)["data"]).trim()
+        : ""
+
     const msg = getString(json, "msg") ?? getString(json, "message") ?? fallbackMessage
     const type =
       getString(json, "type") ??
@@ -141,9 +155,27 @@ export function showApiErrorToast(body: string, fallbackMessage: string): void {
       if (looksLikeStack) traceback = raw
     }
 
-    // toast 展示为：msg + type tag + 两行描述；traceback 通过 More 按钮弹出
-    const node = createElement(ApiErrorToast, { msg, type, description, traceback })
-    sonnerToast.error(node, traceback ? TOAST_OPTIONS_WITH_TRACEBACK : TOAST_OPTIONS)
+    let dataForModal: string | undefined
+    if (!traceback && fullDataFormatted.length > LONG_ERROR_DATA_THRESHOLD) {
+      dataForModal = fullDataFormatted
+      const reasonTrimmed = reason?.trim()
+      if (!reasonTrimmed && (description?.trim() ?? "") === fullDataFormatted) {
+        description = truncateForToastPreview(fullDataFormatted, 200)
+      }
+    }
+
+    // toast：msg + type + 描述；traceback 或过长 data 通过按钮弹出模态框
+    const node = createElement(ApiErrorToast, {
+      msg,
+      type,
+      description,
+      traceback,
+      dataForModal,
+    })
+    sonnerToast.error(
+      node,
+      traceback || dataForModal ? TOAST_OPTIONS_WITH_TRACEBACK : TOAST_OPTIONS,
+    )
     return
   } catch {
     // 非 JSON，用原始文本兜底

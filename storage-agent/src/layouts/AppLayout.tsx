@@ -1,5 +1,7 @@
+import { useCallback, type MouseEvent } from "react"
 import { NavLink, Outlet } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
+import { useNavigationLeaveBlock } from "../contexts/NavigationLeaveBlockContext"
 import { Button } from "../components/ui/button"
 import {
   SidebarProvider,
@@ -40,6 +42,17 @@ function getEnvVar(key: EnvKey): string {
 
 function AppShell() {
   const { user, logout } = useAuth()
+  const { confirmIfBlocking } = useNavigationLeaveBlock()
+
+  const guardNav = useCallback(
+    (e: MouseEvent) => {
+      if (!confirmIfBlocking()) {
+        e.preventDefault()
+      }
+    },
+    [confirmIfBlocking],
+  )
+
   const page_agent = new PageAgent({
       model: getEnvVar("VITE_PAGE_AGENT_MODEL"),
       baseURL: getEnvVar("VITE_PAGE_AGENT_BASE_URL"),
@@ -65,21 +78,21 @@ function AppShell() {
             <div>
               <SidebarSectionTitle>基础数据管理</SidebarSectionTitle>
               <SidebarMenu>
-                <NavLink to="/data/basic/region">
+                <NavLink to="/data/basic/region" onClick={guardNav}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon="R">
                       区域管理
                     </SidebarMenuButton>
                   )}
                 </NavLink>
-                <NavLink to="/data/basic/application">
+                <NavLink to="/data/basic/application" onClick={guardNav}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon="A">
                       应用管理
                     </SidebarMenuButton>
                   )}
                 </NavLink>
-                <NavLink to="/data/basic/api-key">
+                <NavLink to="/data/basic/api-key" onClick={guardNav}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon="K">
                       APIKey 管理
@@ -92,21 +105,21 @@ function AppShell() {
             <div>
               <SidebarSectionTitle>存储服务</SidebarSectionTitle>
               <SidebarMenu>
-                <NavLink to="/data/minio">
+                <NavLink to="/data/minio" onClick={guardNav}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon="M">
                       MinIO 服务管理
                     </SidebarMenuButton>
                   )}
                 </NavLink>
-                <NavLink to="/data/storage/bucket-manage">
+                <NavLink to="/data/storage/bucket-manage" onClick={guardNav}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon="S">
                       存储桶管理
                     </SidebarMenuButton>
                   )}
                 </NavLink>
-                <NavLink to="/data/storage/buckets">
+                <NavLink to="/data/storage/buckets" onClick={guardNav}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon="B">
                       服务器文件详情
@@ -136,7 +149,7 @@ function AppShell() {
               </SidebarMenuButton>
             </SidebarMenu>
             <SidebarMenu>
-              <NavLink to="/docs">
+              <NavLink to="/docs" onClick={guardNav}>
                 {({ isActive }) => (
                   <SidebarMenuButton active={isActive} icon="D">
                     使用文档
@@ -177,6 +190,7 @@ function AppShell() {
               size="md"
               variant="default"
               onClick={() => {
+                if (!confirmIfBlocking()) return
                 void logout()
               }}
             >
