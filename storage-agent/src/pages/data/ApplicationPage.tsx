@@ -241,7 +241,7 @@ export default function ApplicationPage() {
     approvalPhase === "confirm" ? "确认授权应用" : "应用授权进度"
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-8xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">应用管理</h1>
@@ -273,7 +273,7 @@ export default function ApplicationPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {applications.map((app) => (
             <Card key={app.id} className="flex flex-col">
               <CardContent className="pt-4 text-[11px] text-muted-foreground">
@@ -499,7 +499,7 @@ export default function ApplicationPage() {
                     ? "正在与服务器建立授权流，请保持页面打开直至完成。"
                     : "授权流程已结束，可关闭此窗口返回列表。"}
                 </p>
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-2 text-[11px]">
+                <div className="docs-scroll min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-border/60 bg-muted/20 p-2 text-[11px]">
                   {approvalEvents.length === 0 && isStreaming ? (
                     <div className="flex items-center gap-2 py-6 text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />

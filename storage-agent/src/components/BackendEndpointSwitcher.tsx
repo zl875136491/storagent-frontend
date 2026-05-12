@@ -88,7 +88,7 @@ export function BackendEndpointSwitcher() {
   }
 
   return (
-    <div ref={rootRef} className="relative min-w-0 max-w-[min(100%,48rem)] flex-1">
+    <div ref={rootRef} className="relative min-w-0 flex-1 sm:max-w-[min(100%,48rem)]">
       <button
         type="button"
         aria-expanded={open}
@@ -97,17 +97,17 @@ export function BackendEndpointSwitcher() {
         disabled={(loading && items.length === 0) || switching}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex w-full min-w-0 items-center gap-2 rounded-xl border border-border/80 bg-muted/30 px-2.5 py-1.5 text-left transition-colors",
+          "flex w-full min-w-0 items-center gap-1.5 rounded-xl border border-border/80 bg-muted/30 px-2 py-1 text-left transition-colors sm:gap-2 sm:px-2.5 sm:py-1.5",
           "hover:border-primary/40 hover:bg-muted/50",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           ((loading && items.length === 0) || switching) && "pointer-events-none opacity-60",
         )}
       >
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Server className="h-3.5 w-3.5" aria-hidden />
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-7 sm:w-7">
+          <Server className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="text-[8px] font-medium uppercase tracking-wider text-muted-foreground sm:text-[9px]">
             后端服务
           </div>
           {loading && items.length === 0 ? (
@@ -118,33 +118,59 @@ export function BackendEndpointSwitcher() {
           ) : loadError ? (
             <div className="mt-0.5 truncate text-xs text-destructive">{loadError}</div>
           ) : selected ? (
-            <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] leading-tight">
-              <span className="shrink-0 font-semibold text-foreground">{selected.shown_name}</span>
-              <span className="shrink-0 text-muted-foreground/40" aria-hidden>
-                |
-              </span>
-              <span className="max-w-[5.5rem] shrink-0 truncate text-muted-foreground" title={selected.name}>
-                {selected.name}
-              </span>
-              <span className="shrink-0 text-muted-foreground/40" aria-hidden>
-                |
-              </span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground" title={selected.endpoint}>
-                {selected.endpoint}
-              </span>
-              {selected.master ? (
-                <span className="shrink-0 rounded bg-primary/15 px-1 py-px text-[9px] font-medium text-primary">
-                  主
+            <>
+              <div
+                className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-tight sm:hidden"
+                title={`${selected.name} · ${selected.endpoint}`}
+              >
+                <span className="min-w-0 flex-1 truncate font-semibold text-foreground">
+                  {selected.shown_name}
                 </span>
-              ) : null}
-            </div>
+                {selected.master ? (
+                  <span className="shrink-0 rounded bg-primary/15 px-1 py-px text-[9px] font-medium text-primary">
+                    主
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-0.5 hidden min-w-0 items-center gap-2 text-[11px] leading-tight sm:flex">
+                <span className="shrink-0 font-semibold text-foreground">{selected.shown_name}</span>
+                <span className="shrink-0 text-muted-foreground/40" aria-hidden>
+                  |
+                </span>
+                <span className="max-w-[5.5rem] shrink-0 truncate text-muted-foreground" title={selected.name}>
+                  {selected.name}
+                </span>
+                <span className="shrink-0 text-muted-foreground/40" aria-hidden>
+                  |
+                </span>
+                <span
+                  className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground"
+                  title={selected.endpoint}
+                >
+                  {selected.endpoint}
+                </span>
+                {selected.master ? (
+                  <span className="shrink-0 rounded bg-primary/15 px-1 py-px text-[9px] font-medium text-primary">
+                    主
+                  </span>
+                ) : null}
+              </div>
+            </>
           ) : currentBase ? (
-            <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] leading-tight">
-              <span className="shrink-0 font-medium text-foreground">当前</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+            <>
+              <div
+                className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground sm:hidden"
+                title={currentBase}
+              >
                 {currentBase}
-              </span>
-            </div>
+              </div>
+              <div className="mt-0.5 hidden min-w-0 items-center gap-2 text-[11px] leading-tight sm:flex">
+                <span className="shrink-0 font-medium text-foreground">当前</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
+                  {currentBase}
+                </span>
+              </div>
+            </>
           ) : (
             <div className="mt-0.5 text-xs text-muted-foreground">未选择</div>
           )}
@@ -167,7 +193,7 @@ export function BackendEndpointSwitcher() {
           id={listId}
           role="listbox"
           aria-label="选择后端服务"
-          className="absolute left-0 top-[calc(100%+6px)] z-[100] max-h-[min(70vh,18rem)] w-[min(100vw-2rem,48rem)] overflow-y-auto overflow-x-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-lg"
+          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,18rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-lg"
         >
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-muted-foreground">

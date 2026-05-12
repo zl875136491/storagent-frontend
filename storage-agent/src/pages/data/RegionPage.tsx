@@ -62,7 +62,7 @@ export default function RegionPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-8xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold">区域管理</h1>
@@ -96,7 +96,7 @@ export default function RegionPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
           {regions.map((region) => (
             <Card key={region.id} className="flex flex-col">
               <CardContent className="pt-4">

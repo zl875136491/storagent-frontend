@@ -213,7 +213,7 @@ export default function BucketPage() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-8xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">服务器文件详情</h1>

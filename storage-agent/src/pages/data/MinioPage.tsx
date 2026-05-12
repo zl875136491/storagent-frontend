@@ -114,7 +114,7 @@ export default function MinioPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-8xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">MinIO 服务管理</h1>
@@ -153,7 +153,7 @@ export default function MinioPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {servers.map((server) => (
             <Card key={server.id} className="flex flex-col">
               <CardContent className="pt-4 text-[11px] text-muted-foreground">

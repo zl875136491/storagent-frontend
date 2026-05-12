@@ -49,7 +49,7 @@ export default function StorageBucketManagePage() {
   )
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col">
+    <div className="mx-auto flex h-full max-w-8xl flex-col">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">存储桶管理</h1>
@@ -82,7 +82,7 @@ export default function StorageBucketManagePage() {
               <div className="border-b border-border/70 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
                 共 {buckets.length} 个存储桶
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <div className="docs-scroll min-h-0 flex-1 overflow-y-auto p-2">
                 <div className="space-y-1">
                   {buckets.map((bucket) => {
                     const active = bucket.name === selectedName

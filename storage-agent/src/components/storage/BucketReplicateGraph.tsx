@@ -9,6 +9,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 import {
   ReactFlow,
   Background,
@@ -24,7 +25,6 @@ import {
   useStore,
   MarkerType,
   BaseEdge,
-  EdgeLabelRenderer,
   getBezierPath,
   ConnectionLineType,
   type Connection,
@@ -734,6 +734,27 @@ function EdgeInspector({
 
 type ReplicateEdgeData = { replicate: BucketReplicateRule }
 
+/** 与边卡片 Tailwind 尺寸一致，用于将 fixed 定位钳在视口内，避免贴边裁切 */
+function edgeInspectCardMaxSize() {
+  if (typeof window === "undefined") return { maxW: 300, maxH: 440 }
+  return {
+    maxW: Math.min(window.innerWidth * 0.92, 300),
+    maxH: Math.min(window.innerHeight * 0.72, 440),
+  }
+}
+
+function clampEdgeInspectCardToViewport(cx: number, cy: number, pad = 8) {
+  const { maxW, maxH } = edgeInspectCardMaxSize()
+  const vw = typeof window !== "undefined" ? window.innerWidth : maxW
+  const vh = typeof window !== "undefined" ? window.innerHeight : maxH
+  const halfW = maxW / 2 + pad
+  const halfH = maxH / 2 + pad
+  return {
+    x: Math.min(Math.max(cx, halfW), Math.max(halfW, vw - halfW)),
+    y: Math.min(Math.max(cy, halfH), Math.max(halfH, vh - halfH)),
+  }
+}
+
 function ReplicateBezierEdge({
   id,
   sourceX,
@@ -749,9 +770,22 @@ function ReplicateBezierEdge({
 }: EdgeProps<Edge<ReplicateEdgeData>>) {
   const ctx = useContext(ReplicateEdgeContext)
   const replicate = data?.replicate
-  /** 与画布 viewport 的 zoom 相抵，避免边标签随缩放变形；edgelabel-renderer 仍在变换层内 */
-  const viewportZoom = useStore((s) => s.transform[2])
-  const labelInverseScale = 1 / Math.max(viewportZoom, 0.001)
+  const { flowToScreenPosition } = useReactFlow()
+  /** 平移/缩放时重算屏幕坐标（卡片经 portal 挂到 body，不在缩放层内） */
+  const transform = useStore((s) => s.transform)
+  void transform
+
+  const [resizeTick, setResizeTick] = useState(0)
+  const showCard = ctx != null && replicate != null && ctx.openInspectorEdgeId === id
+
+  useEffect(() => {
+    if (!showCard) return
+    const onResize = () => setResizeTick((n) => n + 1)
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [showCard])
+
+  void resizeTick
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -763,7 +797,12 @@ function ReplicateBezierEdge({
   })
 
   const stroke = selected ? "var(--primary)" : "var(--muted-foreground)"
-  const showCard = ctx != null && replicate != null && ctx.openInspectorEdgeId === id
+
+  const rawScreen =
+    showCard && typeof window !== "undefined"
+      ? flowToScreenPosition({ x: labelX, y: labelY })
+      : { x: 0, y: 0 }
+  const screen = showCard ? clampEdgeInspectCardToViewport(rawScreen.x, rawScreen.y) : rawScreen
 
   if (!replicate || !ctx) {
     return (
@@ -784,19 +823,21 @@ function ReplicateBezierEdge({
         style={{ ...style, stroke, strokeWidth: selected ? 2.25 : 1.5 }}
         interactionWidth={26}
       />
-      {showCard && (
-        <EdgeLabelRenderer>
+      {showCard && typeof document !== "undefined" && (
+        createPortal(
           <div
             className="nodrag nopan nowheel pointer-events-auto"
             style={{
-              position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px) scale(${labelInverseScale})`,
-              transformOrigin: "center center",
-              zIndex: 1001,
+              position: "fixed",
+              left: screen.x,
+              top: screen.y,
+              transform: "translate(-50%, -50%)",
+              zIndex: 10050,
             }}
             onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="max-h-[min(72vh,440px)] w-[min(92vw,300px)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 text-card-foreground shadow-lg ring-1 ring-border/60 [touch-action:pan-y]">
+            <div className="docs-scroll max-h-[min(72vh,440px)] w-[min(92vw,300px)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 text-card-foreground shadow-lg ring-1 ring-border/60 [touch-action:pan-y]">
               <EdgeInspector
                 mode={ctx.mode}
                 replicate={replicate}
@@ -813,8 +854,9 @@ function ReplicateBezierEdge({
                 onClose={() => ctx.closeEdgeInspector()}
               />
             </div>
-          </div>
-        </EdgeLabelRenderer>
+          </div>,
+          document.body,
+        )
       )}
     </>
   )
@@ -1198,7 +1240,8 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
 
   const onEdgeClick = useCallback((_e: MouseEvent, edge: Edge) => {
     if (edge.type !== "replicateBezier") return
-    setOpenInspectorEdgeId((cur) => (cur === edge.id ? null : edge.id))
+    /** 始终打开当前边；勿在同边上 toggle 关闭，否则 portal 卡片与边命中区重叠时易穿透触发而误关 */
+    setOpenInspectorEdgeId(edge.id)
   }, [])
 
   const onPaneClick = useCallback(() => {
