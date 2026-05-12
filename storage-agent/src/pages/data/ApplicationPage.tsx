@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, Loader2, XCircle } from "lucide-react"
+import { Check, Circle, Loader2, XCircle } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
 import {
   approveApplicationStream,
@@ -37,7 +37,7 @@ function statusStyle(status: ApplicationApprovalSseStatus): string {
   return "border-l-border bg-muted/40"
 }
 
-/** 仅 `isRunningActive` 为 true 时转动，表示当前仍在进行中的 running；历史 running 已结束，静止显示 */
+/** running 且为当前最后一条时转动；该 running 步骤已结束时改为绿色完整圆环，表示该阶段已完成 */
 function StatusGlyph({
   status,
   isRunningActive,
@@ -46,12 +46,18 @@ function StatusGlyph({
   isRunningActive: boolean
 }) {
   if (status === "running") {
+    if (isRunningActive) {
+      return (
+        <Loader2
+          className="h-3.5 w-3.5 shrink-0 animate-spin text-amber-600"
+          aria-hidden
+        />
+      )
+    }
     return (
-      <Loader2
-        className={cn(
-          "h-3.5 w-3.5 shrink-0 text-amber-600",
-          isRunningActive && "animate-spin",
-        )}
+      <Circle
+        className="h-3.5 w-3.5 shrink-0 fill-none text-emerald-600"
+        strokeWidth={2.5}
         aria-hidden
       />
     )

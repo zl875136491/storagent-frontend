@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useAuth } from "../../auth/AuthContext"
 import { fetchStorageBucketsApi, type StorageBucketItem } from "../../api/client"
+import { BucketReplicateGraph } from "../../components/storage/BucketReplicateGraph"
 import { Card, CardContent } from "../../components/ui/card"
 
 function getBucketShownName(bucket: StorageBucketItem): string {
@@ -176,12 +177,16 @@ export default function StorageBucketManagePage() {
               </CardContent>
             </Card>
 
-            <Card className="flex-1 border-dashed bg-muted/20">
-              <CardContent className="pt-4">
-                <div className="text-sm font-medium text-foreground">预留区域</div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  下方区域暂不使用，后续功能会在这里扩展。
-                </div>
+            <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-dashed bg-muted/20">
+              <CardContent className="flex min-h-0 flex-1 flex-col p-2 pt-2">
+                {selectedBucket ? (
+                  <BucketReplicateGraph
+                    bucketName={selectedBucket.name}
+                    accessToken={accessToken ?? undefined}
+                  />
+                ) : (
+                  <div className="text-xs text-muted-foreground">选择存储桶后显示复制拓扑。</div>
+                )}
               </CardContent>
             </Card>
           </div>

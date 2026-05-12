@@ -159,6 +159,83 @@ export interface StorageBucketsResponse {
   data: StorageBucketItem[]
 }
 
+/** 存储桶跨站点复制规则状态（与 GET …/replicates 一致） */
+export interface BucketReplicateRuleStatus {
+  status: string
+  priority: number
+  delete_marker_replication: string
+  existing_object_replication: string
+  source_selection_criteria: string
+}
+
+/** 复制拓扑边上：连线从 from 节点的哪一侧离开 / 进入 to 节点的哪一侧（与 UI 一致，便于存后端） */
+export type ReplicateSide = "top" | "right" | "bottom" | "left"
+
+/** GET replicates 图中连接桩方位（与 POST …/bucket-edge-position 一致）；对应画布 Handle 为 up→top、down→bottom */
+export type ReplicateGraphPortPosition = "up" | "down" | "left" | "right"
+
+export interface BucketGraphServerCoords {
+  position_x: number
+  position_y: number
+}
+
+/** 新版：各站点节点在拓扑图中的坐标（可为百分比 0–100 或像素，由数值范围推断） */
+export type BucketReplicateServersMap = Record<string, BucketGraphServerCoords>
+
+export interface BucketReplicateRule {
+  from: string
+  to: string
+  /** 边在 `from` 节点上的连接侧；缺省时前端可按几何推断或由 from_position 映射 */
+  from_side?: ReplicateSide
+  /** 边在 `to` 节点上的连接侧 */
+  to_side?: ReplicateSide
+  /** API：从 from 节点哪一侧出线（up/down/left/right） */
+  from_position?: ReplicateGraphPortPosition
+  /** API：进入 to 节点哪一侧 */
+  to_position?: ReplicateGraphPortPosition
+  status: BucketReplicateRuleStatus
+  rule_id: string
+}
+
+/**
+ * 与 GET `/api/storage/buckets/{name}/replicates` 一并返回的可选布局快照（version 便于演进）。
+ * 保存后可还原节点坐标与每条边使用的连接侧。
+ */
+export interface ReplicateGraphLayoutV1 {
+  version: 1
+  nodes: Array<{ id: string; x: number; y: number }>
+  edges: Array<{
+    rule_id: string
+    from: string
+    to: string
+    from_side: ReplicateSide
+    to_side: ReplicateSide
+  }>
+}
+
+export interface BucketReplicatesResponse {
+  /** 旧版：站点 id 列表；新版：站点 id → 坐标 */
+  servers: string[] | BucketReplicateServersMap
+  replicates: BucketReplicateRule[]
+  /** 可选：与 replicates 配套的画布布局 */
+  layout?: ReplicateGraphLayoutV1
+}
+
+export interface BucketGraphNodePositionPayload {
+  bucket: string
+  server: string
+  position_x: number
+  position_y: number
+}
+
+export interface BucketGraphEdgePositionPayload {
+  bucket: string
+  from_server: string
+  to_server: string
+  from_position: ReplicateGraphPortPosition
+  to_position: ReplicateGraphPortPosition
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   const text = await response.text().catch(() => "")
 
@@ -270,6 +347,58 @@ export async function fetchStorageBucketsApi(
   accessToken?: string,
 ): Promise<StorageBucketsResponse> {
   return apiGet<StorageBucketsResponse>("/api/storage/buckets", accessToken)
+}
+
+export async function fetchBucketReplicatesApi(
+  bucketName: string,
+  accessToken?: string,
+): Promise<BucketReplicatesResponse> {
+  const q = encodeURIComponent(bucketName)
+  return apiGet<BucketReplicatesResponse>(`/api/storage/buckets/${q}/replicates`, accessToken)
+}
+
+export async function postBucketGraphNodePosition(
+  payload: BucketGraphNodePositionPayload,
+  accessToken?: string,
+): Promise<BucketGraphNodePositionPayload> {
+  return apiPost<BucketGraphNodePositionPayload, BucketGraphNodePositionPayload>(
+    "/api/graph/bucket-node-position",
+    payload,
+    accessToken,
+  )
+}
+
+export async function postBucketGraphEdgePosition(
+  payload: BucketGraphEdgePositionPayload,
+  accessToken?: string,
+): Promise<BucketGraphEdgePositionPayload> {
+  return apiPost<BucketGraphEdgePositionPayload, BucketGraphEdgePositionPayload>(
+    "/api/graph/bucket-edge-position",
+    payload,
+    accessToken,
+  )
+}
+
+/** 新建一条复制规则（POST body 与后端约定一致时可再调整字段名） */
+export interface BucketReplicateCreatePayload {
+  from: string
+  to: string
+  from_side: ReplicateSide
+  to_side: ReplicateSide
+  status: BucketReplicateRuleStatus
+}
+
+export async function createBucketReplicateApi(
+  bucketName: string,
+  payload: BucketReplicateCreatePayload,
+  accessToken?: string,
+): Promise<BucketReplicateRule> {
+  const q = encodeURIComponent(bucketName)
+  return apiPost<BucketReplicateCreatePayload, BucketReplicateRule>(
+    `/api/storage/buckets/${q}/replicates`,
+    payload,
+    accessToken,
+  )
 }
 
 export async function createMinioServerApi(

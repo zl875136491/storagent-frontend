@@ -372,3 +372,46 @@ code.hljs {
   background: var(--primary);
   opacity: 1;
 }
+
+/* 存储桶复制拓扑：悬停边属性卡片需叠在节点之上（RF 默认 edgelabel 层在节点之下） */
+.replicate-bucket-flow .react-flow__edgelabel-renderer {
+  z-index: 1000;
+}
+
+/* React Flow 左下角控件：跟随主题变量（默认样式偏浅/固定色） */
+.replicate-bucket-flow .react-flow__controls {
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.08);
+}
+.replicate-bucket-flow .react-flow__controls-button {
+  background: var(--card);
+  color: var(--foreground);
+  border-bottom: 1px solid var(--border);
+  fill: var(--foreground);
+}
+.replicate-bucket-flow .react-flow__controls-button:hover {
+  background: var(--muted);
+}
+.replicate-bucket-flow .react-flow__controls-button:disabled {
+  opacity: 0.45;
+}
+.replicate-bucket-flow .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+/* 小地图：背景与节点块随主题 */
+.replicate-bucket-flow .react-flow__minimap {
+  background-color: var(--card) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* 四向连接桩：默认较淡，悬停/编辑时更易对准 */
+.replicate-bucket-flow .replicate-quad-handle {
+  opacity: 0.22;
+  width: 10px !important;
+  height: 10px !important;
+  min-width: 10px !important;
+  min-height: 10px !important;
+}
+.replicate-bucket-flow .replicate-quad-handle:hover {
+  opacity: 0.55 !important;
+}
