@@ -21,6 +21,7 @@ import {
   useNodesState,
   useEdgesState,
   useReactFlow,
+  useStore,
   MarkerType,
   BaseEdge,
   EdgeLabelRenderer,
@@ -484,11 +485,29 @@ function ReadonlyReplicationSwitchRow({ label, checked }: { label: string; check
   )
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function EdgePriorityReadout({ priority }: { priority: number }) {
+  const n = typeof priority === "number" && !Number.isNaN(priority) ? priority : Number(priority)
+  const value = Number.isFinite(n) ? n : 0
+  const belowMin = value < 0
   return (
-    <div>
-      <dt className="text-[10px] text-muted-foreground/90">{label}</dt>
-      <dd className="mt-0.5 break-all font-mono text-[11px] text-foreground">{value}</dd>
+    <div className="rounded-lg border border-border/60 bg-muted/25 px-2.5 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-medium text-muted-foreground">优先级 (数值越大优先级越高)</span>
+        <span
+          className="font-mono text-lg font-semibold tabular-nums leading-none tracking-tight text-foreground"
+          title={`优先级数值：${value}`}
+        >
+          {value}
+        </span>
+      </div>
+      {/* <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+        ；约定从 <span className="font-medium text-foreground/90">0</span> 起，上不封顶。
+      </p> */}
+      {belowMin && (
+        <p className="mt-1 text-[10px] leading-snug text-amber-800 dark:text-amber-200">
+          当前值小于 0，与常见约定不一致，仅作展示。
+        </p>
+      )}
     </div>
   )
 }
@@ -576,7 +595,7 @@ function EdgeInspector({
   replicate,
   onApply,
   onDelete,
-  onClose,
+  onClose: _onClose,
 }: {
   mode: GraphMode
   replicate: BucketReplicateRule
@@ -640,19 +659,22 @@ function EdgeInspector({
     return (
       <div className="text-xs">
         {header}
-        <dl className="space-y-2">
-          <Row label="规则 ID" value={replicate.rule_id || "—"} />
-        </dl>
+        {/* <dl className="space-y-2">
+          <div>
+            <dt className="text-[10px] text-muted-foreground/90">规则 ID</dt>
+            <dd className="mt-0.5 break-all font-mono text-[11px] text-foreground">{replicate.rule_id || "—"}</dd>
+          </div>
+        </dl> */}
         <div className="mt-2 space-y-2">{endpointReadonly}</div>
-        <dl className="mt-2 space-y-2">
-          <Row label="优先级" value={String(st.priority)} />
-        </dl>
+        <div className="mt-2">
+          <EdgePriorityReadout priority={st.priority} />
+        </div>
         <div className="mt-2">{readonlyFlags}</div>
-        <div className="mt-3 flex justify-end">
+        {/* <div className="mt-3 flex justify-end">
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
             关闭
           </Button>
-        </div>
+        </div> */}
       </div>
     )
   }
@@ -660,9 +682,9 @@ function EdgeInspector({
   return (
     <div className="space-y-2 text-xs">
       {header}
-      <Field label="规则 ID">
+      {/* <Field label="规则 ID">
         <Input value={replicate.rule_id} readOnly disabled className="font-mono text-[11px]" />
-      </Field>
+      </Field> */}
       <div className="grid gap-2">
         <div className="rounded-lg border border-border/60 bg-muted/25 px-2.5 py-2">
           <div className="text-[10px] text-muted-foreground">源站点</div>
@@ -683,14 +705,12 @@ function EdgeInspector({
           </div>
         </div>
       </div>
-      <Field label="同步状态（只读）">
+      {/* <Field label="同步状态（只读）">
         <Input value={st.status} readOnly disabled className="text-[11px]" />
-      </Field>
-      <Field label="优先级（只读）">
-        <Input type="number" value={st.priority} readOnly disabled className="text-[11px]" />
-      </Field>
+      </Field> */}
+      <EdgePriorityReadout priority={st.priority} />
       {readonlyFlags}
-      <div className="flex flex-wrap gap-2 pt-1">
+      <div className="flex flex-wrap justify-between pt-1">
         <Button
           type="button"
           size="sm"
@@ -702,13 +722,10 @@ function EdgeInspector({
             })
           }
         >
-          应用出线/入线侧
+          应用
         </Button>
         <Button type="button" size="sm" variant="destructive" onClick={onDelete}>
-          删除边
-        </Button>
-        <Button type="button" size="sm" variant="outline" onClick={onClose}>
-          关闭
+          删除
         </Button>
       </div>
     </div>
@@ -732,6 +749,9 @@ function ReplicateBezierEdge({
 }: EdgeProps<Edge<ReplicateEdgeData>>) {
   const ctx = useContext(ReplicateEdgeContext)
   const replicate = data?.replicate
+  /** 与画布 viewport 的 zoom 相抵，避免边标签随缩放变形；edgelabel-renderer 仍在变换层内 */
+  const viewportZoom = useStore((s) => s.transform[2])
+  const labelInverseScale = 1 / Math.max(viewportZoom, 0.001)
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
@@ -767,15 +787,16 @@ function ReplicateBezierEdge({
       {showCard && (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan pointer-events-auto"
+            className="nodrag nopan nowheel pointer-events-auto"
             style={{
               position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px) scale(${labelInverseScale})`,
+              transformOrigin: "center center",
               zIndex: 1001,
             }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <div className="w-[min(92vw,300px)] max-h-[min(72vh,440px)] overflow-y-auto rounded-xl border border-border bg-card p-3 text-card-foreground shadow-lg ring-1 ring-border/60">
+            <div className="max-h-[min(72vh,440px)] w-[min(92vw,300px)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 text-card-foreground shadow-lg ring-1 ring-border/60 [touch-action:pan-y]">
               <EdgeInspector
                 mode={ctx.mode}
                 replicate={replicate}
