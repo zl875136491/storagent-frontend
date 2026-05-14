@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
@@ -776,7 +777,17 @@ function ReplicateBezierEdge({
   void transform
 
   const [resizeTick, setResizeTick] = useState(0)
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const dragSessionRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null)
+  const prevShowCardRef = useRef(false)
   const showCard = ctx != null && replicate != null && ctx.openInspectorEdgeId === id
+
+  useEffect(() => {
+    if (showCard && !prevShowCardRef.current) {
+      setDragOffset({ x: 0, y: 0 })
+    }
+    prevShowCardRef.current = showCard
+  }, [showCard])
 
   useEffect(() => {
     if (!showCard) return
@@ -802,7 +813,42 @@ function ReplicateBezierEdge({
     showCard && typeof window !== "undefined"
       ? flowToScreenPosition({ x: labelX, y: labelY })
       : { x: 0, y: 0 }
-  const screen = showCard ? clampEdgeInspectCardToViewport(rawScreen.x, rawScreen.y) : rawScreen
+  const screen = showCard
+    ? clampEdgeInspectCardToViewport(rawScreen.x + dragOffset.x, rawScreen.y + dragOffset.y)
+    : rawScreen
+
+  const onInspectDragPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragSessionRef.current = {
+      px: e.clientX,
+      py: e.clientY,
+      ox: dragOffset.x,
+      oy: dragOffset.y,
+    }
+  }
+
+  const onInspectDragPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = dragSessionRef.current
+    if (!d) return
+    e.preventDefault()
+    setDragOffset({
+      x: d.ox + (e.clientX - d.px),
+      y: d.oy + (e.clientY - d.py),
+    })
+  }
+
+  const onInspectDragPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragSessionRef.current) return
+    dragSessionRef.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }
 
   if (!replicate || !ctx) {
     return (
@@ -834,25 +880,40 @@ function ReplicateBezierEdge({
               transform: "translate(-50%, -50%)",
               zIndex: 10050,
             }}
-            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="docs-scroll max-h-[min(72vh,440px)] w-[min(92vw,300px)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card p-3 text-card-foreground shadow-lg ring-1 ring-border/60 [touch-action:pan-y]">
-              <EdgeInspector
-                mode={ctx.mode}
-                replicate={replicate}
-                onApply={(next) => {
-                  const fs = next.from_side ?? "bottom"
-                  const ts = next.to_side ?? "top"
-                  ctx.updateReplicate(id, { ...next, from_side: fs, to_side: ts })
-                  ctx.persistEdgePorts?.(next.from, next.to, fs, ts)
-                }}
-                onDelete={() => {
-                  ctx.removeEdge(id)
-                  ctx.closeEdgeInspector()
-                }}
-                onClose={() => ctx.closeEdgeInspector()}
-              />
+            <div className="flex max-h-[min(72vh,440px)] w-[min(92vw,300px)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-lg ring-1 ring-border/60">
+              <div
+                className={cn(
+                  "flex shrink-0 cursor-grab items-center gap-2 border-b border-border/60 bg-muted/30 px-3 py-2 select-none active:cursor-grabbing",
+                  "[touch-action:none]",
+                )}
+                onPointerDown={onInspectDragPointerDown}
+                onPointerMove={onInspectDragPointerMove}
+                onPointerUp={onInspectDragPointerUp}
+                onPointerCancel={onInspectDragPointerUp}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span className="inline-block h-1 w-8 rounded-full bg-muted-foreground/35" aria-hidden />
+                {/* <span className="text-[10px] font-medium text-muted-foreground">拖动调整位置</span> */}
+              </div>
+              <div className="docs-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 [touch-action:pan-y]">
+                <EdgeInspector
+                  mode={ctx.mode}
+                  replicate={replicate}
+                  onApply={(next) => {
+                    const fs = next.from_side ?? "bottom"
+                    const ts = next.to_side ?? "top"
+                    ctx.updateReplicate(id, { ...next, from_side: fs, to_side: ts })
+                    ctx.persistEdgePorts?.(next.from, next.to, fs, ts)
+                  }}
+                  onDelete={() => {
+                    ctx.removeEdge(id)
+                    ctx.closeEdgeInspector()
+                  }}
+                  onClose={() => ctx.closeEdgeInspector()}
+                />
+              </div>
             </div>
           </div>,
           document.body,

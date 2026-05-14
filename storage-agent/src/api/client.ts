@@ -43,6 +43,8 @@ export interface UserProfile {
   id: string
   username: string
   name: string
+  /** 与后端 `/api/auth/profile` 一致，用于前端权限展示 */
+  is_admin: boolean
   roles: Role[]
   created_at: string
   updated_at: string
@@ -110,6 +112,8 @@ export interface MinioServer {
   /** MinIO 进程监听端口 */
   minio_port: number
   access_key: string
+  /** 复制集权重 */
+  replicate_weight?: number
   // secret_key: string
 }
 
@@ -117,13 +121,8 @@ export interface MinioServerListResponse {
   data: MinioServer[]
 }
 
-export interface MinioServerCreateRequest {
-  region: string
-  name: string
-  host: string
-  port: number
-  access_key: string
-  secret_key: string
+export interface MinioServerReplicateWeightPayload {
+  replicate_weight: number
 }
 
 export interface BucketFileItem {
@@ -401,12 +400,13 @@ export async function createBucketReplicateApi(
   )
 }
 
-export async function createMinioServerApi(
-  payload: MinioServerCreateRequest,
+export async function updateMinioServerApi(
+  minioServerId: string,
+  payload: MinioServerReplicateWeightPayload,
   accessToken?: string,
 ): Promise<MinioServer> {
-  return apiPost<MinioServerCreateRequest, MinioServer>(
-    "/api/storage/minio-server",
+  return apiPost<MinioServerReplicateWeightPayload, MinioServer>(
+    `/api/storage/minio-server/${minioServerId}`,
     payload,
     accessToken,
   )

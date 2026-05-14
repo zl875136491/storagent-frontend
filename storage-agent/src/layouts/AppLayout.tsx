@@ -1,17 +1,21 @@
-import { useCallback, type MouseEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
 import {
   BookOpen,
   Boxes,
+  ChevronDown,
   Database,
   FileStack,
   FolderKanban,
   Globe2,
   KeyRound,
+  LogOut,
   Sparkles,
+  UserRound,
 } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
 import { useNavigationLeaveBlock } from "../contexts/NavigationLeaveBlockContext"
+import type { UserProfile } from "../api/client"
 import { Button } from "../components/ui/button"
 import {
   SidebarProvider,
@@ -50,6 +54,118 @@ function getEnvVar(key: EnvKey): string {
     return ""
   }
   return value
+}
+
+function HeaderUserMenu({
+  user,
+  logout,
+  confirmIfBlocking,
+}: {
+  user: UserProfile
+  logout: () => Promise<void>
+  confirmIfBlocking: () => boolean
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [logoutInlineConfirm, setLogoutInlineConfirm] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  const displayName = user.name || user.username
+
+  useEffect(() => {
+    if (!menuOpen) setLogoutInlineConfirm(false)
+  }, [menuOpen])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function onPointerDown(e: PointerEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown, true)
+    return () => document.removeEventListener("pointerdown", onPointerDown, true)
+  }, [menuOpen])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false)
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [menuOpen])
+
+  const confirmLogout = useCallback(() => {
+    if (!confirmIfBlocking()) return
+    setMenuOpen(false)
+    void logout()
+  }, [confirmIfBlocking, logout])
+
+  return (
+    <div ref={rootRef} className="relative shrink-0">
+      <Button
+        type="button"
+        variant="ghost"
+        size="md"
+        className="h-9 max-w-[min(100%,14rem)] gap-1.5 px-2 text-muted-foreground hover:bg-accent/80 hover:text-foreground sm:max-w-[18rem] sm:gap-2 sm:px-3"
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        <UserRound className="h-4 w-4 shrink-0 text-foreground/90" aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground">
+          {displayName}
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 opacity-70 transition-transform ${menuOpen ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </Button>
+
+      {menuOpen ? (
+        <div
+          role="menu"
+          aria-label="用户菜单"
+          className="absolute right-0 top-full z-50 mt-1.5 w-[min(calc(100vw-1.5rem),15rem)] rounded-xl border border-border/80 bg-popover py-1 text-popover-foreground shadow-lg ring-1 ring-black/5 dark:ring-white/10"
+        >
+          <div className="p-1">
+            {logoutInlineConfirm ? (
+              <div className="flex gap-1.5" role="group" aria-label="确认退出登录">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 min-w-0 flex-1 rounded-lg px-2 text-xs"
+                  onClick={() => setLogoutInlineConfirm(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="h-8 min-w-0 flex-1 rounded-lg px-2 text-xs"
+                  onClick={confirmLogout}
+                >
+                  退出
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setLogoutInlineConfirm(true)}
+              >
+                <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+                退出登录
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function AppShell() {
@@ -188,31 +304,9 @@ function AppShell() {
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
             <ModeToggle />
-            {user && (
-              <div className="hidden items-center gap-3 text-xs text-muted-foreground md:flex">
-                <div className="flex flex-col text-right">
-                  <span className="text-sm font-medium text-foreground">
-                    {user.name || user.username}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {user.roles && user.roles.length > 0
-                      ? user.roles.map(role => role.name).join(" / ")
-                      : "未分配角色"}
-                  </span>
-                </div>
-              </div>
-            )}
-            <Button
-              size="md"
-              variant="default"
-              className="shrink-0 px-3 text-xs sm:text-sm"
-              onClick={() => {
-                if (!confirmIfBlocking()) return
-                void logout()
-              }}
-            >
-              退出登录
-            </Button>
+            {user ? (
+              <HeaderUserMenu user={user} logout={logout} confirmIfBlocking={confirmIfBlocking} />
+            ) : null}
           </div>
         </header>
 

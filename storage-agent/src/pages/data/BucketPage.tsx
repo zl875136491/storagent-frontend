@@ -235,7 +235,7 @@ export default function BucketPage() {
           <Card className="border-dashed bg-muted/40">
             <CardContent className="flex flex-col gap-1 pt-4 text-xs text-muted-foreground">
               <span>当前暂无 MinIO 服务配置。</span>
-              <span>请先在「MinIO 服务管理」中创建至少一个服务实例。</span>
+              <span>请联系管理员在后端注册 MinIO 服务后刷新本页。</span>
             </CardContent>
           </Card>
         ) : (
