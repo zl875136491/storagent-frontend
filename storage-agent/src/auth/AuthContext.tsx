@@ -13,6 +13,7 @@ import {
   loginApi,
   logoutApi,
   refreshTokenApi,
+  registerAuthTokenHandlers,
   type LoginRequest,
   type TokenResponse,
   type UserProfile,
@@ -91,6 +92,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshingRef.current = job
     return job
   }, [applyTokens, clearAuthState])
+
+  // 供 api client 在 401 时自动续期
+  useEffect(() => {
+    registerAuthTokenHandlers({
+      getAccessToken: () => localStorage.getItem(ACCESS_TOKEN_KEY),
+      refreshAccessToken: async () => {
+        const ok = await refreshSession()
+        return ok ? localStorage.getItem(ACCESS_TOKEN_KEY) : null
+      },
+    })
+  }, [refreshSession])
 
   useEffect(() => {
     const storedAccessToken = localStorage.getItem(ACCESS_TOKEN_KEY)
