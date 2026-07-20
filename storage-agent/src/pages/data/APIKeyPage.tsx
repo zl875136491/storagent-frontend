@@ -4,6 +4,7 @@ import {
   createApiKeyApi,
   fetchApiKeysApi,
   fetchEnabledApplicationsApi,
+  revokeApiKeyApi,
   type APIKey,
   type APIKeyCreateRequest,
   type SimpleApplication,
@@ -33,6 +34,8 @@ export default function APIKeyPage() {
 
   const [createdApiKey, setCreatedApiKey] = useState<APIKey | null>(null)
   const [copySuccess, setCopySuccess] = useState(false)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<APIKey | null>(null)
 
   const loadApiKeys = async () => {
     setLoading(true)
@@ -120,6 +123,21 @@ export default function APIKeyPage() {
     }
   }
 
+  const handleRevoke = async () => {
+    if (!revokeTarget) return
+    setRevokingId(revokeTarget.id)
+    try {
+      await revokeApiKeyApi(revokeTarget.id, accessToken ?? undefined)
+      showSuccessToast("APIKey 已吊销")
+      setRevokeTarget(null)
+      void loadApiKeys()
+    } catch {
+      // toast 已由 client 处理
+    } finally {
+      setRevokingId(null)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-8xl">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -191,9 +209,18 @@ export default function APIKeyPage() {
                         </div>
                       </div>
                     </div>
-                    {/* <div className="mt-1 text-[11px] text-muted-foreground">
-                      {item.application.description || "该应用暂无描述"}
-                    </div> */}
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      disabled={revokingId === item.id}
+                      onClick={() => setRevokeTarget(item)}
+                    >
+                      吊销
+                    </Button>
                   </div>
                 </div>
               </CardContent>
@@ -347,9 +374,42 @@ export default function APIKeyPage() {
               >
                 关闭
               </Button>
-              {/* <Button type="button" size="sm" onClick={() => void handleCopy()}>
-                复制
-              </Button> */}
+            </DialogFooter>
+          </div>
+        </Modal>
+      )}
+
+      {revokeTarget && (
+        <Modal title="确认吊销 APIKey" onClose={() => setRevokeTarget(null)}>
+          <div className="space-y-4 text-sm">
+            <p className="text-[13px] text-muted-foreground">
+              吊销后该密钥将立即失效，且无法恢复。确定要吊销以下 APIKey 吗？
+            </p>
+            <div className="rounded-xl border border-border bg-muted/40 p-3 font-mono text-xs break-all">
+              {revokeTarget.key}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              应用：{revokeTarget.application.shown_name || revokeTarget.application.name}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={revokingId === revokeTarget.id}
+                onClick={() => setRevokeTarget(null)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={revokingId === revokeTarget.id}
+                onClick={() => void handleRevoke()}
+              >
+                {revokingId === revokeTarget.id ? "吊销中…" : "确认吊销"}
+              </Button>
             </DialogFooter>
           </div>
         </Modal>

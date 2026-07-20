@@ -10,7 +10,10 @@ export interface PublicEndpointItem {
   name: string
   shown_name: string
   master: boolean
+  /** Storagent API 地址 */
   endpoint: string
+  /** MinIO 直连地址（可选，新后端提供） */
+  minio_endpoint?: string
 }
 
 export interface PublicEndpointsResponse {

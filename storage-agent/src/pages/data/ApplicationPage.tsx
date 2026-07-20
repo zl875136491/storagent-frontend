@@ -3,6 +3,7 @@ import { Check, Circle, Loader2, XCircle } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
 import {
   approveApplicationStream,
+  approvalStepLabel,
   createApplicationApi,
   fetchApplicationsApi,
 } from "../../api/client"
@@ -28,7 +29,7 @@ function statusStyle(status: ApplicationApprovalSseStatus): string {
   if (status === "running") {
     return "border-l-amber-500 bg-amber-500/5 text-foreground"
   }
-  if (status === "ok" || status === "success") {
+  if (status === "ok" || status === "success" || status === "skipped") {
     return "border-l-emerald-500 bg-emerald-500/5 text-foreground"
   }
   if (status === "failed") {
@@ -62,7 +63,7 @@ function StatusGlyph({
       />
     )
   }
-  if (status === "ok" || status === "success") {
+  if (status === "ok" || status === "success" || status === "skipped") {
     return <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
   }
   if (status === "failed") {
@@ -87,7 +88,6 @@ export default function ApplicationPage() {
     name: "",
     shown_name: "",
     description: "",
-    regions: [],
   })
   const [creating, setCreating] = useState(false)
 
@@ -172,7 +172,6 @@ export default function ApplicationPage() {
         name: "",
         shown_name: "",
         description: "",
-        regions: [],
       })
       void loadApplications()
     } catch {
@@ -522,7 +521,7 @@ export default function ApplicationPage() {
                             <div className="font-medium text-foreground/90">{ev.message}</div>
                             {(ev.server_name || ev.step) && (
                               <div className="mt-0.5 text-[10px] text-muted-foreground">
-                                {ev.step}
+                                {approvalStepLabel(ev.step)}
                                 {ev.server_name ? ` · ${ev.server_name}` : ""}
                               </div>
                             )}

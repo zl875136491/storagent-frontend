@@ -88,7 +88,8 @@ export interface Application {
   enabled: boolean
   enabled_at: string | null
   author: ApplicationAuthor
-  regions: Region[]
+  /** 旧字段，新后端不再返回 */
+  regions?: Region[]
 }
 
 export interface ApplicationListResponse {
@@ -99,7 +100,6 @@ export interface ApplicationCreateRequest {
   name: string
   shown_name: string
   description: string
-  regions: string[]
 }
 
 export interface MinioServer {
@@ -111,14 +111,24 @@ export interface MinioServer {
   server_port: number
   /** MinIO 进程监听端口 */
   minio_port: number
-  access_key: string
+  master?: boolean
   /** 复制集权重 */
   replicate_weight?: number
-  // secret_key: string
 }
 
 export interface MinioServerListResponse {
   data: MinioServer[]
+}
+
+export interface MinioServerCreateRequest {
+  region: string
+  name: string
+  host: string
+  server_port: number
+  minio_port: number
+  access_key: string
+  secret_key: string
+  replicate_weight?: number
 }
 
 export interface MinioServerReplicateWeightPayload {
@@ -235,6 +245,16 @@ export interface BucketGraphEdgePositionPayload {
   to_position: ReplicateGraphPortPosition
 }
 
+/** 解析后端统一错误体 `{ msg, data }` */
+export function parseApiErrorBody(text: string): { msg?: string; data?: unknown } | null {
+  if (!text) return null
+  try {
+    return JSON.parse(text) as { msg?: string; data?: unknown }
+  } catch {
+    return null
+  }
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   const text = await response.text().catch(() => "")
 
@@ -302,8 +322,64 @@ export async function apiPost<TRequest, TResponse>(
   }
 }
 
+export async function apiPut<TRequest, TResponse>(
+  path: string,
+  body: TRequest,
+  accessToken?: string,
+): Promise<TResponse> {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  }
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  try {
+    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(body),
+    })
+    return await handleResponse<TResponse>(resp)
+  } catch (e) {
+    if (e instanceof TypeError) {
+      showNetworkErrorToast()
+    }
+    throw e
+  }
+}
+
+export async function apiDelete<TResponse = { message: string }>(
+  path: string,
+  accessToken?: string,
+): Promise<TResponse> {
+  const headers: HeadersInit = {}
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  try {
+    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
+      method: "DELETE",
+      headers,
+    })
+    return await handleResponse<TResponse>(resp)
+  } catch (e) {
+    if (e instanceof TypeError) {
+      showNetworkErrorToast()
+    }
+    throw e
+  }
+}
+
 export async function loginApi(payload: LoginRequest): Promise<TokenResponse> {
   return apiPost<LoginRequest, TokenResponse>("/api/auth/login", payload)
+}
+
+export async function refreshTokenApi(refreshToken: string): Promise<TokenResponse> {
+  return apiPost<{ refresh_token: string }, TokenResponse>("/api/auth/refresh", {
+    refresh_token: refreshToken,
+  })
 }
 
 export async function fetchProfileApi(accessToken: string): Promise<UserProfile> {
@@ -316,6 +392,17 @@ export async function logoutApi(accessToken?: string): Promise<void> {
   } catch {
     // ignore logout failure
   }
+}
+
+export async function fetchHealthApi(baseUrl?: string): Promise<{
+  status: string
+  app?: string
+  version?: string
+  region?: string
+}> {
+  const base = (baseUrl ?? requireApiBaseUrl()).replace(/\/$/, "")
+  const resp = await fetch(`${base}/health`)
+  return handleResponse(resp)
 }
 
 export async function fetchRegionsApi(accessToken?: string): Promise<RegionListResponse> {
@@ -378,6 +465,36 @@ export async function postBucketGraphEdgePosition(
   )
 }
 
+export interface BucketNodePositionListResponse {
+  data: BucketGraphNodePositionPayload[]
+}
+
+export interface BucketEdgePositionListResponse {
+  data: BucketGraphEdgePositionPayload[]
+}
+
+export async function fetchBucketGraphNodePositions(
+  bucket: string,
+  accessToken?: string,
+): Promise<BucketNodePositionListResponse> {
+  const q = encodeURIComponent(bucket)
+  return apiGet<BucketNodePositionListResponse>(
+    `/api/graph/bucket-node-position?bucket=${q}`,
+    accessToken,
+  )
+}
+
+export async function fetchBucketGraphEdgePositions(
+  bucket: string,
+  accessToken?: string,
+): Promise<BucketEdgePositionListResponse> {
+  const q = encodeURIComponent(bucket)
+  return apiGet<BucketEdgePositionListResponse>(
+    `/api/graph/bucket-edge-position?bucket=${q}`,
+    accessToken,
+  )
+}
+
 /** 新建一条复制规则（POST body 与后端约定一致时可再调整字段名） */
 export interface BucketReplicateCreatePayload {
   from: string
@@ -400,12 +517,23 @@ export async function createBucketReplicateApi(
   )
 }
 
+export async function createMinioServerApi(
+  payload: MinioServerCreateRequest,
+  accessToken?: string,
+): Promise<MinioServer> {
+  return apiPost<MinioServerCreateRequest, MinioServer>(
+    "/api/storage/minio-server",
+    payload,
+    accessToken,
+  )
+}
+
 export async function updateMinioServerApi(
   minioServerId: string,
   payload: MinioServerReplicateWeightPayload,
   accessToken?: string,
 ): Promise<MinioServer> {
-  return apiPost<MinioServerReplicateWeightPayload, MinioServer>(
+  return apiPut<MinioServerReplicateWeightPayload, MinioServer>(
     `/api/storage/minio-server/${minioServerId}`,
     payload,
     accessToken,
@@ -430,13 +558,36 @@ export async function createApplicationApi(
 }
 
 /** 授权 SSE 单条事件（与后端 data: JSON 一致） */
-export type ApplicationApprovalSseStatus = "running" | "ok" | "failed" | "success"
+export type ApplicationApprovalSseStatus =
+  | "running"
+  | "ok"
+  | "failed"
+  | "success"
+  | "skipped"
 
 export interface ApplicationApprovalSseEvent {
   step: string
   server_name: string | null
   status: ApplicationApprovalSseStatus
   message: string
+}
+
+/** SSE step → 中文标签（含跨节点 sync / replicate） */
+export const APPROVAL_STEP_LABELS: Record<string, string> = {
+  start: "开始",
+  validate: "校验",
+  bucket_phase: "桶阶段",
+  bucket_check: "检查桶",
+  bucket_create: "创建桶",
+  bucket_versioning: "版本控制",
+  persist: "持久化",
+  sync: "跨节点同步",
+  replicate: "复制规则",
+  done: "完成",
+}
+
+export function approvalStepLabel(step: string): string {
+  return APPROVAL_STEP_LABELS[step] ?? step
 }
 
 export interface ApproveApplicationStreamParams {
@@ -598,10 +749,77 @@ export async function createApiKeyApi(
   return apiPost<APIKeyCreateRequest, APIKey>("/api/public/api-key", payload, accessToken)
 }
 
+export async function revokeApiKeyApi(
+  apiKeyId: string,
+  accessToken?: string,
+): Promise<{ message: string }> {
+  return apiDelete<{ message: string }>(`/api/public/api-key/${apiKeyId}`, accessToken)
+}
+
 export async function fetchPublicEndpointsApi(
   accessToken?: string,
 ): Promise<PublicEndpointsResponse> {
   return apiGet<PublicEndpointsResponse>("/api/public/endpoints", accessToken)
+}
+
+/** 对象在远端副本节点的下载指引 */
+export interface ObjectLocationItem {
+  region: string
+  shown_name: string
+  master: boolean
+  endpoint: string
+  stat_url: string
+  download_url: string
+}
+
+export interface ObjectLocateResponse {
+  bucket: string
+  object_key: string
+  current_region: string
+  local_exists: boolean
+  available_at: ObjectLocationItem[]
+}
+
+/** 本节点不存在对象时后端错误码（HTTP 404） */
+export const OBJECT_NOT_FOUND_LOCAL_MSG = "对象在本节点不存在"
+
+export interface ObjectNotFoundLocalData {
+  bucket: string
+  object_key: string
+  current_region: string
+  available_at: ObjectLocationItem[]
+}
+
+export async function locateObjectApi(
+  baseURL: string,
+  apiKey: string,
+  objectKey: string,
+  offset = 0,
+  length = 0,
+): Promise<ObjectLocateResponse> {
+  const qs = new URLSearchParams({
+    object_key: objectKey,
+    offset: String(offset),
+    length: String(length),
+  })
+  const resp = await fetch(
+    `${baseURL.replace(/\/$/, "")}/api/files/object/locate?${qs.toString()}`,
+    { method: "GET", headers: { "x-api-key": apiKey } },
+  )
+  return handleResponse<ObjectLocateResponse>(resp)
+}
+
+/**
+ * 从失败响应中解析跨区下载指引（msg 为「对象在本节点不存在」且 data.available_at 非空）
+ */
+export function extractCrossRegionLocations(errorText: string): ObjectLocationItem[] | null {
+  const body = parseApiErrorBody(errorText)
+  if (!body) return null
+  const data = body.data as ObjectNotFoundLocalData | undefined
+  if (!data || !Array.isArray(data.available_at) || data.available_at.length === 0) {
+    return null
+  }
+  return data.available_at
 }
 
 export type { PublicEndpointItem, PublicEndpointsResponse } from "./backendResolver"

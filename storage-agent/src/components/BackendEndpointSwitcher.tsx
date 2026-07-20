@@ -231,7 +231,11 @@ export function BackendEndpointSwitcher() {
                       </span>
                       <span
                         className="min-w-0 truncate font-mono text-[10px] leading-none text-muted-foreground/95"
-                        title={item.endpoint}
+                        title={
+                          item.minio_endpoint
+                            ? `API: ${item.endpoint}\nMinIO: ${item.minio_endpoint}`
+                            : item.endpoint
+                        }
                       >
                         {item.endpoint}
                       </span>
@@ -243,6 +247,14 @@ export function BackendEndpointSwitcher() {
                         <span className="justify-self-end w-5 shrink-0" aria-hidden />
                       )}
                     </button>
+                    {item.minio_endpoint ? (
+                      <div className="px-2 pb-1.5 pl-2 text-[9px] text-muted-foreground/80">
+                        MinIO：
+                        <span className="font-mono" title={item.minio_endpoint}>
+                          {item.minio_endpoint}
+                        </span>
+                      </div>
+                    ) : null}
                   </li>
                 )
               })}
