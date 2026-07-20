@@ -154,6 +154,10 @@ export function showApiErrorToast(body: string, fallbackMessage: string): void {
         || /Caused by:/i.test(raw)
       if (looksLikeStack) traceback = raw
     }
+    // 生产环境不向终端用户展示堆栈
+    if (import.meta.env.PROD) {
+      traceback = undefined
+    }
 
     let dataForModal: string | undefined
     if (!traceback && fullDataFormatted.length > LONG_ERROR_DATA_THRESHOLD) {
@@ -187,9 +191,12 @@ export function showApiErrorToast(body: string, fallbackMessage: string): void {
     msg,
     type: "error",
     description,
-    traceback: raw || undefined,
+    traceback: import.meta.env.PROD ? undefined : (raw || undefined),
   })
-  sonnerToast.error(node, raw ? TOAST_OPTIONS_WITH_TRACEBACK : TOAST_OPTIONS)
+  sonnerToast.error(
+    node,
+    !import.meta.env.PROD && raw ? TOAST_OPTIONS_WITH_TRACEBACK : TOAST_OPTIONS,
+  )
 }
 
 /** 网络/请求失败（如 fetch 抛错） */

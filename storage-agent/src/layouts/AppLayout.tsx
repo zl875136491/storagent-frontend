@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import {
   BookOpen,
   Boxes,
@@ -184,13 +184,22 @@ function AppShell() {
     [confirmIfBlocking, closeMobileDrawer],
   )
 
-  const page_agent = new PageAgent({
-      model: getEnvVar("VITE_PAGE_AGENT_MODEL"),
-      baseURL: getEnvVar("VITE_PAGE_AGENT_BASE_URL"),
-      apiKey: getEnvVar("VITE_PAGE_AGENT_API_KEY"),
-      language: "zh-CN"
+  const page_agent = useMemo(() => {
+    try {
+      const apiKey = getEnvVar("VITE_PAGE_AGENT_API_KEY")
+      if (!apiKey || apiKey === "your-api-key-here") {
+        return null
+      }
+      return new PageAgent({
+        model: getEnvVar("VITE_PAGE_AGENT_MODEL"),
+        baseURL: getEnvVar("VITE_PAGE_AGENT_BASE_URL"),
+        apiKey,
+        language: "zh-CN",
+      })
+    } catch {
+      return null
     }
-  )
+  }, [])
 
   return (
     <div className="flex h-screen min-w-0 overflow-hidden bg-background text-foreground">

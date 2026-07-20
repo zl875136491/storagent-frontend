@@ -285,24 +285,51 @@ async function authorizedFetch(
   if (token) {
     headers.set("Authorization", `Bearer ${token}`)
   }
-  const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
-    ...init,
-    headers,
-  })
-  // 401 / 402（凭据失效类）时尝试 refresh 一次
-  if (
-    (resp.status === 401 || resp.status === 402) &&
-    !retried &&
-    authTokenRefresher &&
-    !path.startsWith("/api/auth/login") &&
-    !path.startsWith("/api/auth/refresh")
-  ) {
-    const next = await authTokenRefresher()
-    if (next) {
-      return authorizedFetch(path, init, next, true)
+
+  const timeoutMs = 30_000
+  const controller = new AbortController()
+  const externalSignal = init.signal
+  const onExternalAbort = () => controller.abort()
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort()
+    } else {
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true })
     }
   }
-  return resp
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
+      ...init,
+      headers,
+      signal: controller.signal,
+    })
+    // 401 / 402（凭据失效类）时尝试 refresh 一次
+    if (
+      (resp.status === 401 || resp.status === 402) &&
+      !retried &&
+      authTokenRefresher &&
+      !path.startsWith("/api/auth/login") &&
+      !path.startsWith("/api/auth/refresh")
+    ) {
+      const next = await authTokenRefresher()
+      if (next) {
+        return authorizedFetch(path, init, next, true)
+      }
+    }
+    return resp
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new TypeError("请求超时，请检查网络或后端连通性")
+    }
+    throw e
+  } finally {
+    window.clearTimeout(timer)
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", onExternalAbort)
+    }
+  }
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
