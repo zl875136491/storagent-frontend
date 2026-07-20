@@ -245,14 +245,64 @@ export interface BucketGraphEdgePositionPayload {
   to_position: ReplicateGraphPortPosition
 }
 
-/** 解析后端统一错误体 `{ msg, data }` */
-export function parseApiErrorBody(text: string): { msg?: string; data?: unknown } | null {
+/** 解析后端统一错误体 `{ msg, data, code }` */
+export function parseApiErrorBody(text: string): {
+  msg?: string
+  data?: unknown
+  code?: number
+} | null {
   if (!text) return null
   try {
-    return JSON.parse(text) as { msg?: string; data?: unknown }
+    return JSON.parse(text) as { msg?: string; data?: unknown; code?: number }
   } catch {
     return null
   }
+}
+
+type AccessTokenGetter = () => string | null
+type AccessTokenRefresher = () => Promise<string | null>
+
+let authTokenGetter: AccessTokenGetter | null = null
+let authTokenRefresher: AccessTokenRefresher | null = null
+
+/** 由 AuthProvider 注册，供 api* 在 401 时自动续期 */
+export function registerAuthTokenHandlers(handlers: {
+  getAccessToken: AccessTokenGetter
+  refreshAccessToken: AccessTokenRefresher
+}): void {
+  authTokenGetter = handlers.getAccessToken
+  authTokenRefresher = handlers.refreshAccessToken
+}
+
+async function authorizedFetch(
+  path: string,
+  init: RequestInit,
+  accessToken?: string,
+  retried = false,
+): Promise<Response> {
+  const headers = new Headers(init.headers ?? undefined)
+  const token = accessToken ?? authTokenGetter?.() ?? undefined
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`)
+  }
+  const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
+    ...init,
+    headers,
+  })
+  // 401 / 402（凭据失效类）时尝试 refresh 一次
+  if (
+    (resp.status === 401 || resp.status === 402) &&
+    !retried &&
+    authTokenRefresher &&
+    !path.startsWith("/api/auth/login") &&
+    !path.startsWith("/api/auth/refresh")
+  ) {
+    const next = await authTokenRefresher()
+    if (next) {
+      return authorizedFetch(path, init, next, true)
+    }
+  }
+  return resp
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -276,16 +326,8 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export async function apiGet<T>(path: string, accessToken?: string): Promise<T> {
-  const headers: HeadersInit = {}
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`
-  }
-
   try {
-    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
-      method: "GET",
-      headers,
-    })
+    const resp = await authorizedFetch(path, { method: "GET" }, accessToken)
     return await handleResponse<T>(resp)
   } catch (e) {
     if (e instanceof TypeError) {
@@ -300,19 +342,16 @@ export async function apiPost<TRequest, TResponse>(
   body: TRequest,
   accessToken?: string,
 ): Promise<TResponse> {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`
-  }
-
   try {
-    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    })
+    const resp = await authorizedFetch(
+      path,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      accessToken,
+    )
     return await handleResponse<TResponse>(resp)
   } catch (e) {
     if (e instanceof TypeError) {
@@ -327,19 +366,16 @@ export async function apiPut<TRequest, TResponse>(
   body: TRequest,
   accessToken?: string,
 ): Promise<TResponse> {
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  }
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`
-  }
-
   try {
-    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
-      method: "PUT",
-      headers,
-      body: JSON.stringify(body),
-    })
+    const resp = await authorizedFetch(
+      path,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      accessToken,
+    )
     return await handleResponse<TResponse>(resp)
   } catch (e) {
     if (e instanceof TypeError) {
@@ -353,16 +389,8 @@ export async function apiDelete<TResponse = { message: string }>(
   path: string,
   accessToken?: string,
 ): Promise<TResponse> {
-  const headers: HeadersInit = {}
-  if (accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`
-  }
-
   try {
-    const resp = await fetch(`${requireApiBaseUrl()}${path}`, {
-      method: "DELETE",
-      headers,
-    })
+    const resp = await authorizedFetch(path, { method: "DELETE" }, accessToken)
     return await handleResponse<TResponse>(resp)
   } catch (e) {
     if (e instanceof TypeError) {
@@ -781,6 +809,7 @@ export interface ObjectLocateResponse {
 }
 
 /** 本节点不存在对象时后端错误码（HTTP 404） */
+export const OBJECT_NOT_FOUND_LOCAL_CODE = 404032
 export const OBJECT_NOT_FOUND_LOCAL_MSG = "对象在本节点不存在"
 
 export interface ObjectNotFoundLocalData {
@@ -810,7 +839,8 @@ export async function locateObjectApi(
 }
 
 /**
- * 从失败响应中解析跨区下载指引（msg 为「对象在本节点不存在」且 data.available_at 非空）
+ * 从失败响应中解析跨区下载指引。
+ * 优先匹配业务 code=404032，兼容旧版仅靠中文 msg。
  */
 export function extractCrossRegionLocations(errorText: string): ObjectLocationItem[] | null {
   const body = parseApiErrorBody(errorText)
@@ -818,6 +848,12 @@ export function extractCrossRegionLocations(errorText: string): ObjectLocationIt
   const data = body.data as ObjectNotFoundLocalData | undefined
   if (!data || !Array.isArray(data.available_at) || data.available_at.length === 0) {
     return null
+  }
+  const codeMatch = body.code === OBJECT_NOT_FOUND_LOCAL_CODE
+  const msgMatch = body.msg === OBJECT_NOT_FOUND_LOCAL_MSG
+  if (!codeMatch && !msgMatch) {
+    // 若有 available_at 结构仍视为跨区指引（防御性）
+    if (!("available_at" in data)) return null
   }
   return data.available_at
 }
