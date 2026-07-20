@@ -5,8 +5,12 @@ import {
   showSuccessToast,
 } from "./toast"
 import type { PublicEndpointsResponse } from "./backendResolver"
+import { failoverToAlternateBackend } from "./backendResolver"
+import { CANDIDATE_SERVER_LIST } from "../config/serverList"
+import { setStoredApiBase } from "./apiBaseStorage"
 
 let apiBaseUrl = ""
+let failoverInFlight: Promise<string | null> | null = null
 
 export function setApiBaseUrl(url: string): void {
   apiBaseUrl = url.trim().replace(/\/$/, "")
@@ -21,6 +25,22 @@ function requireApiBaseUrl(): string {
     throw new Error("后端地址尚未就绪")
   }
   return apiBaseUrl
+}
+
+async function ensureFailoverBackend(): Promise<string | null> {
+  if (!failoverInFlight) {
+    failoverInFlight = (async () => {
+      const next = await failoverToAlternateBackend(CANDIDATE_SERVER_LIST, apiBaseUrl)
+      if (next) {
+        setApiBaseUrl(next)
+        setStoredApiBase(next)
+      }
+      return next
+    })().finally(() => {
+      failoverInFlight = null
+    })
+  }
+  return failoverInFlight
 }
 
 export interface LoginRequest {
@@ -279,6 +299,7 @@ async function authorizedFetch(
   init: RequestInit,
   accessToken?: string,
   retried = false,
+  failoverRetried = false,
 ): Promise<Response> {
   const headers = new Headers(init.headers ?? undefined)
   const token = accessToken ?? authTokenGetter?.() ?? undefined
@@ -315,12 +336,20 @@ async function authorizedFetch(
     ) {
       const next = await authTokenRefresher()
       if (next) {
-        return authorizedFetch(path, init, next, true)
+        return authorizedFetch(path, init, next, true, failoverRetried)
       }
     }
     return resp
   } catch (e) {
-    if (e instanceof DOMException && e.name === "AbortError") {
+    const isAbort = e instanceof DOMException && e.name === "AbortError"
+    const isNetwork = e instanceof TypeError || isAbort
+    if (isNetwork && !failoverRetried) {
+      const nextBase = await ensureFailoverBackend()
+      if (nextBase) {
+        return authorizedFetch(path, init, accessToken, retried, true)
+      }
+    }
+    if (isAbort) {
       throw new TypeError("请求超时，请检查网络或后端连通性")
     }
     throw e

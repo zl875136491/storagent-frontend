@@ -188,3 +188,33 @@ export async function resolveMasterBackend(
 
   throw new Error("无法连接任一后端，或未找到主节点（master）")
 }
+
+/**
+ * 当前后端不可达时，从候选列表中探测并切换到下一个可用节点。
+ * 成功则写入 storage 并返回新基址；失败返回 null。
+ */
+export async function failoverToAlternateBackend(
+  candidates: string[],
+  currentBase?: string | null,
+): Promise<string | null> {
+  const current = normalizeBase(currentBase ?? getStoredApiBase() ?? "")
+  const probed = new Set<string>()
+  if (current) probed.add(current.toLowerCase())
+
+  for (const raw of candidates) {
+    const base = normalizeBase(raw)
+    if (!base) continue
+    const key = base.toLowerCase()
+    if (probed.has(key)) continue
+    probed.add(key)
+
+    const masterBase = await tryMasterEndpointFromProbeBase(base)
+    if (masterBase) {
+      const masterKey = masterBase.toLowerCase()
+      if (masterKey === current.toLowerCase()) continue
+      setStoredApiBase(masterBase)
+      return masterBase
+    }
+  }
+  return null
+}
