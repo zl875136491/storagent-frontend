@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { ChevronDown, Loader2, Server } from "lucide-react"
 
 import {
+  fetchProfileApi,
   fetchPublicEndpointsApi,
   getApiBaseUrl,
   setApiBaseUrl,
@@ -12,8 +13,25 @@ import { setStoredApiBase } from "@/api/apiBaseStorage"
 import { showErrorToast } from "@/api/toast"
 import { cn } from "@/lib/utils"
 
+const ACCESS_TOKEN_KEY = "cross_storage_access_token"
+const REFRESH_TOKEN_KEY = "cross_storage_refresh_token"
+
 function normalizeEndpoint(url: string): string {
   return url.trim().replace(/\/$/, "")
+}
+
+/** 切换后端后校验会话；无效则清空本地 token，强制重新登录 */
+async function validateSessionOrClear(): Promise<boolean> {
+  const access = localStorage.getItem(ACCESS_TOKEN_KEY)
+  if (!access) return true
+  try {
+    await fetchProfileApi(access)
+    return true
+  } catch {
+    localStorage.removeItem(ACCESS_TOKEN_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
+    return false
+  }
 }
 
 export function BackendEndpointSwitcher() {
@@ -81,6 +99,10 @@ export function BackendEndpointSwitcher() {
       setApiBaseUrl(next)
       setStoredApiBase(next)
       setOpen(false)
+      const sessionOk = await validateSessionOrClear()
+      if (!sessionOk) {
+        showErrorToast("已切换后端，原登录态在该节点无效，请重新登录")
+      }
       window.location.reload()
     } finally {
       setSwitching(false)
