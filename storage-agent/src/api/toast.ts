@@ -8,6 +8,19 @@ const TOAST_OPTIONS_WITH_TRACEBACK = { duration: 600_000 } as const // traceback
 /** data 超过此长度且无 traceback 时，toast 内缩略展示并提供「更多」查看全文 */
 const LONG_ERROR_DATA_THRESHOLD = 120
 
+/** 后端稳定业务码 → 用户可读补充说明 */
+const KNOWN_ERROR_HINTS: Record<number, string> = {
+  404032: "对象不在本节点，可使用返回的跨区下载地址",
+  429041: "请求过于频繁，请稍后再试",
+  503040: "跨节点同步失败，请检查 Etcd 或稍后重试",
+}
+
+function getNumber(obj: unknown, key: string): number | undefined {
+  if (!obj || typeof obj !== "object") return undefined
+  const v = (obj as Record<string, unknown>)[key]
+  return typeof v === "number" && Number.isFinite(v) ? v : undefined
+}
+
 function truncateForToastPreview(text: string, maxChars: number): string {
   const t = text.trim()
   if (t.length <= maxChars) return t
@@ -117,7 +130,9 @@ export function showApiErrorToast(body: string, fallbackMessage: string): void {
         : ""
 
     const msg = getString(json, "msg") ?? getString(json, "message") ?? fallbackMessage
+    const code = getNumber(json, "code")
     const type =
+      (code != null ? `code ${code}` : undefined) ??
       getString(json, "type") ??
       getString(json, "error_type") ??
       getString(json, "name") ??
@@ -142,6 +157,12 @@ export function showApiErrorToast(body: string, fallbackMessage: string): void {
       }
     }
     description = description ?? extractDescription(json) ?? firstLine(raw) ?? msg
+    if (code != null && KNOWN_ERROR_HINTS[code]) {
+      const hint = KNOWN_ERROR_HINTS[code]
+      if (!description?.includes(hint)) {
+        description = description ? `${description}\n${hint}` : hint
+      }
+    }
 
     let traceback = extractTraceback(json)
     if (!traceback) {
