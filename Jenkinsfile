@@ -18,13 +18,13 @@ pipeline {
     }
 
     environment {
-        HARBOR_REGISTRY = '10.17.151.187'
-        IMAGE_REPOSITORY = '10.17.151.187/storagent/storagent_frontend'
+        HARBOR_REGISTRY = '10.17.158.118'
+        IMAGE_REPOSITORY = '10.17.158.118/storagent/storagent_frontend'
         // Registry token requests must use the proxied Docker daemon network path.
         BUILDKIT_NO_CLIENT_TOKEN = 'true'
         HTTP_PROXY = 'http://10.17.167.251:7897'
         HTTPS_PROXY = 'http://10.17.167.251:7897'
-        NO_PROXY = 'localhost,127.0.0.1,::1,10.17.151.187,10.17.158.156,10.41.102.223,10.32.129.241,10.17.158.115,10.8.136.107,10.31.133.207'
+        NO_PROXY = 'localhost,127.0.0.1,::1,10.17.158.118,10.17.158.156,10.41.102.223,10.32.129.241,10.17.158.115,10.8.136.107,10.31.133.207'
     }
 
     stages {
