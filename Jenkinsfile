@@ -20,6 +20,8 @@ pipeline {
     environment {
         HARBOR_REGISTRY = '10.17.151.187'
         IMAGE_REPOSITORY = '10.17.151.187/storagent/storagent_frontend'
+        // Registry token requests must use the proxied Docker daemon network path.
+        BUILDKIT_NO_CLIENT_TOKEN = 'true'
     }
 
     stages {
