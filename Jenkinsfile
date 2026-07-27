@@ -22,6 +22,9 @@ pipeline {
         IMAGE_REPOSITORY = '10.17.151.187/storagent/storagent_frontend'
         // Registry token requests must use the proxied Docker daemon network path.
         BUILDKIT_NO_CLIENT_TOKEN = 'true'
+        HTTP_PROXY = 'http://10.17.167.251:7897'
+        HTTPS_PROXY = 'http://10.17.167.251:7897'
+        NO_PROXY = 'localhost,127.0.0.1,::1,10.17.151.187,10.17.158.156,10.41.102.223,10.32.129.241,10.17.158.115,10.8.136.107,10.31.133.207'
     }
 
     stages {
@@ -60,6 +63,9 @@ set -euo pipefail
 
 docker build --pull \
   --target build \
+  --build-arg HTTP_PROXY \
+  --build-arg HTTPS_PROXY \
+  --build-arg NO_PROXY \
   --build-arg STORAGENT_API_SERVERS \
   --tag "${CI_IMAGE_REF}" \
   .
@@ -77,6 +83,9 @@ set -euo pipefail
 
 docker build \
   --platform linux/amd64 \
+  --build-arg HTTP_PROXY \
+  --build-arg HTTPS_PROXY \
+  --build-arg NO_PROXY \
   --build-arg STORAGENT_API_SERVERS \
   --build-arg "VCS_REF=${FRONTEND_GIT_COMMIT}" \
   --tag "${IMAGE_REF}" \
