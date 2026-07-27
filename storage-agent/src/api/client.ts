@@ -188,6 +188,53 @@ export interface StorageBucketsResponse {
   data: StorageBucketItem[]
 }
 
+export type AIProviderProtocol = "chat_completions" | "responses"
+
+export interface AIRuntimeConfig {
+  enabled: boolean
+  configured: boolean
+  provider_name: string
+  protocol: AIProviderProtocol
+  model: string
+  models: string[]
+  max_steps: number
+}
+
+export interface AIProviderAdminConfig {
+  provider_name: string
+  base_url: string
+  api_key_configured: boolean
+  api_key_hint?: string | null
+  protocol: AIProviderProtocol
+  models: string[]
+  default_model: string
+  enabled: boolean
+  system_prompt: string
+  max_steps: number
+  updated_at?: string | null
+  updated_by?: string | null
+}
+
+export interface AIProviderUpdateRequest {
+  provider_name: string
+  base_url: string
+  api_key?: string
+  clear_api_key?: boolean
+  protocol: AIProviderProtocol
+  models: string[]
+  default_model: string
+  enabled: boolean
+  system_prompt: string
+  max_steps: number
+}
+
+export interface AIProviderTestResponse {
+  ok: boolean
+  model: string
+  protocol: AIProviderProtocol
+  latency_ms: number
+}
+
 /** 存储桶跨站点复制规则状态（与 GET …/replicates 一致） */
 export interface BucketReplicateRuleStatus {
   status: string
@@ -307,7 +354,7 @@ async function authorizedFetch(
     headers.set("Authorization", `Bearer ${token}`)
   }
 
-  const timeoutMs = 30_000
+  const timeoutMs = path.startsWith("/api/ai/") ? 120_000 : 30_000
   const controller = new AbortController()
   const externalSignal = init.signal
   const onExternalAbort = () => controller.abort()
@@ -517,6 +564,50 @@ export async function fetchStorageBucketsApi(
   accessToken?: string,
 ): Promise<StorageBucketsResponse> {
   return apiGet<StorageBucketsResponse>("/api/storage/buckets", accessToken)
+}
+
+export async function fetchAIRuntimeConfigApi(
+  accessToken?: string,
+): Promise<AIRuntimeConfig> {
+  return apiGet<AIRuntimeConfig>("/api/ai/config", accessToken)
+}
+
+export async function fetchAIProviderAdminConfigApi(
+  accessToken?: string,
+): Promise<AIProviderAdminConfig> {
+  return apiGet<AIProviderAdminConfig>("/api/ai/admin/config", accessToken)
+}
+
+export async function updateAIProviderAdminConfigApi(
+  payload: AIProviderUpdateRequest,
+  accessToken?: string,
+): Promise<AIProviderAdminConfig> {
+  return apiPut<AIProviderUpdateRequest, AIProviderAdminConfig>(
+    "/api/ai/admin/config",
+    payload,
+    accessToken,
+  )
+}
+
+export async function testAIProviderAdminConfigApi(
+  accessToken?: string,
+): Promise<AIProviderTestResponse> {
+  return apiPost<Record<string, never>, AIProviderTestResponse>(
+    "/api/ai/admin/test",
+    {},
+    accessToken,
+  )
+}
+
+/** PageAgent customFetch: keep the upstream API Key on the backend. */
+export async function fetchAIChatCompletionProxy(
+  _input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  return authorizedFetch(
+    "/api/ai/openai/v1/chat/completions",
+    init ?? { method: "POST" },
+  )
 }
 
 export async function fetchBucketReplicatesApi(
@@ -853,6 +944,8 @@ export interface ObjectLocationItem {
   master: boolean
   endpoint: string
   stat_url: string
+  stat_method: "POST"
+  stat_body: { object_key: string }
   download_url: string
 }
 
@@ -915,4 +1008,3 @@ export function extractCrossRegionLocations(errorText: string): ObjectLocationIt
 }
 
 export type { PublicEndpointItem, PublicEndpointsResponse } from "./backendResolver"
-

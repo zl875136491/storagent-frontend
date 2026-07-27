@@ -322,11 +322,14 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
     setLoading(true)
     setError(null)
     try {
-      const qs = new URLSearchParams({ object_key: objectKey.trim() })
       const data = await jsonOrThrow<ObjectStatResponse>(
-        await fetch(joinUrl(baseURL, \`/api/files/object/stat?\${qs.toString()}\`), {
-          method: "GET",
-          headers: { "x-api-key": apiKey },
+        await fetch(joinUrl(baseURL, "/api/files/object/stat"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify({ object_key: objectKey.trim() }),
         }),
       )
       setStat(data)
@@ -481,4 +484,3 @@ export default function FileComponentsGuidePage() {
     </ApiKeyProvider>
   )
 }
-

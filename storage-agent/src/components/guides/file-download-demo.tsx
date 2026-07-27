@@ -95,10 +95,13 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
     setLocations(null)
     setRedirectHint(null)
     try {
-      const qs = new URLSearchParams({ object_key: objectKey.trim() })
-      const resp = await fetch(joinUrl(baseURL, `/api/files/object/stat?${qs.toString()}`), {
-        method: "GET",
-        headers: { "x-api-key": apiKey },
+      const resp = await fetch(joinUrl(baseURL, "/api/files/object/stat"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+        },
+        body: JSON.stringify({ object_key: objectKey.trim() }),
       })
       const text = await readErrorText(resp)
       if (!resp.ok) {

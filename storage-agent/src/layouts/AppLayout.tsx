@@ -9,13 +9,19 @@ import {
   Globe2,
   KeyRound,
   LogOut,
+  Settings2,
   Sparkles,
   UserRound,
 } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
 import { useNavigationLeaveBlock } from "../contexts/NavigationLeaveBlockContext"
-import type { UserProfile } from "../api/client"
+import {
+  fetchAIChatCompletionProxy,
+  fetchAIRuntimeConfigApi,
+  type AIRuntimeConfig,
+  type UserProfile,
+} from "../api/client"
 import { Button } from "../components/ui/button"
 import {
   SidebarProvider,
@@ -31,7 +37,7 @@ import {
 } from "../components/ui/sidebar"
 import { BackendEndpointSwitcher } from "../components/BackendEndpointSwitcher"
 import { ModeToggle } from "../components/mode-toggle"
-import { PageAgent } from 'page-agent'
+import { PageAgent } from "page-agent"
 import { showErrorToast } from "../api/toast"
 
 export default function AppLayout() {
@@ -40,20 +46,6 @@ export default function AppLayout() {
       <AppShell />
     </SidebarProvider>
   )
-}
-
-type EnvKey =
-  | "VITE_PAGE_AGENT_MODEL"
-  | "VITE_PAGE_AGENT_BASE_URL"
-  | "VITE_PAGE_AGENT_API_KEY"
-
-function getEnvVar(key: EnvKey): string {
-  const value = import.meta.env[key]
-  if (!value) {
-    console.warn(`[pageAgentConfig] 环境变量 ${key} 未设置`)
-    return ""
-  }
-  return value
 }
 
 function HeaderUserMenu({
@@ -169,9 +161,11 @@ function HeaderUserMenu({
 }
 
 function AppShell() {
-  const { user, logout } = useAuth()
+  const { user, logout, accessToken } = useAuth()
   const { confirmIfBlocking } = useNavigationLeaveBlock()
   const { closeMobileDrawer } = useSidebar()
+  const [aiConfig, setAIConfig] = useState<AIRuntimeConfig | null>(null)
+  const [aiConfigLoading, setAIConfigLoading] = useState(true)
 
   const handleNavClick = useCallback(
     (e: MouseEvent) => {
@@ -184,22 +178,47 @@ function AppShell() {
     [confirmIfBlocking, closeMobileDrawer],
   )
 
-  const page_agent = useMemo(() => {
+  const loadAIConfig = useCallback(async () => {
+    if (!accessToken) {
+      setAIConfig(null)
+      setAIConfigLoading(false)
+      return
+    }
+    setAIConfigLoading(true)
     try {
-      const apiKey = getEnvVar("VITE_PAGE_AGENT_API_KEY")
-      if (!apiKey || apiKey === "your-api-key-here") {
-        return null
-      }
+      setAIConfig(await fetchAIRuntimeConfigApi(accessToken))
+    } catch {
+      setAIConfig(null)
+    } finally {
+      setAIConfigLoading(false)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void loadAIConfig()
+    const reload = () => void loadAIConfig()
+    window.addEventListener("storagent:ai-config-updated", reload)
+    return () => window.removeEventListener("storagent:ai-config-updated", reload)
+  }, [loadAIConfig])
+
+  const pageAgent = useMemo(() => {
+    if (!aiConfig?.enabled || !aiConfig.configured) return null
+    try {
       return new PageAgent({
-        model: getEnvVar("VITE_PAGE_AGENT_MODEL"),
-        baseURL: getEnvVar("VITE_PAGE_AGENT_BASE_URL"),
-        apiKey,
+        model: aiConfig.model,
+        baseURL: "/api/ai/openai/v1",
+        customFetch: fetchAIChatCompletionProxy,
         language: "zh-CN",
+        maxSteps: aiConfig.max_steps,
       })
     } catch {
       return null
     }
-  }, [])
+  }, [aiConfig])
+
+  useEffect(() => {
+    return () => pageAgent?.dispose()
+  }, [pageAgent])
 
   return (
     <div className="flex h-screen min-w-0 overflow-hidden bg-background text-foreground">
@@ -269,6 +288,21 @@ function AppShell() {
                 </NavLink>
               </SidebarMenu>
             </div>
+
+            {user?.is_admin ? (
+              <div>
+                <SidebarSectionTitle>系统管理</SidebarSectionTitle>
+                <SidebarMenu>
+                  <NavLink to="/admin/ai" onClick={handleNavClick}>
+                    {({ isActive }) => (
+                      <SidebarMenuButton active={isActive} icon={<Settings2 aria-hidden />}>
+                        AI 助手配置
+                      </SidebarMenuButton>
+                    )}
+                  </NavLink>
+                </SidebarMenu>
+              </div>
+            ) : null}
           </div>
 
           <div className="mt-auto border-t border-sidebar-border/60 pt-6">
@@ -277,12 +311,15 @@ function AppShell() {
               <SidebarMenuButton
                 icon={<Sparkles aria-hidden />}
                 onClick={() => {
-                  if (!page_agent) {
-                    showErrorToast("PageAgent 未初始化，无法打开 AI 助手面板")
-                    console.error("PageAgent 未初始化，无法打开 AI 助手面板")
+                  if (aiConfigLoading) {
+                    showErrorToast("AI 助手配置正在加载")
                     return
                   }
-                  void page_agent.panel.show()
+                  if (!pageAgent) {
+                    showErrorToast("AI 助手尚未启用或配置不可用")
+                    return
+                  }
+                  void pageAgent.panel.show()
                   closeMobileDrawer()
                 }}
               >
@@ -326,4 +363,3 @@ function AppShell() {
     </div>
   )
 }
-

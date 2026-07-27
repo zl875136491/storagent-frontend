@@ -11,6 +11,7 @@ import ApplicationPage from "./pages/data/ApplicationPage"
 import BucketPage from "./pages/data/BucketPage"
 import StorageBucketManagePage from "./pages/data/StorageBucketManagePage"
 import DocsPage from "./pages/docs/DocsPage"
+import AIConfigPage from "./pages/admin/AIConfigPage"
 
 export function App() {
   return (
@@ -36,6 +37,7 @@ export function App() {
                 </Route>
               </Route>
               <Route path="docs" element={<DocsPage />} />
+              <Route path="admin/ai" element={<AIConfigPage />} />
             </Route>
           </Route>
 
