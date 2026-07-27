@@ -110,7 +110,7 @@ trap cleanup_registry_session EXIT
 
 printf '%s' "${HARBOR_PASSWORD}" | docker login "${HARBOR_REGISTRY}" --username "${HARBOR_USERNAME}" --password-stdin
 docker push "${IMAGE_REF}" 2>&1 | tee docker-push.log
-sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' docker-push.log | tail -n 1 > frontend-image.digest
+awk '/digest: sha256:/{for (i = 1; i <= NF; i++) if ($i ~ /^sha256:/) {print $i; exit}}' docker-push.log > frontend-image.digest
 test -s frontend-image.digest
 ''')
                 }
