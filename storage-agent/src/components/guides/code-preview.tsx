@@ -14,6 +14,12 @@ type Props = {
   codeLanguage?: string
 }
 
+type PackageManager = "npm" | "pnpm" | "yarn" | "npx"
+
+function isPackageManager(value: string): value is PackageManager {
+  return value === "npm" || value === "pnpm" || value === "yarn" || value === "npx"
+}
+
 function takeFirstLines(text: string, n: number) {
   const lines = text.split("\n")
   return lines.slice(0, Math.max(1, n)).join("\n") + (lines.length > n ? "\n" : "")
@@ -64,7 +70,7 @@ export function CodePreview({
   const [open, setOpen] = useState(Boolean(defaultOpen))
   const [copiedCode, setCopiedCode] = useState(false)
   const [copiedInstall, setCopiedInstall] = useState(false)
-  const [pm, setPm] = useState<"npm" | "pnpm" | "yarn" | "npx">("npx")
+  const [pm, setPm] = useState<PackageManager>("npx")
 
   const normalized = useMemo(() => code.trim() + "\n", [code])
   const normalizedInstall = useMemo(
@@ -127,7 +133,12 @@ export function CodePreview({
             <div className="flex items-center justify-between gap-2">
               <div className="text-sm font-medium">安装依赖</div>
               <div className="flex items-center gap-2">
-                <RadioGroup value={pm} onValueChange={(v) => setPm(v as any)}>
+                <RadioGroup
+                  value={pm}
+                  onValueChange={(value) => {
+                    if (isPackageManager(value)) setPm(value)
+                  }}
+                >
                   <RadioGroupItem value="npx">npx</RadioGroupItem>
                   <RadioGroupItem value="pnpm">pnpm</RadioGroupItem>
                   <RadioGroupItem value="yarn">yarn</RadioGroupItem>
@@ -159,4 +170,3 @@ export function CodePreview({
     </Card>
   )
 }
-

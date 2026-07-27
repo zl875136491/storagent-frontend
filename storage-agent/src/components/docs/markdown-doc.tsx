@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { useState } from "react"
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeHighlight from "rehype-highlight"
 import { copyTextToClipboard } from "@/lib/copy-to-clipboard"
@@ -184,11 +184,10 @@ export function MarkdownDoc({ content }: MarkdownDocProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
-        components={components as any}
+        components={components as Components}
       >
         {content}
       </ReactMarkdown>
     </div>
   )
 }
-

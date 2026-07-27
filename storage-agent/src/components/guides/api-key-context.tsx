@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { createContext, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useMemo, useState } from "react"
 
 type ApiKeyContextValue = {
   apiKey: string
@@ -11,19 +11,18 @@ const ApiKeyContext = createContext<ApiKeyContextValue | null>(null)
 
 const STORAGE_KEY = "storagent.demo.apiKey"
 
+function loadStoredApiKey(): string {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) ?? ""
+  } catch {
+    return ""
+  }
+}
+
 export function ApiKeyProvider({ children }: { children: ReactNode }) {
-  const [apiKey, setApiKeyState] = useState("")
+  const [apiKey, setApiKeyState] = useState(loadStoredApiKey)
 
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY)
-      if (stored) setApiKeyState(stored)
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  const setApiKey = (next: string) => {
+  const setApiKey = useCallback((next: string) => {
     const v = next.trim()
     setApiKeyState(v)
     try {
@@ -32,13 +31,13 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-  }
+  }, [])
 
-  const clearApiKey = () => setApiKey("")
+  const clearApiKey = useCallback(() => setApiKey(""), [setApiKey])
 
   const value = useMemo<ApiKeyContextValue>(
     () => ({ apiKey, setApiKey, clearApiKey }),
-    [apiKey],
+    [apiKey, clearApiKey, setApiKey],
   )
 
   return <ApiKeyContext.Provider value={value}>{children}</ApiKeyContext.Provider>
@@ -51,4 +50,3 @@ export function useApiKey() {
   }
   return ctx
 }
-

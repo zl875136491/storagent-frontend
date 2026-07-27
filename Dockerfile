@@ -1,0 +1,30 @@
+FROM node:22-alpine AS build
+
+WORKDIR /app/storage-agent
+
+COPY storage-agent/package.json storage-agent/package-lock.json ./
+RUN npm ci
+
+COPY storage-agent/ ./
+
+ARG STORAGENT_API_SERVERS=http://10.41.102.223:6783,http://10.32.129.241:6783,http://10.17.158.115:6783,http://10.8.136.107:6783,http://10.31.133.207:6783
+ENV STORAGENT_API_SERVERS=${STORAGENT_API_SERVERS}
+
+RUN npm run ci
+
+FROM nginx:1.28-alpine AS runtime
+
+ARG VCS_REF=unknown
+
+LABEL org.opencontainers.image.title="Storagent Frontend" \
+      org.opencontainers.image.component="frontend" \
+      org.opencontainers.image.revision="${VCS_REF}"
+
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/storage-agent/dist/ /usr/share/nginx/html/
+
+EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
+

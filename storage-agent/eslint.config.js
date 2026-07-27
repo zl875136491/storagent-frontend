@@ -20,4 +20,27 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    files: [
+      'src/auth/AuthContext.tsx',
+      'src/components/docs/markdown-doc.tsx',
+      'src/components/guides/api-key-context.tsx',
+      'src/components/storage/BucketReplicateGraph.tsx',
+      'src/components/theme-provider.tsx',
+      'src/components/ui/sidebar.tsx',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    files: [
+      'src/components/storage/BucketReplicateGraph.tsx',
+      'src/components/ui/sidebar.tsx',
+      'src/layouts/AppLayout.tsx',
+    ],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
 ])

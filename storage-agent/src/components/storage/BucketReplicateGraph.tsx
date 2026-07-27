@@ -596,13 +596,11 @@ function EdgeInspector({
   replicate,
   onApply,
   onDelete,
-  onClose: _onClose,
 }: {
   mode: GraphMode
   replicate: BucketReplicateRule
   onApply: (r: BucketReplicateRule) => void
   onDelete: () => void
-  onClose: () => void
 }) {
   const [fromSide, setFromSide] = useState<ReplicateSide>(replicate.from_side ?? "bottom")
   const [toSide, setToSide] = useState<ReplicateSide>(replicate.to_side ?? "top")
@@ -911,7 +909,6 @@ function ReplicateBezierEdge({
                     ctx.removeEdge(id)
                     ctx.closeEdgeInspector()
                   }}
-                  onClose={() => ctx.closeEdgeInspector()}
                 />
               </div>
             </div>

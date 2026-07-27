@@ -18,7 +18,53 @@ function parseServerListFromApiConfig(raw: string): string[] {
   return urls
 }
 
+function normalizeEnvironmentServerList(values: unknown[]): string[] {
+  if (values.length === 0) {
+    throw new Error("STORAGENT_API_SERVERS must contain at least one URL")
+  }
+
+  const urls = values.map((value) => {
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error("STORAGENT_API_SERVERS entries must be non-empty strings")
+    }
+
+    const url = value.trim()
+    if (!/^https?:\/\//i.test(url)) {
+      throw new Error(`STORAGENT_API_SERVERS entry must use http or https: ${url}`)
+    }
+    return url
+  })
+
+  return [...new Set(urls)]
+}
+
+function parseServerListFromEnvironment(raw: string | undefined): string[] | null {
+  const value = raw?.trim()
+  if (!value) return null
+
+  if (value.startsWith("[")) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(value)
+    } catch {
+      throw new Error("STORAGENT_API_SERVERS is not a valid JSON array")
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new Error("STORAGENT_API_SERVERS JSON value must be an array")
+    }
+    return normalizeEnvironmentServerList(parsed)
+  }
+
+  return normalizeEnvironmentServerList(value.split(","))
+}
+
 function loadServerList(): string[] {
+  const environmentServers = parseServerListFromEnvironment(
+    process.env.STORAGENT_API_SERVERS,
+  )
+  if (environmentServers) return environmentServers
+
   const configPath = path.resolve(__dirname, "../api.config")
   try {
     const raw = fs.readFileSync(configPath, "utf-8")

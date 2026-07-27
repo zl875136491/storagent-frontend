@@ -18,7 +18,7 @@ export function RadioGroup({
     <div role="radiogroup" className={cn("flex flex-wrap gap-2", className)} {...props}>
       {Children.map(children, (child) => {
         if (!isValidElement(child)) return child
-        return cloneElement(child as ReactElement<any>, {
+        return cloneElement(child as ReactElement<RadioGroupItemProps>, {
           __groupValue: value,
           __onGroupValueChange: onValueChange,
         })
@@ -65,4 +65,3 @@ export function RadioGroupItem({
     </button>
   )
 }
-

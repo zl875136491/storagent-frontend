@@ -1,0 +1,15 @@
+.git
+.github
+.gitignore
+
+**/node_modules
+**/dist
+**/dist-ssr
+**/.env
+**/.env.*
+**/*.log
+
+.DS_Store
+api.config
+openapi.json
+

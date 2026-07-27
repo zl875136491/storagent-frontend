@@ -6,7 +6,6 @@ import { TableOfContents } from "@/components/docs/table-of-contents"
 import { cn } from "@/lib/utils"
 
 // 使用 Vite 的 raw 导入，将 Markdown 作为字符串加载
-// eslint-disable-next-line import/no-unresolved
 import gettingStartedContent from "@/docs/getting-started.md?raw"
 import developerUsageContent from "@/docs/developer-usage.md?raw"
 import FileComponentsGuidePage from "@/pages/docs/FileComponentsGuidePage"
@@ -132,4 +131,3 @@ export default function DocsPage() {
     </div>
   )
 }
-

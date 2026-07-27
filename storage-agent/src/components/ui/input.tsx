@@ -1,7 +1,7 @@
 import type { InputHTMLAttributes } from "react"
 import { cn } from "../../lib/utils"
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {}
+export type InputProps = InputHTMLAttributes<HTMLInputElement>
 
 export function Input({ className, type = "text", ...props }: InputProps) {
   return (
@@ -15,4 +15,3 @@ export function Input({ className, type = "text", ...props }: InputProps) {
     />
   )
 }
-

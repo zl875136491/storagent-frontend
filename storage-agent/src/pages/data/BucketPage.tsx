@@ -19,8 +19,18 @@ function formatBytes(size: number): string {
   return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[index]}`
 }
 
-function buildTreemapNodes(files: BucketFileItem[]) {
-  const toNode = (item: BucketFileItem): any => {
+interface TreemapNode {
+  name: string
+  value?: number
+  children?: TreemapNode[]
+}
+
+interface TreemapTooltipInfo extends echarts.DefaultLabelFormatterCallbackParams {
+  treePathInfo?: Array<{ name: string }>
+}
+
+function buildTreemapNodes(files: BucketFileItem[]): TreemapNode[] {
+  const toNode = (item: BucketFileItem): TreemapNode => {
     const hasChildren = Array.isArray(item.children) && item.children.length > 0
     return {
       name: item.name,
@@ -82,10 +92,15 @@ function BucketTreemap({ buckets }: BucketTreemapProps) {
     const option: echarts.EChartsCoreOption = {
       backgroundColor: "transparent",
       tooltip: {
-        formatter: (info: any) => {
+        formatter: (params: echarts.TooltipComponentFormatterCallbackParams) => {
+          const info = (Array.isArray(params) ? params[0] : params) as
+            | TreemapTooltipInfo
+            | undefined
+          if (!info) return ""
+
           const { name, value, treePathInfo } = info
-          const path = treePathInfo
-            .map((p: any) => p.name)
+          const path = (treePathInfo ?? [])
+            .map((item) => item.name)
             .filter((n: string) => !!n)
             .join(" / ")
 
@@ -313,4 +328,3 @@ export default function BucketPage() {
     </div>
   )
 }
-
