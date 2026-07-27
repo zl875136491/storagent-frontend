@@ -36,10 +36,12 @@ pipeline {
                     if (!(revision ==~ /[0-9a-f]{40,64}/)) {
                         error('Unable to determine a valid Git revision')
                     }
-                    if (!params.STORAGENT_API_SERVERS?.trim()) {
+                    def apiServers = params.STORAGENT_API_SERVERS?.trim()
+                    if (!apiServers) {
                         error('STORAGENT_API_SERVERS must not be empty')
                     }
 
+                    env.STORAGENT_API_SERVERS = apiServers
                     env.FRONTEND_GIT_COMMIT = revision
                     env.IMAGE_TAG = "sha-${revision.take(12)}"
                     env.IMAGE_REF = "${env.IMAGE_REPOSITORY}:${env.IMAGE_TAG}"
@@ -56,7 +58,7 @@ set -euo pipefail
 
 docker build --pull \
   --target build \
-  --build-arg "STORAGENT_API_SERVERS=${STORAGENT_API_SERVERS}" \
+  --build-arg STORAGENT_API_SERVERS \
   --tag "${CI_IMAGE_REF}" \
   .
 ''')
@@ -73,7 +75,7 @@ set -euo pipefail
 
 docker build \
   --platform linux/amd64 \
-  --build-arg "STORAGENT_API_SERVERS=${STORAGENT_API_SERVERS}" \
+  --build-arg STORAGENT_API_SERVERS \
   --build-arg "VCS_REF=${FRONTEND_GIT_COMMIT}" \
   --tag "${IMAGE_REF}" \
   .
