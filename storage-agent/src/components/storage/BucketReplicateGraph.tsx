@@ -48,6 +48,7 @@ import type {
 } from "../../api/client"
 import {
   createBucketReplicateApi,
+  deleteBucketReplicateApi,
   fetchBucketReplicatesApi,
   postBucketGraphEdgePosition,
   postBucketGraphNodePosition,
@@ -95,56 +96,21 @@ export function parseInSide(handleId: string | null | undefined): ReplicateSide 
   return SIDES.includes(s) ? s : null
 }
 
-/** 与后端 GET 坐标及画布像素互转时的基准区域 */
-const GRAPH_AREA_W = 900
-const GRAPH_AREA_H = 560
-
+/** 画布像素坐标（后端已统一为像素；遗留百分比由后端读取时迁移） */
 function isServersRecord(
   servers: BucketReplicatesResponse["servers"],
 ): servers is BucketReplicateServersMap {
   return servers != null && !Array.isArray(servers) && typeof servers === "object"
 }
 
-function graphCoordModeFromServersMap(map: BucketReplicateServersMap): "percent" | "pixel" {
-  const vals = Object.values(map)
-  if (vals.length === 0) return "percent"
-  return vals.some((v) => v.position_x > 100 || v.position_y > 100) ? "pixel" : "percent"
-}
-
-function getGraphCoordMode(resp: BucketReplicatesResponse): "percent" | "pixel" {
-  if (isServersRecord(resp.servers)) {
-    return graphCoordModeFromServersMap(resp.servers)
-  }
-  return "percent"
-}
-
 function serverEntryToPixel(
   entry: { position_x: number; position_y: number },
-  mode: "percent" | "pixel",
 ): { x: number; y: number } {
-  if (mode === "pixel") {
-    return { x: entry.position_x, y: entry.position_y }
-  }
-  return {
-    x: (entry.position_x / 100) * GRAPH_AREA_W,
-    y: (entry.position_y / 100) * GRAPH_AREA_H,
-  }
+  return { x: entry.position_x, y: entry.position_y }
 }
 
-function pixelToGraphPayload(
-  x: number,
-  y: number,
-  mode: "percent" | "pixel",
-): { position_x: number; position_y: number } {
-  if (mode === "pixel") {
-    return { position_x: Math.round(x), position_y: Math.round(y) }
-  }
-  const px = Math.round((x / GRAPH_AREA_W) * 100)
-  const py = Math.round((y / GRAPH_AREA_H) * 100)
-  return {
-    position_x: Math.min(100, Math.max(0, px)),
-    position_y: Math.min(100, Math.max(0, py)),
-  }
+function pixelToGraphPayload(x: number, y: number): { position_x: number; position_y: number } {
+  return { position_x: Math.round(x), position_y: Math.round(y) }
 }
 
 function apiPortToSide(p: ReplicateGraphPortPosition): ReplicateSide {
@@ -293,7 +259,7 @@ type GraphMode = "view" | "edit"
 const ReplicateEdgeContext = createContext<{
   mode: GraphMode
   updateReplicate: (edgeId: string, next: BucketReplicateRule) => void
-  removeEdge: (edgeId: string) => void
+  removeEdge: (edgeId: string, options?: { persist?: boolean }) => void
   persistEdgePorts?: (from: string, to: string, from_side: ReplicateSide, to_side: ReplicateSide) => void
   openInspectorEdgeId: string | null
   closeEdgeInspector: () => void
@@ -301,6 +267,9 @@ const ReplicateEdgeContext = createContext<{
 
 function collectServerIds(resp: BucketReplicatesResponse): string[] {
   const ids = new Set<string>()
+  if (Array.isArray(resp.server_ids) && resp.server_ids.length > 0) {
+    for (const s of resp.server_ids) ids.add(s)
+  }
   const srv = resp.servers
   if (Array.isArray(srv)) {
     for (const s of srv) ids.add(s)
@@ -368,12 +337,11 @@ function buildFlowState(resp: BucketReplicatesResponse): { nodes: Node[]; edges:
   const ids = collectServerIds(resp)
   const posMap = new Map<string, { x: number; y: number }>()
   const layout = resp.layout
-  const coordMode = getGraphCoordMode(resp)
 
   if (isServersRecord(resp.servers)) {
     const sm = resp.servers
     for (const [id, entry] of Object.entries(sm)) {
-      posMap.set(id, serverEntryToPixel(entry, coordMode))
+      posMap.set(id, serverEntryToPixel(entry))
     }
   }
 
@@ -1074,7 +1042,8 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-  const graphCoordModeRef = useRef<"percent" | "pixel">("percent")
+  const edgesRef = useRef<Edge[]>([])
+  edgesRef.current = edges
 
   const onEdgesChangeWrapped = useCallback(
     (changes: EdgeChange<Edge>[]) => {
@@ -1092,7 +1061,6 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
     try {
       const data = await fetchBucketReplicatesApi(bucketName, accessToken)
       setPayload(data)
-      graphCoordModeRef.current = getGraphCoordMode(data)
       const { nodes: n, edges: e } = buildFlowState(data)
       setNodes(n)
       setEdges(e)
@@ -1112,12 +1080,53 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
     setEdges((eds) => eds.map((e) => ({ ...e, deletable: mode === "edit" })))
   }, [mode, payload, setEdges])
 
+  const isDraftEdgeId = useCallback(
+    (edgeId: string) => edgeId.startsWith("draft-") || newEdgeDraft?.edgeId === edgeId,
+    [newEdgeDraft],
+  )
+
+  const persistDeleteReplicate = useCallback(
+    async (edge: Edge) => {
+      if (isDraftEdgeId(edge.id)) return
+      const replicate = (edge.data as { replicate?: BucketReplicateRule } | undefined)?.replicate
+      if (!replicate?.from || !replicate?.to) return
+      await deleteBucketReplicateApi(
+        bucketName,
+        {
+          from: replicate.from,
+          to: replicate.to,
+          rule_id: replicate.rule_id?.startsWith("draft-") ? undefined : replicate.rule_id,
+        },
+        accessToken,
+      )
+    },
+    [accessToken, bucketName, isDraftEdgeId],
+  )
+
   const removeEdgeById = useCallback(
-    (edgeId: string) => {
+    (edgeId: string, options?: { persist?: boolean }) => {
+      const persist = options?.persist !== false
+      const edge = edgesRef.current.find((e) => e.id === edgeId)
       setOpenInspectorEdgeId((cur) => (cur === edgeId ? null : cur))
       setEdges((eds) => eds.filter((e) => e.id !== edgeId))
+      if (!persist || !edge || isDraftEdgeId(edgeId)) return
+      void persistDeleteReplicate(edge).catch(() => {
+        void reload()
+      })
     },
-    [setEdges],
+    [isDraftEdgeId, persistDeleteReplicate, reload, setEdges],
+  )
+
+  const onEdgesDelete = useCallback(
+    (deleted: Edge[]) => {
+      for (const edge of deleted) {
+        if (isDraftEdgeId(edge.id)) continue
+        void persistDeleteReplicate(edge).catch(() => {
+          void reload()
+        })
+      }
+    },
+    [isDraftEdgeId, persistDeleteReplicate, reload],
   )
 
   const closeEdgeInspector = useCallback(() => {
@@ -1128,7 +1137,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
     if (mode !== "view") return
     setNewEdgeDraft((draft) => {
       if (draft) {
-        queueMicrotask(() => removeEdgeById(draft.edgeId))
+        queueMicrotask(() => removeEdgeById(draft.edgeId, { persist: false }))
       }
       return null
     })
@@ -1167,7 +1176,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
 
   const cancelNewEdge = useCallback(() => {
     if (newEdgeDraft) {
-      removeEdgeById(newEdgeDraft.edgeId)
+      removeEdgeById(newEdgeDraft.edgeId, { persist: false })
     }
     setNewEdgeDraft(null)
   }, [newEdgeDraft, removeEdgeById])
@@ -1233,11 +1242,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
   const onNodeDragStop = useCallback(
     (_event: unknown, node: Node) => {
       if (mode !== "edit") return
-      const { position_x, position_y } = pixelToGraphPayload(
-        node.position.x,
-        node.position.y,
-        graphCoordModeRef.current,
-      )
+      const { position_x, position_y } = pixelToGraphPayload(node.position.x, node.position.y)
       void postBucketGraphNodePosition(
         {
           bucket: bucketName,
@@ -1408,6 +1413,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
               onReconnect={onReconnect}
               onEdgeClick={onEdgeClick}
               onPaneClick={onPaneClick}
+              onEdgesDelete={onEdgesDelete}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               connectionLineType={ConnectionLineType.Bezier}
