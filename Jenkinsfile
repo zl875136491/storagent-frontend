@@ -82,6 +82,7 @@ docker build --pull \
 set -euo pipefail
 
 docker build \
+  --provenance=false \
   --platform linux/amd64 \
   --build-arg HTTP_PROXY \
   --build-arg HTTPS_PROXY \
