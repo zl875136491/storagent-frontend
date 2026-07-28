@@ -96,34 +96,17 @@ export function parseInSide(handleId: string | null | undefined): ReplicateSide 
   return SIDES.includes(s) ? s : null
 }
 
-/** 与后端 GET 坐标及画布像素互转时的基准区域（仅用于遗留百分比坐标迁移） */
-const GRAPH_AREA_W = 900
-const GRAPH_AREA_H = 560
-
+/** 画布像素坐标（后端已统一为像素；遗留百分比由后端读取时迁移） */
 function isServersRecord(
   servers: BucketReplicatesResponse["servers"],
 ): servers is BucketReplicateServersMap {
   return servers != null && !Array.isArray(servers) && typeof servers === "object"
 }
 
-/** 旧数据：全部坐标落在 0–100 时按百分比解释一次；新数据统一按像素读写。 */
-function isLegacyPercentServersMap(map: BucketReplicateServersMap): boolean {
-  const vals = Object.values(map)
-  if (vals.length === 0) return false
-  return vals.every((v) => v.position_x >= 0 && v.position_x <= 100 && v.position_y >= 0 && v.position_y <= 100)
-}
-
 function serverEntryToPixel(
   entry: { position_x: number; position_y: number },
-  asPercent: boolean,
 ): { x: number; y: number } {
-  if (!asPercent) {
-    return { x: entry.position_x, y: entry.position_y }
-  }
-  return {
-    x: (entry.position_x / 100) * GRAPH_AREA_W,
-    y: (entry.position_y / 100) * GRAPH_AREA_H,
-  }
+  return { x: entry.position_x, y: entry.position_y }
 }
 
 function pixelToGraphPayload(x: number, y: number): { position_x: number; position_y: number } {
@@ -354,13 +337,11 @@ function buildFlowState(resp: BucketReplicatesResponse): { nodes: Node[]; edges:
   const ids = collectServerIds(resp)
   const posMap = new Map<string, { x: number; y: number }>()
   const layout = resp.layout
-  const legacyPercent =
-    isServersRecord(resp.servers) && isLegacyPercentServersMap(resp.servers)
 
   if (isServersRecord(resp.servers)) {
     const sm = resp.servers
     for (const [id, entry] of Object.entries(sm)) {
-      posMap.set(id, serverEntryToPixel(entry, legacyPercent))
+      posMap.set(id, serverEntryToPixel(entry))
     }
   }
 
