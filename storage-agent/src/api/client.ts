@@ -255,7 +255,7 @@ export interface BucketGraphServerCoords {
   position_y: number
 }
 
-/** 新版：各站点节点在拓扑图中的坐标（可为百分比 0–100 或像素，由数值范围推断） */
+/** 新版：各站点节点在拓扑图中的画布像素坐标 */
 export type BucketReplicateServersMap = Record<string, BucketGraphServerCoords>
 
 export interface BucketReplicateRule {
@@ -290,8 +290,10 @@ export interface ReplicateGraphLayoutV1 {
 }
 
 export interface BucketReplicatesResponse {
-  /** 旧版：站点 id 列表；新版：站点 id → 坐标 */
+  /** 旧版：站点 id 列表；新版：站点 id → 像素坐标（仅含已落盘位置） */
   servers: string[] | BucketReplicateServersMap
+  /** 全部相关站点 id（含尚无落盘坐标的站点）；优先于 servers 键集合 */
+  server_ids?: string[]
   replicates: BucketReplicateRule[]
   /** 可选：与 replicates 配套的画布布局 */
   layout?: ReplicateGraphLayoutV1
@@ -688,6 +690,31 @@ export async function createBucketReplicateApi(
   return apiPost<BucketReplicateCreatePayload, BucketReplicateRule>(
     `/api/storage/buckets/${q}/replicates`,
     payload,
+    accessToken,
+  )
+}
+
+export interface BucketReplicateDeleteParams {
+  from: string
+  to: string
+  rule_id?: string
+}
+
+export async function deleteBucketReplicateApi(
+  bucketName: string,
+  params: BucketReplicateDeleteParams,
+  accessToken?: string,
+): Promise<{ message: string; from: string; to: string; rule_id: string }> {
+  const q = encodeURIComponent(bucketName)
+  const search = new URLSearchParams({
+    from: params.from,
+    to: params.to,
+  })
+  if (params.rule_id) {
+    search.set("rule_id", params.rule_id)
+  }
+  return apiDelete<{ message: string; from: string; to: string; rule_id: string }>(
+    `/api/storage/buckets/${q}/replicates?${search.toString()}`,
     accessToken,
   )
 }
