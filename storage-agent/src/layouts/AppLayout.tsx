@@ -12,6 +12,7 @@ import {
   Settings2,
   Sparkles,
   UserRound,
+  Users,
 } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
@@ -293,6 +294,13 @@ function AppShell() {
               <div>
                 <SidebarSectionTitle>系统管理</SidebarSectionTitle>
                 <SidebarMenu>
+                  <NavLink to="/admin/users" onClick={handleNavClick}>
+                    {({ isActive }) => (
+                      <SidebarMenuButton active={isActive} icon={<Users aria-hidden />}>
+                        角色管理
+                      </SidebarMenuButton>
+                    )}
+                  </NavLink>
                   <NavLink to="/admin/ai" onClick={handleNavClick}>
                     {({ isActive }) => (
                       <SidebarMenuButton active={isActive} icon={<Settings2 aria-hidden />}>

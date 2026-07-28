@@ -12,6 +12,7 @@ import BucketPage from "./pages/data/BucketPage"
 import StorageBucketManagePage from "./pages/data/StorageBucketManagePage"
 import DocsPage from "./pages/docs/DocsPage"
 import AIConfigPage from "./pages/admin/AIConfigPage"
+import UserRolePage from "./pages/admin/UserRolePage"
 
 export function App() {
   return (
@@ -38,6 +39,7 @@ export function App() {
               </Route>
               <Route path="docs" element={<DocsPage />} />
               <Route path="admin/ai" element={<AIConfigPage />} />
+              <Route path="admin/users" element={<UserRolePage />} />
             </Route>
           </Route>
 
