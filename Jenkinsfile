@@ -61,7 +61,7 @@ pipeline {
                 sh(label: 'Run frontend CI in Node 22', script: '''#!/usr/bin/env bash
 set -euo pipefail
 
-docker build --pull \
+docker build \
   --target build \
   --build-arg HTTP_PROXY \
   --build-arg HTTPS_PROXY \

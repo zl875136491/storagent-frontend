@@ -4,6 +4,8 @@ import { CodePreview } from "@/components/guides/code-preview"
 import { FileDownloadDemo } from "@/components/guides/file-download-demo"
 import { FileUploadDemo } from "@/components/guides/file-upload-demo"
 import { GuideEndpointsProvider } from "@/components/guides/guide-endpoints-context"
+import { DocLead, DocNote, DocTitle, useRegisterToc } from "@/components/docs/primitives"
+import { useGoDoc } from "@/components/docs/nav-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -442,8 +444,19 @@ export function FileDownloadDemo({ apiKey, baseURL, defaultObjectKey }: Props) {
 }
 
 function InnerPage() {
+  const goDoc = useGoDoc()
   const { apiKey } = useApiKey()
   const [lastUploadedObjectKey, setLastUploadedObjectKey] = useState<string | null>(null)
+
+  const toc = useMemo(
+    () => [
+      { id: "api-key", title: "配置 APIKey", level: 2 as const },
+      { id: "upload-demo", title: "上传 Demo", level: 2 as const },
+      { id: "download-demo", title: "下载 Demo", level: 2 as const },
+    ],
+    [],
+  )
+  useRegisterToc(toc)
 
   const uploadSnippet = useMemo(() => uploadCode(), [])
   const downloadSnippet = useMemo(() => downloadCode(), [])
@@ -459,36 +472,31 @@ function InnerPage() {
 
   return (
     <GuideEndpointsProvider>
-      <div className="space-y-6">
-        <Card>
-          <CardHeader className="py-4">
-            <CardTitle className="text-base">使用说明</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              <span className="font-medium text-foreground">本页上方 Demo</span>
-              ：在控制台内可直接试用（自动探测
-              <span className="font-mono text-[11px]"> /api/public/endpoints </span>
-              并选择低时延节点）。
-            </p>
-            <p>
-              <span className="font-medium text-foreground">下方可复制代码</span>
-              ：已改成<strong>独立集成示例</strong>，只依赖 shadcn 基础组件 +{" "}
-              <span className="font-mono text-[11px]">fetch</span>
-              ，通过 props 传入 <span className="font-mono text-[11px]">baseURL</span> 与{" "}
-              <span className="font-mono text-[11px]">apiKey</span>
-              ，不依赖本仓库的 <span className="font-mono text-[11px]">guides/*</span>。
-            </p>
-            <p>
-              纯接口说明（无 UI）见文档「功能接口引导」。鉴权头必须是{" "}
-              <span className="font-mono text-[11px]">x-api-key</span>。
-            </p>
-          </CardContent>
-        </Card>
+      <div className="space-y-6 pb-10">
+        <div>
+          <DocTitle>功能组件引导</DocTitle>
+          <DocLead>
+            控制台内可直接试用上传/下载；下方代码可拷到外部项目（只依赖 shadcn + fetch）。
+          </DocLead>
+          <DocNote>
+            纯 HTTP 语义见{" "}
+            <button
+              type="button"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+              onClick={() => goDoc("api-guide")}
+            >
+              功能接口引导
+            </button>
+            。鉴权头必须是 <code className="font-mono text-[11px]">x-api-key</code>。
+          </DocNote>
+        </div>
 
-        <ApiKeyBox />
+        <section id="api-key" className="scroll-m-24">
+          <ApiKeyBox />
+        </section>
 
-        <div className="space-y-3">
+        <section id="upload-demo" className="scroll-m-24 space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">上传 Demo</h2>
           <FileUploadDemo apiKey={apiKey} onUploaded={(r) => setLastUploadedObjectKey(r.objectKey)} />
           <CodePreview
             title="上传组件代码（可复制到外部项目）"
@@ -497,9 +505,10 @@ function InnerPage() {
             codeLanguage="tsx"
             code={uploadSnippet}
           />
-        </div>
+        </section>
 
-        <div className="space-y-3">
+        <section id="download-demo" className="scroll-m-24 space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">下载 Demo</h2>
           <FileDownloadDemo apiKey={apiKey} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
           <CodePreview
             title="下载组件代码（可复制到外部项目）"
@@ -508,7 +517,7 @@ function InnerPage() {
             codeLanguage="tsx"
             code={downloadSnippet}
           />
-        </div>
+        </section>
       </div>
     </GuideEndpointsProvider>
   )
