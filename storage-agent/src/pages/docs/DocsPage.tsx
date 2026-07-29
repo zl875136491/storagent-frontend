@@ -1,135 +1,118 @@
-import type { ReactElement } from "react"
 import { useEffect, useMemo } from "react"
-import { useSearchParams } from "react-router-dom"
-import { MarkdownDoc } from "@/components/docs/markdown-doc"
-import { TableOfContents } from "@/components/docs/table-of-contents"
+import { Link, useSearchParams } from "react-router-dom"
+import { BookOpen, ChevronRight, Layers, Plug, Rocket } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-import gettingStartedContent from "@/docs/getting-started.md?raw"
-import usageOverviewContent from "@/docs/usage-overview.md?raw"
-import apiGuideContent from "@/docs/api-guide.md?raw"
+import { DocsNavProvider, useGoDoc } from "@/components/docs/nav-context"
+import { DocsOnThisPage, DocsTocProvider } from "@/components/docs/primitives"
+import GettingStartedPage from "@/pages/docs/GettingStartedPage"
+import UsageOverviewPage from "@/pages/docs/UsageOverviewPage"
+import ApiGuidePage from "@/pages/docs/ApiGuidePage"
 import FileComponentsGuidePage from "@/pages/docs/FileComponentsGuidePage"
 
-type DocItem = {
-  id: string
-  title: string
-  description: string
-  section: string
-} & (
-  | { content: string; element?: never }
-  | { element: ReactElement; content?: never }
-)
+type DocId = "getting-started" | "usage-overview" | "api-guide" | "components"
 
-const docs = [
-  {
-    id: "getting-started",
-    title: "快速开始",
-    description: "5 分钟弄清角色分工、上手路径与鉴权约定。",
-    content: gettingStartedContent as string,
-    section: "指南",
-  },
-  {
-    id: "usage-overview",
-    title: "使用概览",
-    description: "对照控制台菜单的系统使用向导，说明各模块能力与权限边界。",
-    content: usageOverviewContent as string,
-    section: "指南",
-  },
-  {
-    id: "api-guide",
-    title: "功能接口引导",
-    description: "对外存储 HTTP 接口说明与调用示例，便于自行设计组件。",
-    content: apiGuideContent as string,
-    section: "指南",
-  },
-  {
-    id: "file-components",
-    title: "功能组件引导",
-    description: "控制台内可试用的上传/下载 Demo，以及可拷贝到外部项目的独立组件代码。",
-    element: <FileComponentsGuidePage />,
-    section: "指南",
-  },
-] as const satisfies readonly DocItem[]
+const NAV: { id: DocId; title: string; icon: typeof Rocket; hint: string }[] = [
+  { id: "getting-started", title: "快速开始", icon: Rocket, hint: "最短路径上手" },
+  { id: "usage-overview", title: "使用概览", icon: BookOpen, hint: "控制台怎么用" },
+  { id: "api-guide", title: "功能接口引导", icon: Plug, hint: "HTTP API 参考" },
+  { id: "components", title: "功能组件引导", icon: Layers, hint: "上传 / 下载演示" },
+]
 
-const DOC_PARAM = "doc"
-
-export default function DocsPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const defaultDocId = docs[0]?.id ?? "getting-started"
-  const rawDocId = searchParams.get(DOC_PARAM) ?? defaultDocId
-  // 旧链接兼容：开发人员使用指南 → 使用概览
-  const docId = rawDocId === "developer-usage" ? "usage-overview" : rawDocId
-  const currentDoc = useMemo(
-    () => docs.find((d) => d.id === docId) ?? docs[0],
-    [docId],
-  )
-
-  const setDoc = (id: string) => {
-    setSearchParams({ [DOC_PARAM]: id }, { replace: true })
+function resolveDocId(raw: string | null): DocId {
+  if (raw === "developer-usage" || raw === "file-components") return raw === "file-components" ? "components" : "usage-overview"
+  if (raw === "getting-started" || raw === "usage-overview" || raw === "api-guide" || raw === "components") {
+    return raw
   }
+  return "getting-started"
+}
+
+function DocsShell() {
+  const [searchParams] = useSearchParams()
+  const goDoc = useGoDoc()
+  const active = useMemo(() => resolveDocId(searchParams.get("doc")), [searchParams])
 
   useEffect(() => {
-    if (docId !== currentDoc.id || rawDocId === "developer-usage") {
-      setSearchParams({ [DOC_PARAM]: currentDoc.id }, { replace: true })
+    const raw = searchParams.get("doc")
+    if (raw === "developer-usage") {
+      goDoc("usage-overview", { replace: true })
+    } else if (raw === "file-components") {
+      goDoc("components", { replace: true })
     }
-  }, [docId, rawDocId, currentDoc.id, setSearchParams])
+  }, [searchParams, goDoc])
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden -ml-4 md:-ml-8 mr-0 pl-2 pr-4 md:pl-4 md:pr-8">
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-[theme(spacing.36)_1fr_theme(spacing.48)] lg:gap-6">
-        <aside className="hidden flex-col border-r border-border/70 pr-3 text-xs text-muted-foreground lg:flex">
-          <div className="space-y-3">
-            <div>
-              <div className="mb-1.5 text-[10px] font-semibold text-muted-foreground">
-                指南
-              </div>
-              <nav className="space-y-1">
-                {docs
-                  .filter((doc) => doc.section === "指南")
-                  .map((doc) => (
-                    <button
-                      key={doc.id}
-                      type="button"
-                      onClick={() => setDoc(doc.id)}
-                      className={cn(
-                        "flex w-full items-center rounded-md px-2 py-1 text-left text-[12px] transition-colors",
-                        currentDoc.id === doc.id
-                          ? "bg-accent font-medium text-accent-foreground"
-                          : "text-foreground/80 hover:bg-accent/70 hover:text-accent-foreground",
-                      )}
-                    >
-                      <span className="line-clamp-2">{doc.title}</span>
-                    </button>
-                  ))}
-              </nav>
-            </div>
-          </div>
-        </aside>
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-background lg:flex-row">
+      <aside className="shrink-0 border-b border-border/60 bg-card/40 lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:w-60 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+        <div className="px-4 py-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            文档中心
+          </p>
+          <p className="mt-1 text-sm font-medium text-foreground">Storagent Docs</p>
+        </div>
+        <nav className="space-y-0.5 px-2 pb-6" aria-label="文档导航">
+          {NAV.map((item) => {
+            const Icon = item.icon
+            const isActive = active === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => goDoc(item.id)}
+                className={cn(
+                  "flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{item.title}</span>
+                  <span className="mt-0.5 block text-[11px] opacity-80">{item.hint}</span>
+                </span>
+              </button>
+            )
+          })}
+        </nav>
+      </aside>
 
-        <section className="min-w-0 overflow-y-auto overflow-x-hidden docs-scroll pr-3 -mr-3 lg:pr-4 lg:-mr-4">
-          <div className="space-y-4 pb-8">
-            <div className="space-y-1">
-              <h1 className="scroll-m-20 text-3xl font-semibold tracking-tight">
-                {currentDoc.title}
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                {currentDoc.description}
-              </p>
-            </div>
-            {"content" in currentDoc ? (
-              <MarkdownDoc content={currentDoc.content} />
-            ) : (
-              currentDoc.element
-            )}
+      <div className="min-w-0 flex-1">
+        <div className="border-b border-border/50 bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground sm:px-8">
+          <div className="mx-auto flex max-w-6xl items-center gap-1.5">
+            <Link to="/docs" className="hover:text-foreground">
+              文档
+            </Link>
+            <ChevronRight className="h-3 w-3 opacity-50" />
+            <span className="font-medium text-foreground">
+              {NAV.find((n) => n.id === active)?.title}
+            </span>
           </div>
-        </section>
+        </div>
 
-        <aside className="hidden min-h-0 overflow-y-auto pl-2 docs-scroll lg:block">
-          {"content" in currentDoc ? (
-            <TableOfContents content={currentDoc.content} />
-          ) : null}
-        </aside>
+        <div className="mx-auto flex max-w-6xl gap-10 px-4 py-8 sm:px-8 lg:px-10">
+          <main className="min-w-0 flex-1">
+            {active === "getting-started" && <GettingStartedPage />}
+            {active === "usage-overview" && <UsageOverviewPage />}
+            {active === "api-guide" && <ApiGuidePage />}
+            {active === "components" && <FileComponentsGuidePage />}
+          </main>
+          <aside className="hidden w-44 shrink-0 xl:block">
+            <div className="sticky top-24">
+              <DocsOnThisPage />
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
+  )
+}
+
+export default function DocsPage() {
+  return (
+    <DocsTocProvider>
+      <DocsNavProvider>
+        <DocsShell />
+      </DocsNavProvider>
+    </DocsTocProvider>
   )
 }
