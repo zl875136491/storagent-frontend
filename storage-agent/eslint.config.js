@@ -24,6 +24,8 @@ export default defineConfig([
     files: [
       'src/auth/AuthContext.tsx',
       'src/components/docs/markdown-doc.tsx',
+      'src/components/docs/nav-context.tsx',
+      'src/components/docs/primitives.tsx',
       'src/components/guides/api-key-context.tsx',
       'src/components/storage/BucketReplicateGraph.tsx',
       'src/components/theme-provider.tsx',
