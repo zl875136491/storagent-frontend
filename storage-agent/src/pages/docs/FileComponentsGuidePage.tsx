@@ -38,10 +38,7 @@ function ApiKeyBox() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => setApiKey(draft)}
-            disabled={!draft.trim()}
-          >
+          <Button onClick={() => setApiKey(draft)} disabled={!draft.trim()}>
             保存
           </Button>
           <Button variant="outline" onClick={() => setConfirmOpen(true)}>
@@ -60,7 +57,9 @@ function ApiKeyBox() {
             清除后，本页上传/下载将无法继续调用，且本地缓存会被删除。
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>取消</Button>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              取消
+            </Button>
             <Button
               variant="destructive"
               onClick={() => {
@@ -78,11 +77,10 @@ function ApiKeyBox() {
   )
 }
 
+/** 可复制到外部项目的独立上传示例（不依赖本仓库 guides/*） */
 function uploadCode() {
   return `
 import { useMemo, useState } from "react"
-import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
-import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -91,6 +89,9 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 
 type Props = {
+  /** Storagent API 根地址，如 https://storagent.example.com */
+  baseURL: string
+  /** 控制台签发的 APIKey，请求头使用 x-api-key */
   apiKey: string
   chunkSizeBytes?: number
   onUploaded?: (result: { bucket: string; objectKey: string }) => void
@@ -114,9 +115,11 @@ function sanitizeEtag(etag: string) {
   return etag.replace(/^"+|"+$/g, "")
 }
 
-export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
-  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
-    useGuideDemoBackendSelection()
+/**
+ * 独立上传组件：仅依赖 shadcn 基础组件 + fetch。
+ * 鉴权必须用 x-api-key，不要用 Authorization Bearer。
+ */
+export function FileUploadDemo({ apiKey, baseURL, chunkSizeBytes, onUploaded }: Props) {
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -125,18 +128,20 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
   const [resultOpen, setResultOpen] = useState(false)
 
   const chunkSize = useMemo(() => chunkSizeBytes ?? 5 * 1024 * 1024, [chunkSizeBytes])
-
-  const canUpload = Boolean(baseURL && apiKey && file && !uploading && !backendListLoading && !backendListError)
+  const canUpload = Boolean(baseURL && apiKey && file && !uploading)
 
   const upload = async () => {
     if (!file) return
-    if (!baseURL) throw new Error("请先选择可达的后端服务")
+    if (!baseURL) throw new Error("请配置 baseURL")
     if (!apiKey) throw new Error("apiKey 为空")
 
     setUploading(true)
     setError(null)
     setResult(null)
     setProgress(null)
+
+    let uploadId = ""
+    let objectKey = ""
 
     try {
       const init = await jsonOrThrow<InitResp>(
@@ -149,6 +154,8 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
           body: JSON.stringify({ content_type: file.type || "application/octet-stream" }),
         }),
       )
+      uploadId = init.upload_id
+      objectKey = init.object_key
 
       const totalParts = Math.max(1, Math.ceil(file.size / chunkSize))
       setProgress({ done: 0, total: totalParts })
@@ -197,6 +204,16 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
       setResultOpen(true)
       onUploaded?.(finalResult)
     } catch (e) {
+      if (uploadId && objectKey) {
+        void fetch(joinUrl(baseURL, "/api/files/multipart/abort"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify({ upload_id: uploadId, object_key: objectKey }),
+        }).catch(() => undefined)
+      }
       setError(e instanceof Error ? e.message : "上传失败")
     } finally {
       setUploading(false)
@@ -206,11 +223,9 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">1. 上传组件</CardTitle>
+        <CardTitle className="text-base">上传文件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
-
         <div className="space-y-2">
           <Label htmlFor="upload-file">选择文件</Label>
           <Input
@@ -251,14 +266,14 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
       </Dialog>
     </Card>
   )
-}`
+}
+`.trimStart()
 }
 
+/** 可复制到外部项目的独立下载示例 */
 function downloadCode() {
   return `
 import { useEffect, useState } from "react"
-import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
-import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -266,6 +281,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
 type Props = {
+  baseURL: string
   apiKey: string
   defaultObjectKey?: string
 }
@@ -295,9 +311,7 @@ function filenameFromObjectKey(objectKey: string) {
   return seg || "download.bin"
 }
 
-export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
-  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
-    useGuideDemoBackendSelection()
+export function FileDownloadDemo({ apiKey, baseURL, defaultObjectKey }: Props) {
   const [objectKey, setObjectKey] = useState(defaultObjectKey ?? "")
   const [loading, setLoading] = useState(false)
   const [stat, setStat] = useState<ObjectStatResponse | null>(null)
@@ -310,12 +324,10 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
     }
   }, [defaultObjectKey])
 
-  const canCall = Boolean(
-    baseURL && apiKey && objectKey.trim() && !loading && !backendListLoading && !backendListError,
-  )
+  const canCall = Boolean(baseURL && apiKey && objectKey.trim() && !loading)
 
   const fetchStat = async () => {
-    if (!baseURL) throw new Error("请先选择可达的后端服务")
+    if (!baseURL) throw new Error("请配置 baseURL")
     if (!apiKey) throw new Error("apiKey 为空")
     if (!objectKey.trim()) throw new Error("object_key 为空")
 
@@ -343,7 +355,7 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
   }
 
   const download = async () => {
-    if (!baseURL) throw new Error("请先选择可达的后端服务")
+    if (!baseURL) throw new Error("请配置 baseURL")
     if (!apiKey) throw new Error("apiKey 为空")
     if (!objectKey.trim()) throw new Error("object_key 为空")
 
@@ -383,11 +395,9 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">2. 下载组件</CardTitle>
+        <CardTitle className="text-base">下载文件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
-
         <div className="space-y-2">
           <Label htmlFor="download-object-key">object_key</Label>
           <Input
@@ -427,7 +437,8 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
       </Dialog>
     </Card>
   )
-}`
+}
+`.trimStart()
 }
 
 function InnerPage() {
@@ -437,7 +448,7 @@ function InnerPage() {
   const uploadSnippet = useMemo(() => uploadCode(), [])
   const downloadSnippet = useMemo(() => downloadCode(), [])
   const installCommands = useMemo(() => {
-    const comps = "button input card label dialog progress radio-group"
+    const comps = "button input card label dialog progress"
     return {
       npx: `npx shadcn@latest add ${comps}`,
       pnpm: `pnpm dlx shadcn@latest add ${comps}`,
@@ -449,12 +460,38 @@ function InnerPage() {
   return (
     <GuideEndpointsProvider>
       <div className="space-y-6">
+        <Card>
+          <CardHeader className="py-4">
+            <CardTitle className="text-base">使用说明</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              <span className="font-medium text-foreground">本页上方 Demo</span>
+              ：在控制台内可直接试用（自动探测
+              <span className="font-mono text-[11px]"> /api/public/endpoints </span>
+              并选择低时延节点）。
+            </p>
+            <p>
+              <span className="font-medium text-foreground">下方可复制代码</span>
+              ：已改成<strong>独立集成示例</strong>，只依赖 shadcn 基础组件 +{" "}
+              <span className="font-mono text-[11px]">fetch</span>
+              ，通过 props 传入 <span className="font-mono text-[11px]">baseURL</span> 与{" "}
+              <span className="font-mono text-[11px]">apiKey</span>
+              ，不依赖本仓库的 <span className="font-mono text-[11px]">guides/*</span>。
+            </p>
+            <p>
+              纯接口说明（无 UI）见文档「功能接口引导」。鉴权头必须是{" "}
+              <span className="font-mono text-[11px]">x-api-key</span>。
+            </p>
+          </CardContent>
+        </Card>
+
         <ApiKeyBox />
 
         <div className="space-y-3">
           <FileUploadDemo apiKey={apiKey} onUploaded={(r) => setLastUploadedObjectKey(r.objectKey)} />
           <CodePreview
-            title="上传组件代码（可复制）"
+            title="上传组件代码（可复制到外部项目）"
             installCommands={installCommands}
             previewLines={16}
             codeLanguage="tsx"
@@ -465,7 +502,7 @@ function InnerPage() {
         <div className="space-y-3">
           <FileDownloadDemo apiKey={apiKey} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
           <CodePreview
-            title="下载组件代码（可复制）"
+            title="下载组件代码（可复制到外部项目）"
             installCommands={installCommands}
             previewLines={16}
             codeLanguage="tsx"

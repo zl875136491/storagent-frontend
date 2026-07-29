@@ -56,6 +56,9 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
     setResult(null)
     setProgress(null)
 
+    let uploadId = ""
+    let objectKey = ""
+
     try {
       const init = await jsonOrThrow<InitResp>(
         await fetch(joinUrl(baseURL, "/api/files/multipart/init"), {
@@ -67,6 +70,8 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
           body: JSON.stringify({ content_type: file.type || "application/octet-stream" }),
         }),
       )
+      uploadId = init.upload_id
+      objectKey = init.object_key
 
       const totalParts = Math.max(1, Math.ceil(file.size / chunkSize))
       setProgress({ done: 0, total: totalParts })
@@ -115,6 +120,16 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
       setResultOpen(true)
       onUploaded?.(finalResult)
     } catch (e) {
+      if (uploadId && objectKey && baseURL) {
+        void fetch(joinUrl(baseURL, "/api/files/multipart/abort"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify({ upload_id: uploadId, object_key: objectKey }),
+        }).catch(() => undefined)
+      }
       setError(e instanceof Error ? e.message : "上传失败")
     } finally {
       setUploading(false)
