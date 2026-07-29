@@ -58,6 +58,7 @@ import { Input } from "../ui/input"
 import { Label } from "../ui/label"
 import { Switch } from "../ui/switch"
 import { cn } from "../../lib/utils"
+import { useAuth } from "../../auth/AuthContext"
 
 const SIDES: ReplicateSide[] = ["top", "right", "bottom", "left"]
 
@@ -1027,7 +1028,10 @@ export interface BucketReplicateGraphProps {
 }
 
 export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicateGraphProps) {
+  const { user } = useAuth()
+  const isAdmin = user?.is_admin === true
   const [mode, setMode] = useState<GraphMode>("view")
+  const canEdit = isAdmin && mode === "edit"
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [payload, setPayload] = useState<BucketReplicatesResponse | null>(null)
@@ -1077,8 +1081,14 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
   }, [accessToken, bucketName, setEdges, setNodes])
 
   useEffect(() => {
-    setEdges((eds) => eds.map((e) => ({ ...e, deletable: mode === "edit" })))
-  }, [mode, payload, setEdges])
+    if (!isAdmin && mode === "edit") {
+      setMode("view")
+    }
+  }, [isAdmin, mode])
+
+  useEffect(() => {
+    setEdges((eds) => eds.map((e) => ({ ...e, deletable: canEdit })))
+  }, [canEdit, payload, setEdges])
 
   const isDraftEdgeId = useCallback(
     (edgeId: string) => edgeId.startsWith("draft-") || newEdgeDraft?.edgeId === edgeId,
@@ -1152,7 +1162,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
 
   const onConnect = useCallback(
     (conn: Connection) => {
-      if (mode !== "edit") return
+      if (!canEdit) return
       if (!conn.source || !conn.target || conn.source === conn.target) return
       const from_side = parseOutSide(conn.sourceHandle)
       const to_side = parseInSide(conn.targetHandle)
@@ -1171,7 +1181,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
       setEdges((eds) => addEdge({ ...replicateToEdge(replicate), deletable: true }, eds))
       setNewEdgeDraft({ edgeId: tempId, replicate })
     },
-    [edges, mode, setEdges],
+    [canEdit, edges, setEdges],
   )
 
   const cancelNewEdge = useCallback(() => {
@@ -1241,7 +1251,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
 
   const onNodeDragStop = useCallback(
     (_event: unknown, node: Node) => {
-      if (mode !== "edit") return
+      if (!canEdit) return
       const { position_x, position_y } = pixelToGraphPayload(node.position.x, node.position.y)
       void postBucketGraphNodePosition(
         {
@@ -1253,12 +1263,12 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
         accessToken,
       )
     },
-    [accessToken, bucketName, mode],
+    [accessToken, bucketName, canEdit],
   )
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
-      if (mode !== "edit") return
+      if (!canEdit) return
       setEdges((eds) => {
         const reconnected = reconnectEdge(oldEdge, newConnection, eds)
         return mergeReplicateSidesFromHandles(
@@ -1298,7 +1308,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
         accessToken,
       )
     },
-    [accessToken, bucketName, mode, setEdges],
+    [accessToken, bucketName, canEdit, setEdges],
   )
 
   const onEdgeClick = useCallback((_e: MouseEvent, edge: Edge) => {
@@ -1337,31 +1347,52 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
           </p> */}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex rounded-full border border-border bg-muted/40 p-0.5">
-            <button
-              type="button"
-              onClick={() => setMode("view")}
+          <div className="relative">
+            <div
               className={cn(
-                "rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
-                mode === "view"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
+                "flex rounded-full border border-border bg-muted/40 p-0.5",
+                !isAdmin && "pointer-events-none opacity-55",
               )}
             >
-              显示
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("edit")}
-              className={cn(
-                "rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
-                mode === "edit"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              编辑
-            </button>
+              <button
+                type="button"
+                onClick={() => setMode("view")}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                  mode === "view"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                显示
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAdmin) return
+                  setMode("edit")
+                }}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                  mode === "edit"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                编辑
+              </button>
+            </div>
+            {!isAdmin ? (
+              <div
+                className="absolute inset-0 z-10 flex cursor-not-allowed items-center justify-center rounded-full bg-background/55 backdrop-blur-[1px]"
+                title="仅管理员可编辑复制拓扑"
+                aria-label="仅管理员可编辑复制拓扑"
+              >
+                <span className="rounded-full border border-border/70 bg-card/90 px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm">
+                  仅管理员可编辑
+                </span>
+              </div>
+            ) : null}
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void reload()}>
             重新加载

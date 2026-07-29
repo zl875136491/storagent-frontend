@@ -519,6 +519,36 @@ export async function fetchProfileApi(accessToken: string): Promise<UserProfile>
   return apiGet<UserProfile>("/api/auth/profile", accessToken)
 }
 
+export interface AdminUserItem {
+  id: string
+  username: string
+  name: string
+  is_admin: boolean
+  role_name: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminUserListResponse {
+  data: AdminUserItem[]
+}
+
+export async function fetchAdminUsersApi(accessToken?: string): Promise<AdminUserListResponse> {
+  return apiGet<AdminUserListResponse>("/api/auth/users", accessToken)
+}
+
+export async function updateUserRoleApi(
+  userId: string,
+  role: "用户" | "管理员",
+  accessToken?: string,
+): Promise<AdminUserItem> {
+  return apiPut<{ role: string }, AdminUserItem>(
+    `/api/auth/users/${encodeURIComponent(userId)}/role`,
+    { role },
+    accessToken,
+  )
+}
+
 export async function logoutApi(accessToken?: string): Promise<void> {
   try {
     await apiGet("/api/auth/logout", accessToken)
@@ -919,6 +949,8 @@ export interface APIKey {
   key: string
   application: SimpleApplication
   expired_at: string | null
+  deleted?: boolean
+  destory_by_admin?: boolean
 }
 
 export interface APIKeyListResponse {

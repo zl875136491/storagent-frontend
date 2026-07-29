@@ -20,7 +20,8 @@ import { CheckIcon } from "lucide-react"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
 
 export default function APIKeyPage() {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
+  const isAdmin = user?.is_admin === true
 
   const [apiKeys, setApiKeys] = useState<APIKey[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,6 +146,7 @@ export default function APIKeyPage() {
           <h1 className="text-lg font-semibold text-foreground">APIKey 管理</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             管理系统中各应用使用的 APIKey。列表中的 Key 已由后端进行掩码处理，仅用于与调用侧比对。
+            {isAdmin ? " 管理员可查看并吊销其他用户的 APIKey。" : ""}
           </p>
         </div>
         <div className="sticky top-3">
@@ -181,6 +183,19 @@ export default function APIKeyPage() {
                     <div className="mt-1 max-w-full break-all font-mono text-sm text-foreground">
                       {item.key}
                     </div>
+                    {item.destory_by_admin ? (
+                      <div className="mt-2 inline-flex rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                        被管理人员注销
+                      </div>
+                    ) : item.deleted ? (
+                      <div className="mt-2 inline-flex rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        已吊销
+                      </div>
+                    ) : (
+                      <div className="mt-2 inline-flex rounded-full border border-emerald-500/35 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-100">
+                        可用
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1 text-[11px]">
                     <span className="inline-flex max-w-[200px] items-center justify-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
@@ -211,16 +226,18 @@ export default function APIKeyPage() {
                     </div>
                   </div>
                   <div className="flex justify-end pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      disabled={revokingId === item.id}
-                      onClick={() => setRevokeTarget(item)}
-                    >
-                      吊销
-                    </Button>
+                    {!item.deleted ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        disabled={revokingId === item.id}
+                        onClick={() => setRevokeTarget(item)}
+                      >
+                        吊销
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </CardContent>
