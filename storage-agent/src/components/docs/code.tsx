@@ -1,7 +1,25 @@
-import { useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { Check, Copy } from "lucide-react"
+import hljs from "highlight.js"
 import { copyTextToClipboard } from "@/lib/copy-to-clipboard"
 import { cn } from "@/lib/utils"
+
+function normalizeLanguage(language: string) {
+  const value = language.trim().toLowerCase()
+  if (value === "js" || value === "jsx") return "javascript"
+  if (value === "ts" || value === "tsx") return "typescript"
+  if (value === "sh" || value === "shell" || value === "zsh") return "bash"
+  return value
+}
+
+function highlightCode(code: string, language: string) {
+  const normalized = normalizeLanguage(language)
+  try {
+    return hljs.highlight(code, { language: normalized }).value
+  } catch {
+    return hljs.highlightAuto(code).value
+  }
+}
 
 export function DocCodeBlock({
   code,
@@ -16,6 +34,7 @@ export function DocCodeBlock({
 }) {
   const [copied, setCopied] = useState(false)
   const text = code.replace(/\n$/, "")
+  const highlighted = useMemo(() => highlightCode(text, language), [language, text])
 
   const onCopy = async () => {
     const ok = await copyTextToClipboard(text)
@@ -25,7 +44,7 @@ export function DocCodeBlock({
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-xl border border-border/80 bg-muted/50", className)}>
+    <div className={cn("docs-code-block overflow-hidden rounded-lg border border-border/80 bg-muted/50", className)}>
       <div className="flex items-center justify-between border-b border-border/60 px-3 py-1.5">
         <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {title || language}
@@ -39,8 +58,11 @@ export function DocCodeBlock({
           {copied ? "已复制" : "复制"}
         </button>
       </div>
-      <pre className="docs-scroll max-h-[28rem] overflow-auto p-3 text-[11px] leading-relaxed text-foreground">
-        <code className="font-mono whitespace-pre">{text}</code>
+      <pre className="docs-scroll max-h-[28rem] overflow-auto p-3 text-[11px] leading-relaxed">
+        <code
+          className="docs-code-highlight hljs font-mono whitespace-pre"
+          dangerouslySetInnerHTML={{ __html: highlighted }}
+        />
       </pre>
     </div>
   )

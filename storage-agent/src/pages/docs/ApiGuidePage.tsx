@@ -1,317 +1,271 @@
 import { useMemo } from "react"
+import { Download, KeyRound, Server, ShieldCheck } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
 import { ApiEndpoint, ApiExamples, ApiParamTable } from "@/components/docs/api"
 import { DocCodeBlock, DocSplit } from "@/components/docs/code"
-import { DocLead, DocNote, DocTitle, useRegisterToc } from "@/components/docs/primitives"
+import {
+  DocHeading,
+  DocLead,
+  DocNote,
+  DocSteps,
+  DocTitle,
+  useRegisterToc,
+} from "@/components/docs/primitives"
+import { cn } from "@/lib/utils"
+import {
+  API_GUIDE_ENDPOINTS,
+  API_GUIDE_ERROR_CODES,
+  API_GUIDE_ERROR_EXAMPLES,
+  API_GUIDE_LANGUAGES,
+  API_GUIDE_SETUP,
+  generateApiGuideMarkdown,
+  getApiGuideLanguage,
+  isApiGuideLanguage,
+  type ApiGuideLanguage,
+} from "./api-guide-content"
 
 export default function ApiGuidePage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const rawLanguage = searchParams.get("lang")
+  const language: ApiGuideLanguage = isApiGuideLanguage(rawLanguage) ? rawLanguage : "typescript"
+  const languageMeta = getApiGuideLanguage(language)
+  const markdownDownloadHref = useMemo(
+    () => `data:text/markdown;charset=utf-8,${encodeURIComponent(generateApiGuideMarkdown(language))}`,
+    [language],
+  )
   const toc = useMemo(
     () => [
-      { id: "conventions", title: "约定", level: 2 as const },
-      { id: "endpoints-list", title: "列出端点", level: 2 as const },
-      { id: "endpoints-test", title: "探测端点", level: 2 as const },
-      { id: "multipart-init", title: "初始化分片", level: 2 as const },
-      { id: "multipart-part", title: "上传分片", level: 2 as const },
-      { id: "multipart-complete", title: "完成上传", level: 2 as const },
-      { id: "multipart-abort", title: "中止上传", level: 2 as const },
-      { id: "object-stat", title: "对象元信息", level: 2 as const },
-      { id: "object-download", title: "下载对象", level: 2 as const },
-      { id: "object-locate", title: "定位对象", level: 2 as const },
+      { id: "conventions", title: "接入约定", level: 2 as const },
+      { id: "workflow", title: "推荐流程", level: 2 as const },
+      { id: "client-setup", title: "公共请求封装", level: 2 as const },
+      ...API_GUIDE_ENDPOINTS.map((endpoint) => ({
+        id: endpoint.id,
+        title: endpoint.summary,
+        level: 2 as const,
+      })),
+      { id: "errors", title: "错误与跨区域回退", level: 2 as const },
     ],
     [],
   )
   useRegisterToc(toc)
 
+  const selectLanguage = (nextLanguage: ApiGuideLanguage) => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        next.set("lang", nextLanguage)
+        return next
+      },
+      { replace: true },
+    )
+  }
+
   return (
     <div className="pb-10">
-      <DocTitle>功能接口引导</DocTitle>
-      <DocLead>
-        对外存储 HTTP 参考。左侧说明参数与语义，右侧给可复制的请求/响应示例——自行设计组件时只依赖这些接口。
-      </DocLead>
+      <div className="flex flex-col gap-5 border-b border-border/70 pb-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <DocTitle>功能接口引导</DocTitle>
+          <DocLead>
+            面向服务端开发的存储 HTTP API 参考，覆盖选点、分片上传、断点续传、元信息查询、跨区域回退与流式下载。
+          </DocLead>
+        </div>
+        <a
+          href={markdownDownloadHref}
+          download={`storagent-api-guide-${language}.md`}
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`下载 ${languageMeta.label} 接入文档`}
+        >
+          <Download className="h-4 w-4" />
+          下载 Markdown
+        </a>
+      </div>
 
-      <section id="conventions" className="mt-8 scroll-m-24">
-        <h2 className="text-xl font-semibold tracking-tight">约定</h2>
-        <ul className="mt-3 space-y-2 text-sm text-foreground/90">
-          <li>
-            Base URL：Storagent API 根，例如{" "}
-            <code className="rounded bg-muted px-1 font-mono text-[11px]">https://storagent.example.com</code>
-          </li>
-          <li>
-            鉴权：文件接口使用请求头{" "}
-            <code className="rounded bg-muted px-1 font-mono text-[11px]">x-api-key</code>
-          </li>
-          <li>对象：业务通常只传 object_key；桶名一般等于应用名，由服务端返回</li>
-        </ul>
+      <div className="sticky top-14 z-20 -mx-4 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-xs font-medium text-foreground">示例语言</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              切换后，本页所有请求代码与下载文档会保持一致。
+            </div>
+          </div>
+          <div
+            className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1 sm:w-auto"
+            role="group"
+            aria-label="代码示例语言"
+          >
+            {API_GUIDE_LANGUAGES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => selectLanguage(item.id)}
+                aria-pressed={language === item.id}
+                className={cn(
+                  "min-w-28 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  language === item.id
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <section id="conventions" className="mt-8 scroll-m-36">
+        <DocHeading id="conventions-heading" level={2} className="mt-0">
+          接入约定
+        </DocHeading>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-lg border border-border/70 p-3">
+            <Server className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+            <div className="mt-2 text-xs font-semibold text-foreground">Base URL</div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              使用 Storagent API 根地址，例如 https://storagent.example.com；通过公共端点探测就近选择。
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/70 p-3">
+            <KeyRound className="h-4 w-4 text-sky-600 dark:text-sky-300" />
+            <div className="mt-2 text-xs font-semibold text-foreground">鉴权</div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              文件接口统一使用 x-api-key 请求头。密钥只能存放在服务端环境变量或密钥管理服务中。
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/70 p-3">
+            <ShieldCheck className="h-4 w-4 text-rose-600 dark:text-rose-300" />
+            <div className="mt-2 text-xs font-semibold text-foreground">边界</div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              浏览器只调用你自己的业务后端，不直接持有 APIKey；对象键按服务端返回值原样保存。
+            </p>
+          </div>
+        </div>
         <DocNote>
-          公共 endpoints 接口无需 APIKey。控制台登录 JWT 接口不在本文范围。
+          本页示例面向 {languageMeta.runtime} 服务端。公共 endpoints 接口无需 APIKey；控制台 JWT 登录接口不在本文范围。
         </DocNote>
       </section>
 
-      <ApiEndpoint id="endpoints-list" method="GET" path="/api/public/endpoints" summary="列出端点">
+      <section id="workflow" className="mt-10 scroll-m-36">
+        <DocHeading id="workflow-heading" level={2} className="mt-0">
+          推荐流程
+        </DocHeading>
+        <DocSteps
+          items={[
+            { title: "发现并探测端点", body: "获取候选 Storagent 地址，并在服务启动或网络变化后重新选择低时延节点。" },
+            { title: "初始化上传", body: "保存 upload_id 与 object_key；它们是续传、完成和中止操作的共同上下文。" },
+            { title: "上传或恢复分片", body: "保存每片 ETag；重启后先查询已上传分片，只补传缺失部分。" },
+            { title: "完成或中止", body: "全部分片成功后完成上传；取消或不可恢复失败时立即中止会话。" },
+            { title: "查询与下载", body: "先使用 POST stat 获取元信息，按需流式下载；当前节点缺失时执行跨区域回退。" },
+          ]}
+        />
+      </section>
+
+      <section id="client-setup" className="mt-10 scroll-m-36">
+        <DocHeading id="client-setup-heading" level={2} className="mt-0">
+          公共请求封装
+        </DocHeading>
         <DocSplit
           left={
-            <>
-              <p className="mt-3 text-sm text-muted-foreground">
-                返回各区域 Storagent API 地址，用于选择低时延 Base URL。
+            <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+              <p>
+                运行环境：<span className="font-medium text-foreground">{languageMeta.runtime}</span>
               </p>
-              <ApiParamTable
-                title="Returns"
-                rows={[
-                  { name: "data[].endpoint", type: "string", required: true, description: "Storagent API 基址" },
-                  { name: "data[].shown_name", type: "string", required: true, description: "展示名称" },
-                  { name: "data[].master", type: "boolean", required: true, description: "是否为区域主节点" },
-                ]}
-              />
-            </>
-          }
-          right={
-            <ApiExamples
-              request={`curl "$BASE_URL/api/public/endpoints"`}
-              response={`{
-  "data": [
-    {
-      "shown_name": "hangzhou",
-      "endpoint": "https://hz.example.com",
-      "master": true
-    }
-  ]
-}`}
-            />
-          }
-        />
-      </ApiEndpoint>
-
-      <ApiEndpoint id="endpoints-test" method="GET" path="/api/public/endpoints/test" summary="探测端点">
-        <DocSplit
-          left={
-            <p className="mt-3 text-sm text-muted-foreground">
-              对候选基址发起探测，比较时延与可达性。控制台组件引导默认用它选最快节点。
-            </p>
-          }
-          right={
-            <DocCodeBlock
-              language="bash"
-              title="Example"
-              code={`curl -o /dev/null -sS -w "%{time_total}\\n" \\
-  "$BASE_URL/api/public/endpoints/test"`}
-            />
-          }
-        />
-      </ApiEndpoint>
-
-      <ApiEndpoint id="multipart-init" method="POST" path="/api/files/multipart/init" summary="初始化分片上传">
-        <DocSplit
-          left={
-            <>
-              <ApiParamTable
-                title="Headers"
-                rows={[
-                  { name: "x-api-key", type: "string", required: true, description: "业务 APIKey" },
-                  { name: "Content-Type", type: "string", required: true, description: "application/json" },
-                ]}
-              />
-              <ApiParamTable
-                title="Body"
-                rows={[
-                  {
-                    name: "content_type",
-                    type: "string",
-                    description: "对象 MIME，默认 application/octet-stream",
-                  },
-                ]}
-              />
-              <ApiParamTable
-                title="Returns"
-                rows={[
-                  { name: "upload_id", type: "string", required: true, description: "后续分片会话 ID" },
-                  { name: "bucket", type: "string", required: true, description: "应用桶名" },
-                  { name: "object_key", type: "string", required: true, description: "服务端生成的对象键" },
-                ]}
-              />
-            </>
-          }
-          right={
-            <ApiExamples
-              request={`curl -X POST "$BASE_URL/api/files/multipart/init" \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: $API_KEY" \\
-  -d '{"content_type":"application/pdf"}'`}
-              response={`{
-  "upload_id": "upload-...",
-  "bucket": "cpl",
-  "object_key": "2026/....pdf"
-}`}
-            />
-          }
-        />
-      </ApiEndpoint>
-
-      <ApiEndpoint id="multipart-part" method="POST" path="/api/files/multipart/part" summary="上传分片">
-        <DocSplit
-          left={
-            <>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Content-Type 为 multipart/form-data。建议分片 ≥ 5MiB（末片可更小）。
+              <p>
+                依赖：<span className="font-medium text-foreground">{languageMeta.dependency}</span>
               </p>
-              <ApiParamTable
-                title="Form fields"
-                rows={[
-                  { name: "upload_id", type: "string", required: true, description: "init 返回" },
-                  { name: "object_key", type: "string", required: true, description: "init 返回" },
-                  { name: "part_number", type: "integer", required: true, description: "从 1 开始" },
-                  { name: "file", type: "binary", required: true, description: "本分片内容" },
-                ]}
+              <p>
+                通过 <code className="rounded bg-muted px-1 font-mono text-[11px]">STORAGENT_BASE_URL</code> 与{" "}
+                <code className="rounded bg-muted px-1 font-mono text-[11px]">STORAGENT_API_KEY</code> 注入配置。
+                请求封装统一处理鉴权、超时和结构化错误。
+              </p>
+            </div>
+          }
+          right={
+            <DocCodeBlock
+              language={languageMeta.fence}
+              title={`${languageMeta.label} · 公共封装`}
+              code={API_GUIDE_SETUP[language]}
+            />
+          }
+        />
+      </section>
+
+      {API_GUIDE_ENDPOINTS.map((endpoint) => (
+        <ApiEndpoint
+          key={endpoint.id}
+          id={endpoint.id}
+          method={endpoint.method}
+          path={endpoint.path}
+          summary={endpoint.summary}
+        >
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{endpoint.description}</p>
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">鉴权</span>
+            {endpoint.authentication === "public" ? "公共接口" : "x-api-key 请求头"}
+          </div>
+          <DocSplit
+            left={
+              <>
+                {endpoint.params.map((section) => (
+                  <ApiParamTable key={section.title} title={section.title} rows={section.rows} />
+                ))}
+                {endpoint.notes?.length ? (
+                  <div className="mt-4 border-l-2 border-amber-500/70 pl-3 text-xs leading-relaxed text-muted-foreground">
+                    {endpoint.notes.map((note) => (
+                      <p key={note} className="mt-1 first:mt-0">{note}</p>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            }
+            right={
+              <ApiExamples
+                request={endpoint.examples[language]}
+                requestLanguage={languageMeta.fence}
+                requestTitle={languageMeta.label}
+                response={endpoint.response}
+                responseTitle="Response 200"
               />
-            </>
-          }
-          right={
-            <ApiExamples
-              request={`curl -X POST "$BASE_URL/api/files/multipart/part" \\
-  -H "x-api-key: $API_KEY" \\
-  -F upload_id="$UPLOAD_ID" \\
-  -F object_key="$OBJECT_KEY" \\
-  -F part_number=1 \\
-  -F file=@part1.bin`}
-              response={`{ "part_number": 1, "etag": "\\"...\\"" }`}
-            />
-          }
-        />
-      </ApiEndpoint>
+            }
+          />
+        </ApiEndpoint>
+      ))}
 
-      <ApiEndpoint
-        id="multipart-complete"
-        method="POST"
-        path="/api/files/multipart/complete"
-        summary="完成分片上传"
-      >
-        <DocSplit
-          left={
-            <ApiParamTable
-              title="Body"
-              rows={[
-                { name: "upload_id", type: "string", required: true, description: "init 返回" },
-                { name: "object_key", type: "string", required: true, description: "init 返回" },
-                {
-                  name: "parts",
-                  type: "array",
-                  required: true,
-                  description: "按 part_number 升序；etag 建议去掉首尾引号",
-                },
-              ]}
-            />
-          }
-          right={
-            <ApiExamples
-              request={`curl -X POST "$BASE_URL/api/files/multipart/complete" \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: $API_KEY" \\
-  -d '{
-    "upload_id": "'"$UPLOAD_ID"'",
-    "object_key": "'"$OBJECT_KEY"'",
-    "parts": [{"part_number":1,"etag":"..."}]
-  }'`}
-              response={`{
-  "bucket": "cpl",
-  "object_key": "2026/....pdf",
-  "etag": "...",
-  "version_id": null
-}`}
-            />
-          }
-        />
-      </ApiEndpoint>
-
-      <ApiEndpoint id="multipart-abort" method="POST" path="/api/files/multipart/abort" summary="中止分片上传">
-        <DocSplit
-          left={
-            <p className="mt-3 text-sm text-muted-foreground">
-              上传失败或用户取消时调用，清理未完成的 multipart。
-            </p>
-          }
-          right={
-            <DocCodeBlock
-              language="bash"
-              title="Example"
-              code={`curl -X POST "$BASE_URL/api/files/multipart/abort" \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: $API_KEY" \\
-  -d '{"upload_id":"'"$UPLOAD_ID"'","object_key":"'"$OBJECT_KEY"'"}'`}
-            />
-          }
-        />
-      </ApiEndpoint>
-
-      <ApiEndpoint id="object-stat" method="POST" path="/api/files/object/stat" summary="获取对象元信息">
-        <DocSplit
-          left={
-            <ApiParamTable
-              title="Body"
-              rows={[
-                { name: "object_key", type: "string", required: true, description: "对象键" },
-              ]}
-            />
-          }
-          right={
-            <ApiExamples
-              request={`curl -X POST "$BASE_URL/api/files/object/stat" \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: $API_KEY" \\
-  -d '{"object_key":"path/to/file.bin"}'`}
-              response={`{
-  "bucket": "cpl",
-  "object_key": "path/to/file.bin",
-  "size": 1048576,
-  "etag": "...",
-  "content_type": "application/octet-stream"
-}`}
-            />
-          }
-        />
-      </ApiEndpoint>
-
-      <ApiEndpoint id="object-download" method="GET" path="/api/files/object/download" summary="下载对象">
-        <DocSplit
-          left={
-            <ApiParamTable
-              title="Query"
-              rows={[
-                { name: "object_key", type: "string", required: true, description: "对象键" },
-                { name: "offset", type: "integer", description: "起始字节，默认 0" },
-                {
-                  name: "length",
-                  type: "integer",
-                  description: "读取长度；0 表示读到末尾（流式）",
-                },
-              ]}
-            />
-          }
-          right={
-            <DocCodeBlock
-              language="bash"
-              title="Example"
-              code={`curl -OJ -H "x-api-key: $API_KEY" \\
-  "$BASE_URL/api/files/object/download?object_key=path/to/file.bin&offset=0&length=0"`}
-            />
-          }
-        />
-      </ApiEndpoint>
-
-      <ApiEndpoint id="object-locate" method="GET" path="/api/files/object/locate" summary="定位对象所在节点">
-        <DocSplit
-          left={
-            <p className="mt-3 text-sm text-muted-foreground">
-              扫描各服务点，返回对象存在位置及对应 stat/download 指引 URL，便于就近下载。可能有频控。
-            </p>
-          }
-          right={
-            <DocCodeBlock
-              language="bash"
-              title="Example"
-              code={`curl -H "x-api-key: $API_KEY" \\
-  "$BASE_URL/api/files/object/locate?object_key=path/to/file.bin"`}
-            />
-          }
-        />
-      </ApiEndpoint>
+      <section id="errors" className="mt-10 scroll-m-36 border-t border-border/70 pt-8">
+        <DocHeading id="errors-heading" level={2} className="mt-0">
+          错误与跨区域回退
+        </DocHeading>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          失败响应通常包含 msg、data 和稳定业务 code。调用侧应同时检查 HTTP 状态与业务码，并保留可恢复上下文。
+        </p>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-border/70">
+          <table className="w-full min-w-[34rem] text-left text-xs">
+            <thead className="border-b border-border/70 bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">业务码</th>
+                <th className="px-3 py-2 font-medium">含义</th>
+                <th className="px-3 py-2 font-medium">建议处理</th>
+              </tr>
+            </thead>
+            <tbody>
+              {API_GUIDE_ERROR_CODES.map(([code, meaning, action]) => (
+                <tr key={code} className="border-b border-border/50 last:border-b-0">
+                  <td className="px-3 py-2 font-mono text-[11px] text-foreground">{code}</td>
+                  <td className="px-3 py-2 text-foreground">{meaning}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{action}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-4">
+          <DocCodeBlock
+            language={languageMeta.fence}
+            title={`${languageMeta.label} · 404032 回退`}
+            code={API_GUIDE_ERROR_EXAMPLES[language]}
+          />
+        </div>
+      </section>
     </div>
   )
 }

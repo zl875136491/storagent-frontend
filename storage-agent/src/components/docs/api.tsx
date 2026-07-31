@@ -99,17 +99,19 @@ export function ApiParamTable({
 export function ApiExamples({
   request,
   response,
+  requestLanguage = "bash",
   requestTitle = "Example",
   responseTitle = "Response",
 }: {
   request: string
   response?: string
+  requestLanguage?: string
   requestTitle?: string
   responseTitle?: string
 }) {
   return (
     <div className="space-y-3">
-      <DocCodeBlock code={request} language="bash" title={requestTitle} />
+      <DocCodeBlock code={request} language={requestLanguage} title={requestTitle} />
       {response ? <DocCodeBlock code={response} language="json" title={responseTitle} /> : null}
     </div>
   )

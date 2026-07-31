@@ -185,6 +185,11 @@ code.hljs {
   padding: 3px 5px;
 }
 
+.docs-code-block code.docs-code-highlight {
+  background: transparent;
+  padding: 0;
+}
+
 /* GitHub (light) */
 .hljs {
   color: #24292e;
