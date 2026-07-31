@@ -28,6 +28,7 @@ interface AuthContextValue {
   user: UserProfile | null
   initializing: boolean
   login: (payload: LoginRequest) => Promise<void>
+  loginWithTokens: (tokens: TokenResponse) => Promise<void>
   logout: () => Promise<void>
   /** 使用 refresh_token 换取新 token；失败则清空登录态 */
   refreshSession: () => Promise<boolean>
@@ -164,10 +165,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       initializing,
       login,
+      loginWithTokens: applyTokens,
       logout,
       refreshSession,
     }),
-    [accessToken, refreshToken, user, initializing, login, logout, refreshSession],
+    [accessToken, refreshToken, user, initializing, login, applyTokens, logout, refreshSession],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

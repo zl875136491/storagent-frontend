@@ -4,6 +4,8 @@ import { NavigationLeaveBlockProvider } from "./contexts/NavigationLeaveBlockCon
 import ProtectedRoute from "./auth/ProtectedRoute"
 import AppLayout from "./layouts/AppLayout"
 import LoginPage from "./pages/LoginPage"
+import LoginByCodePage from "./pages/LoginByCodePage"
+import OAPasswordRequestPage from "./pages/OAPasswordRequestPage"
 import RegionPage from "./pages/data/RegionPage"
 import MinioPage from "./pages/data/MinioPage"
 import APIKeyPage from "./pages/data/APIKeyPage"
@@ -21,6 +23,9 @@ export function App() {
         <NavigationLeaveBlockProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<OAPasswordRequestPage mode="register" />} />
+          <Route path="/forgot-password" element={<OAPasswordRequestPage mode="reset" />} />
+          <Route path="/login_by_code" element={<LoginByCodePage />} />
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>

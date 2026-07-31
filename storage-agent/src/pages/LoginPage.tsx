@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { useLocation, useNavigate } from "react-router-dom"
-import { Eye, EyeOff } from "lucide-react"
+import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Eye, EyeOff, MessageSquareText } from "lucide-react"
 import { useAuth } from "../auth/AuthContext"
+import { requestLoginLinkApi } from "../api/client"
 import { showErrorToast } from "../api/toast"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card"
+import { AuthShell } from "../components/auth/AuthShell"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Button } from "../components/ui/button"
@@ -17,6 +18,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [sendingLink, setSendingLink] = useState(false)
+  const [oaMessage, setOaMessage] = useState("")
 
   const handleSubmit = async (e?: React.SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
     if (submitting) return
@@ -38,20 +41,36 @@ export default function LoginPage() {
     }
   }
 
+  const requestOALogin = async () => {
+    const itcode = username.trim()
+    if (!itcode) {
+      showErrorToast("请先输入 itcode")
+      return
+    }
+    setSendingLink(true)
+    setOaMessage("")
+    try {
+      const result = await requestLoginLinkApi({ username: itcode })
+      setOaMessage(result.message)
+    } catch {
+      // API client already displayed the error.
+    } finally {
+      setSendingLink(false)
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
-            Storage Agent
-          </div>
-          <CardTitle className="text-lg">跨区域存储系统登录</CardTitle>
-          <CardDescription>
-            首次登录时，您输入的密码将自动设置为登录密码。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+    <AuthShell
+      title="登录"
+      description="使用系统密码，或通过 OA 消息快捷认证"
+      footer={
+        <div className="flex items-center justify-center gap-4">
+          <Link className="font-medium text-primary hover:underline" to="/register">注册账号</Link>
+          <Link className="font-medium text-primary hover:underline" to="/forgot-password">忘记密码</Link>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="username">用户名</Label>
               <Input
@@ -102,15 +121,29 @@ export default function LoginPage() {
             >
               {submitting ? "正在登录..." : "登录"}
             </Button>
-          </form>
+        <div className="flex items-center gap-3 py-1 text-[11px] text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          OA 快捷认证
+          <span className="h-px flex-1 bg-border" />
+        </div>
 
-          <div className="mt-4 text-center text-[11px] text-muted-foreground">
-            登录后，系统将把访问令牌保存在浏览器 LocalStorage 中，
-            在令牌有效期内无需重复登录。
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          disabled={sendingLink || submitting}
+          onClick={() => void requestOALogin()}
+        >
+          <MessageSquareText className="mr-2 h-4 w-4" aria-hidden />
+          {sendingLink ? "正在发送..." : "发送快捷登录链接到 OA"}
+        </Button>
+
+        {oaMessage ? (
+          <p className="rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-xs leading-5 text-foreground">
+            {oaMessage}
+          </p>
+        ) : null}
+      </form>
+    </AuthShell>
   )
 }
-

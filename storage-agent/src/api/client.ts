@@ -48,6 +48,25 @@ export interface LoginRequest {
   password: string
 }
 
+export interface AuthLinkRequest {
+  username: string
+}
+
+export interface PasswordPairRequest extends AuthLinkRequest {
+  password: string
+  confirm_password: string
+}
+
+export interface CodeLoginRequest extends AuthLinkRequest {
+  code: string
+}
+
+export interface AuthRequestResponse {
+  message: string
+  expires_in_seconds: number
+  delivery_status: "sent" | "unknown"
+}
+
 export interface TokenResponse {
   access_token: string
   refresh_token: string
@@ -377,6 +396,11 @@ async function authorizedFetch(
   }
 
   const timeoutMs = path.startsWith("/api/ai/") ? 120_000 : 30_000
+  const nodeLocalAuthRequest = [
+    "/api/auth/register/request",
+    "/api/auth/password-reset/request",
+    "/api/auth/login-link/request",
+  ].includes(path)
   const controller = new AbortController()
   const externalSignal = init.signal
   const onExternalAbort = () => controller.abort()
@@ -412,7 +436,7 @@ async function authorizedFetch(
   } catch (e) {
     const isAbort = e instanceof DOMException && e.name === "AbortError"
     const isNetwork = e instanceof TypeError || isAbort
-    if (isNetwork && !failoverRetried) {
+    if (isNetwork && !failoverRetried && !nodeLocalAuthRequest) {
       const nextBase = await ensureFailoverBackend()
       if (nextBase) {
         return authorizedFetch(path, init, accessToken, retried, true)
@@ -527,6 +551,96 @@ export async function apiDelete<TResponse = { message: string }>(
 
 export async function loginApi(payload: LoginRequest): Promise<TokenResponse> {
   return apiPost<LoginRequest, TokenResponse>("/api/auth/login", payload)
+}
+
+export async function requestRegistrationApi(
+  payload: PasswordPairRequest,
+): Promise<AuthRequestResponse> {
+  return apiPost<PasswordPairRequest, AuthRequestResponse>(
+    "/api/auth/register/request",
+    payload,
+  )
+}
+
+export async function requestPasswordResetApi(
+  payload: PasswordPairRequest,
+): Promise<AuthRequestResponse> {
+  return apiPost<PasswordPairRequest, AuthRequestResponse>(
+    "/api/auth/password-reset/request",
+    payload,
+  )
+}
+
+export async function requestLoginLinkApi(
+  payload: AuthLinkRequest,
+): Promise<AuthRequestResponse> {
+  return apiPost<AuthLinkRequest, AuthRequestResponse>(
+    "/api/auth/login-link/request",
+    payload,
+  )
+}
+
+interface CodeLoginSuccess {
+  baseUrl: string
+  tokens: TokenResponse
+}
+
+async function loginByCodeAtBackend(
+  baseUrl: string,
+  payload: CodeLoginRequest,
+): Promise<CodeLoginSuccess> {
+  const base = baseUrl.trim().replace(/\/$/, "")
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 12_000)
+  try {
+    const response = await fetch(`${base}/api/auth/login-by-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+    const text = await response.text().catch(() => "")
+    if (!response.ok) {
+      const parsed = parseApiErrorBody(text)
+      const detail = typeof parsed?.data === "string" ? parsed.data : parsed?.msg
+      throw new Error(detail || `认证失败 (${response.status})`)
+    }
+    return {
+      baseUrl: base,
+      tokens: JSON.parse(text) as TokenResponse,
+    }
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+export async function loginByCodeAcrossBackends(
+  payload: CodeLoginRequest,
+): Promise<TokenResponse> {
+  const candidates = [getApiBaseUrl(), ...CANDIDATE_SERVER_LIST]
+  const unique = [...new Set(
+    candidates
+      .map((item) => item.trim().replace(/\/$/, ""))
+      .filter(Boolean),
+  )]
+  if (unique.length === 0) {
+    throw new Error("没有可用的认证后端")
+  }
+
+  try {
+    const result = await Promise.any(
+      unique.map((baseUrl) => loginByCodeAtBackend(baseUrl, payload)),
+    )
+    setApiBaseUrl(result.baseUrl)
+    setStoredApiBase(result.baseUrl)
+    return result.tokens
+  } catch (error) {
+    if (error instanceof AggregateError) {
+      const detail = error.errors.find((item) => item instanceof Error) as Error | undefined
+      throw new Error(detail?.message || "认证链接无效、已过期或已经使用")
+    }
+    throw error
+  }
 }
 
 export async function refreshTokenApi(refreshToken: string): Promise<TokenResponse> {
