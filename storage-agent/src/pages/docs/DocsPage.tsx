@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import { BookOpen, ChevronRight, Layers, Plug, Rocket } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -30,6 +30,8 @@ function DocsShell() {
   const [searchParams] = useSearchParams()
   const goDoc = useGoDoc()
   const active = useMemo(() => resolveDocId(searchParams.get("doc")), [searchParams])
+  const shellScrollRef = useRef<HTMLDivElement>(null)
+  const contentScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const raw = searchParams.get("doc")
@@ -40,10 +42,18 @@ function DocsShell() {
     }
   }, [searchParams, goDoc])
 
+  useEffect(() => {
+    shellScrollRef.current?.scrollTo({ top: 0 })
+    contentScrollRef.current?.scrollTo({ top: 0 })
+  }, [active])
+
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col bg-background lg:flex-row">
-      <aside className="shrink-0 border-b border-border/60 bg-card/40 lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:w-60 lg:overflow-y-auto lg:border-b-0 lg:border-r">
-        <div className="px-4 py-5">
+    <div
+      ref={shellScrollRef}
+      className="docs-scroll flex h-full min-h-0 flex-col overflow-y-auto bg-background lg:flex-row lg:overflow-hidden"
+    >
+      <aside className="shrink-0 border-b border-border/60 bg-muted/15 lg:h-full lg:w-60 lg:overflow-y-auto lg:border-b-0 lg:border-r">
+        <div className="px-4 pb-3 pt-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             文档中心
           </p>
@@ -76,9 +86,9 @@ function DocsShell() {
         </nav>
       </aside>
 
-      <div className="min-w-0 flex-1">
-        <div className="border-b border-border/50 bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground sm:px-8">
-          <div className="mx-auto flex max-w-6xl items-center gap-1.5">
+      <section className="min-w-0 flex-1 lg:flex lg:min-h-0 lg:flex-col">
+        <div className="shrink-0 border-b border-border/60 bg-background px-4 py-2.5 text-xs text-muted-foreground sm:px-8 lg:px-10">
+          <div className="mx-auto flex w-full max-w-5xl items-center gap-1.5">
             <Link to="/docs" className="hover:text-foreground">
               文档
             </Link>
@@ -89,20 +99,22 @@ function DocsShell() {
           </div>
         </div>
 
-        <div className="mx-auto flex max-w-6xl gap-10 px-4 py-8 sm:px-8 lg:px-10">
-          <main className="min-w-0 flex-1">
+        <div
+          ref={contentScrollRef}
+          className="docs-scroll min-w-0 lg:min-h-0 lg:flex-1 lg:overflow-y-auto"
+        >
+          <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 lg:px-10">
             {active === "getting-started" && <GettingStartedPage />}
             {active === "usage-overview" && <UsageOverviewPage />}
             {active === "api-guide" && <ApiGuidePage />}
             {active === "components" && <FileComponentsGuidePage />}
           </main>
-          <aside className="hidden w-44 shrink-0 xl:block">
-            <div className="sticky top-24">
-              <DocsOnThisPage />
-            </div>
-          </aside>
         </div>
-      </div>
+      </section>
+
+      <aside className="docs-scroll hidden h-full w-48 shrink-0 overflow-y-auto border-l border-border/60 bg-muted/15 px-4 py-6 xl:block">
+        <DocsOnThisPage />
+      </aside>
     </div>
   )
 }

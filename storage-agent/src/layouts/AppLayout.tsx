@@ -14,7 +14,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react"
-import { NavLink, Outlet } from "react-router-dom"
+import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
 import { useNavigationLeaveBlock } from "../contexts/NavigationLeaveBlockContext"
 import {
@@ -40,6 +40,7 @@ import { BackendEndpointSwitcher } from "../components/BackendEndpointSwitcher"
 import { ModeToggle } from "../components/mode-toggle"
 import { PageAgent } from "page-agent"
 import { showErrorToast } from "../api/toast"
+import { cn } from "../lib/utils"
 
 export default function AppLayout() {
   return (
@@ -163,10 +164,12 @@ function HeaderUserMenu({
 
 function AppShell() {
   const { user, logout, accessToken } = useAuth()
+  const location = useLocation()
   const { confirmIfBlocking } = useNavigationLeaveBlock()
   const { closeMobileDrawer } = useSidebar()
   const [aiConfig, setAIConfig] = useState<AIRuntimeConfig | null>(null)
   const [aiConfigLoading, setAIConfigLoading] = useState(true)
+  const isDocsRoute = location.pathname === "/docs"
 
   const handleNavClick = useCallback(
     (e: MouseEvent) => {
@@ -364,7 +367,14 @@ function AppShell() {
           </div>
         </header>
 
-        <main className="docs-scroll flex-1 overflow-y-auto px-4 pb-8 pt-4 md:px-8 md:pt-6">
+        <main
+          className={cn(
+            "min-h-0 flex-1",
+            isDocsRoute
+              ? "overflow-hidden"
+              : "docs-scroll overflow-y-auto px-4 pb-8 pt-4 md:px-8 md:pt-6",
+          )}
+        >
           <Outlet />
         </main>
       </div>

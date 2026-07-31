@@ -80,7 +80,7 @@ export default function ApiGuidePage() {
         </a>
       </div>
 
-      <div className="sticky top-14 z-20 -mx-4 border-b border-border/70 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/85 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+      <div className="sticky top-0 z-30 -mx-4 border-b border-border/70 bg-background px-4 py-3 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-xs font-medium text-foreground">示例语言</div>

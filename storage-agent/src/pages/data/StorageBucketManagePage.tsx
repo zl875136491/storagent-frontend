@@ -177,18 +177,16 @@ export default function StorageBucketManagePage() {
               </CardContent>
             </Card>
 
-            <Card className="flex min-h-[580px] flex-col overflow-hidden border-dashed bg-muted/20 lg:min-h-0 lg:flex-1">
-              <CardContent className="flex min-h-0 flex-1 flex-col p-2 pt-2">
-                {selectedBucket ? (
-                  <BucketReplicateGraph
-                    bucketName={selectedBucket.name}
-                    accessToken={accessToken ?? undefined}
-                  />
-                ) : (
-                  <div className="text-xs text-muted-foreground">选择存储桶后显示复制拓扑。</div>
-                )}
-              </CardContent>
-            </Card>
+            <section className="flex min-h-[580px] flex-col overflow-hidden rounded-lg border border-border/80 bg-background lg:min-h-0 lg:flex-1">
+              {selectedBucket ? (
+                <BucketReplicateGraph
+                  bucketName={selectedBucket.name}
+                  accessToken={accessToken ?? undefined}
+                />
+              ) : (
+                <div className="p-3 text-xs text-muted-foreground">选择存储桶后显示复制拓扑。</div>
+              )}
+            </section>
           </div>
         </div>
       )}

@@ -27,6 +27,14 @@ import type {
 import { fetchBucketReplicatesApi } from "../../api/client"
 import { cn } from "../../lib/utils"
 import { Button } from "../ui/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table"
 
 type ViewMode = "matrix" | "graph"
 type Pair = [string, string]
@@ -143,26 +151,26 @@ function DirectionRow({
   const tone = directedTone(rules)
   const rule = rules[0]
   return (
-    <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border/60 px-3 py-2 last:border-b-0">
-      <div className="flex min-w-0 items-center gap-2 font-mono text-[11px] text-foreground">
-        <span className="truncate" title={from}>{from}</span>
-        <ArrowRight size={13} className="shrink-0 text-muted-foreground" />
-        <span className="truncate" title={to}>{to}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        {rule && (
-          <span
-            className="hidden max-w-28 truncate font-mono text-[10px] text-muted-foreground sm:inline"
-            title={rule.rule_id}
-          >
-            {rule.rule_id}
-          </span>
-        )}
+    <div className="border-b border-border/60 px-3 py-2.5 last:border-b-0">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-foreground">
+          <span className="truncate" title={from}>{from}</span>
+          <ArrowRight size={12} className="shrink-0 text-muted-foreground" />
+          <span className="truncate" title={to}>{to}</span>
+        </div>
         <span className={cn("inline-flex min-w-16 items-center justify-end gap-1 text-[11px] font-medium", TONE_CLASSES[tone])}>
           <StatusIcon tone={tone} size={13} />
           {statusText(rules)}
         </span>
       </div>
+      {rule ? (
+        <div
+          className="mt-1.5 truncate font-mono text-[10px] text-muted-foreground"
+          title={rule.rule_id}
+        >
+          Rule ID · {rule.rule_id}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -175,12 +183,20 @@ function PairDetails({
   rules: BucketReplicateRule[]
 }) {
   const [left, right] = pair
+  const tone = bidirectionalTone(rules, left, right)
+  const summary = tone === "healthy" ? "双向健康" : tone === "missing" ? "规则缺失" : "配置待修复"
   return (
-    <section className="border-t border-border" aria-label={`${left} 与 ${right} 的方向状态`}>
-      <div className="flex items-center justify-between gap-3 px-3 py-2">
-        <h4 className="text-xs font-semibold text-foreground">双向规则</h4>
-        <span className="truncate font-mono text-[10px] text-muted-foreground">
-          {left} / {right}
+    <section aria-label={`${left} 与 ${right} 的方向状态`}>
+      <div className="border-b border-border/70 px-3 py-3">
+        <div className="text-[10px] font-medium text-muted-foreground">复制关系</div>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 font-mono text-xs font-semibold text-foreground">
+          <span className="truncate" title={left}>{left}</span>
+          <ArrowRight size={13} className="shrink-0 text-muted-foreground" />
+          <span className="truncate" title={right}>{right}</span>
+        </div>
+        <span className={cn("mt-2 inline-flex items-center gap-1 text-[11px] font-medium", TONE_CLASSES[tone])}>
+          <StatusIcon tone={tone} size={13} />
+          {summary}
         </span>
       </div>
       <DirectionRow from={left} to={right} rules={rulesForPair(rules, left, right)} />
@@ -202,14 +218,17 @@ function NodeDetails({
     .filter((target) => target !== server)
     .flatMap((target) => [[server, target], [target, server]] as Pair[])
   return (
-    <section className="border-t border-border" aria-label={`${server} 的方向状态`}>
-      <div className="flex items-center justify-between gap-3 px-3 py-2">
-        <h4 className="text-xs font-semibold text-foreground">站点方向</h4>
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {server} · {directions.length} 个方向
-        </span>
+    <section aria-label={`${server} 的方向状态`}>
+      <div className="border-b border-border/70 px-3 py-3">
+        <div className="text-[10px] font-medium text-muted-foreground">站点详情</div>
+        <h4 className="mt-1 truncate font-mono text-xs font-semibold text-foreground" title={server}>
+          {server}
+        </h4>
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          共 {directions.length} 个复制方向
+        </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2">
+      <div>
         {directions.map(([from, to]) => (
           <DirectionRow
             key={`${from}->${to}`}
@@ -220,6 +239,68 @@ function NodeDetails({
         ))}
       </div>
     </section>
+  )
+}
+
+function PolicyDetails({ policy }: { policy: BucketReplicationPolicySummary }) {
+  const items = [
+    ["策略类型", "全连接拓扑"],
+    ["站点数", String(policy.site_count)],
+    ["规则数", `${policy.actual_rule_count} / ${policy.expected_rule_count}`],
+    ["健康规则", `${policy.healthy_rule_count} / ${policy.expected_rule_count}`],
+  ]
+  return (
+    <section aria-label="复制策略详情">
+      <div className="border-b border-border/70 px-3 py-3">
+        <div className="text-[10px] font-medium text-muted-foreground">策略详情</div>
+        <h4 className="mt-1 text-sm font-semibold text-foreground">全连接复制</h4>
+        <div
+          className={cn(
+            "mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium",
+            policy.complete
+              ? "text-emerald-700 dark:text-emerald-300"
+              : "text-amber-700 dark:text-amber-300",
+          )}
+        >
+          {policy.complete ? <Check size={13} /> : <AlertTriangle size={13} />}
+          {policy.complete ? "策略已收敛" : "策略待修复"}
+        </div>
+      </div>
+      <dl className="px-3 py-2">
+        {items.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between gap-3 border-b border-border/50 py-2 last:border-b-0">
+            <dt className="text-[11px] text-muted-foreground">{label}</dt>
+            <dd className="text-right text-[11px] font-medium tabular-nums text-foreground">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
+function SelectionDetails({
+  selectedPair,
+  selectedNode,
+  servers,
+  rules,
+  policy,
+}: {
+  selectedPair: Pair | null
+  selectedNode: string | null
+  servers: string[]
+  rules: BucketReplicateRule[]
+  policy: BucketReplicationPolicySummary
+}) {
+  return (
+    <aside className="docs-scroll min-h-[220px] overflow-y-auto rounded-lg border border-border/80 bg-card shadow-sm lg:min-h-0">
+      {selectedPair ? (
+        <PairDetails pair={selectedPair} rules={rules} />
+      ) : selectedNode ? (
+        <NodeDetails server={selectedNode} servers={servers} rules={rules} />
+      ) : (
+        <PolicyDetails policy={policy} />
+      )}
+    </aside>
   )
 }
 
@@ -272,52 +353,54 @@ function StatusMatrix({
   onSelectPair: (pair: Pair) => void
 }) {
   return (
-    <div className="docs-scroll min-h-0 flex-1 overflow-auto p-3">
-      <table className="w-full min-w-[640px] table-fixed border-separate border-spacing-0 text-xs">
-        <thead>
-          <tr>
-            <th className="sticky left-0 z-10 w-32 border-b border-r border-border bg-card px-2 py-2 text-left text-[10px] font-medium text-muted-foreground">
+    <div className="docs-scroll h-full min-h-[360px] overflow-auto bg-background">
+      <Table className="min-w-[640px] table-fixed">
+        <TableHeader className="bg-muted/35">
+          <TableRow className="hover:bg-muted/35">
+            <TableHead className="sticky left-0 z-20 w-36 border-r border-border bg-muted/80 text-[10px]">
               源站点 / 目标站点
-            </th>
+            </TableHead>
             {servers.map((server) => (
-              <th
+              <TableHead
                 key={server}
-                className="border-b border-border px-2 py-2 text-center font-mono text-[10px] font-medium text-muted-foreground"
+                className="px-2 text-center font-mono text-[10px]"
                 title={server}
               >
                 <span className="block truncate">{server}</span>
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {servers.map((from) => (
-            <tr key={from}>
-              <th
-                className="sticky left-0 z-10 border-b border-r border-border bg-card px-2 py-2 text-left font-mono text-[11px] font-medium text-foreground"
+            <TableRow key={from}>
+              <TableCell
+                className="sticky left-0 z-10 border-r border-border bg-background px-2 font-mono text-[11px] font-medium text-foreground"
                 title={from}
               >
                 <span className="block truncate">{from}</span>
-              </th>
+              </TableCell>
               {servers.map((to) => {
                 if (from === to) {
                   return (
-                    <td key={to} className="h-12 border-b border-border bg-muted/25 text-center text-muted-foreground">
+                    <TableCell key={to} className="h-12 bg-muted/20 text-center text-muted-foreground">
                       <Minus size={15} className="mx-auto" aria-label="不适用" />
-                    </td>
+                    </TableCell>
                   )
                 }
                 const pairRules = rulesForPair(rules, from, to)
                 const tone = directedTone(pairRules)
                 const selected = selectedPair?.[0] === from && selectedPair[1] === to
                 return (
-                  <td key={to} className="h-12 border-b border-border text-center">
+                  <TableCell key={to} className="h-12 text-center">
                     <button
                       type="button"
+                      aria-pressed={selected}
                       className={cn(
-                        "mx-auto inline-flex h-8 w-16 items-center justify-center gap-1 rounded-md border border-transparent text-[10px] font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        TONE_CLASSES[tone],
-                        selected && "border-current bg-muted",
+                        "mx-auto inline-flex h-8 min-w-16 items-center justify-center gap-1 rounded-md px-2 text-[10px] font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        selected
+                          ? "bg-accent text-accent-foreground shadow-sm"
+                          : TONE_CLASSES[tone],
                       )}
                       title={`${from} -> ${to}: ${statusText(pairRules)}`}
                       aria-label={`${from} 到 ${to}: ${statusText(pairRules)}`}
@@ -326,13 +409,13 @@ function StatusMatrix({
                       <StatusIcon tone={tone} size={14} />
                       {tone === "healthy" ? "正常" : statusText(pairRules)}
                     </button>
-                  </td>
+                  </TableCell>
                 )
               })}
-            </tr>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -351,12 +434,15 @@ function circlePoints(servers: string[]): Map<string, Point> {
   return points
 }
 
-function shortenLine(from: Point, to: Point, distance = 42) {
+function shortenLine(from: Point, to: Point) {
   const dx = to.x - from.x
   const dy = to.y - from.y
   const length = Math.max(Math.hypot(dx, dy), 1)
   const ux = dx / length
   const uy = dy / length
+  const horizontalDistance = Math.abs(ux) < 0.001 ? Number.POSITIVE_INFINITY : 58 / Math.abs(ux)
+  const verticalDistance = Math.abs(uy) < 0.001 ? Number.POSITIVE_INFINITY : 21 / Math.abs(uy)
+  const distance = Math.min(horizontalDistance, verticalDistance) + 8
   return {
     x1: from.x + ux * distance,
     y1: from.y + uy * distance,
@@ -392,7 +478,7 @@ function AggregatedGraph({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-hidden p-2 sm:p-3">
+    <div className="h-full min-h-[360px] overflow-hidden p-2 sm:p-3">
       <svg
         className="h-full min-h-[360px] w-full"
         viewBox="0 0 800 500"
@@ -405,14 +491,14 @@ function AggregatedGraph({
             <marker
               key={tone}
               id={`replicate-arrow-${tone}`}
-              markerWidth="7"
-              markerHeight="7"
-              refX="5.5"
-              refY="3.5"
+              markerWidth="5"
+              markerHeight="5"
+              refX="4.25"
+              refY="2.5"
               orient="auto-start-reverse"
-              markerUnits="strokeWidth"
+              markerUnits="userSpaceOnUse"
             >
-              <path d="M0,0 L7,3.5 L0,7 Z" fill={stroke[tone]} />
+              <path d="M0,0 L5,2.5 L0,5 Z" fill={stroke[tone]} />
             </marker>
           ))}
         </defs>
@@ -434,7 +520,8 @@ function AggregatedGraph({
               role="button"
               tabIndex={0}
               aria-label={`关系 ${left} 与 ${right}`}
-              className="cursor-pointer"
+              aria-pressed={selected}
+              className="cursor-pointer outline-none focus:outline-none"
               onClick={() => onSelectPair([left, right])}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -445,13 +532,14 @@ function AggregatedGraph({
               <line
                 {...line}
                 stroke="transparent"
-                strokeWidth="18"
+                strokeWidth="14"
               />
               <line
                 {...line}
                 stroke={stroke[tone]}
-                strokeWidth={selected ? 3.5 : 2}
-                strokeOpacity={active ? (tone === "healthy" ? 0.68 : 0.9) : 0.1}
+                strokeWidth={selected ? 1.8 : 1.1}
+                strokeOpacity={active ? (selected ? 0.95 : tone === "healthy" ? 0.45 : 0.72) : 0.08}
+                strokeLinecap="round"
                 markerStart={`url(#replicate-arrow-${tone})`}
                 markerEnd={`url(#replicate-arrow-${tone})`}
                 className="pointer-events-none transition-opacity"
@@ -473,7 +561,7 @@ function AggregatedGraph({
           return (
             <g
               key={server}
-              className="cursor-pointer"
+              className="cursor-pointer outline-none focus:outline-none"
               role="button"
               aria-label={`站点 ${server}`}
               tabIndex={0}
@@ -490,7 +578,7 @@ function AggregatedGraph({
                 rx="6"
                 fill="var(--card)"
                 stroke={selected ? "var(--primary)" : "var(--border)"}
-                strokeWidth={selected ? 2.5 : 1.5}
+                strokeWidth={selected ? 1.75 : 1}
                 opacity="1"
               />
               <circle
@@ -542,7 +630,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
   const [response, setResponse] = useState<BucketReplicatesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [view, setView] = useState<ViewMode>("matrix")
+  const [view, setView] = useState<ViewMode>("graph")
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [selectedPair, setSelectedPair] = useState<Pair | null>(null)
   const requestId = useRef(0)
@@ -605,19 +693,6 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
             <button
               type="button"
               role="tab"
-              aria-selected={view === "matrix"}
-              className={cn(
-                "inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors",
-                view === "matrix" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-              onClick={() => setView("matrix")}
-            >
-              <Grid3X3 size={13} />
-              状态矩阵
-            </button>
-            <button
-              type="button"
-              role="tab"
               aria-selected={view === "graph"}
               className={cn(
                 "inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors",
@@ -627,6 +702,19 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
             >
               <Network size={13} />
               关系图
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === "matrix"}
+              className={cn(
+                "inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors",
+                view === "matrix" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setView("matrix")}
+            >
+              <Grid3X3 size={13} />
+              状态矩阵
             </button>
           </div>
           <IconTooltip label="刷新复制状态">
@@ -661,29 +749,34 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
           暂无可用站点
         </div>
       ) : (
-        <>
-          {view === "matrix" ? (
-            <StatusMatrix
-              servers={servers}
-              rules={rules}
-              selectedPair={selectedPair}
-              onSelectPair={selectPair}
-            />
-          ) : (
-            <AggregatedGraph
-              servers={servers}
-              rules={rules}
-              selectedNode={selectedNode}
-              selectedPair={selectedPair}
-              onSelectNode={selectNode}
-              onSelectPair={selectPair}
-            />
-          )}
-          {selectedPair && <PairDetails pair={selectedPair} rules={rules} />}
-          {selectedNode && (
-            <NodeDetails server={selectedNode} servers={servers} rules={rules} />
-          )}
-        </>
+        <div className="grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="min-h-[380px] overflow-hidden rounded-lg border border-border/80 bg-background lg:min-h-0">
+            {view === "matrix" ? (
+              <StatusMatrix
+                servers={servers}
+                rules={rules}
+                selectedPair={selectedPair}
+                onSelectPair={selectPair}
+              />
+            ) : (
+              <AggregatedGraph
+                servers={servers}
+                rules={rules}
+                selectedNode={selectedNode}
+                selectedPair={selectedPair}
+                onSelectNode={selectNode}
+                onSelectPair={selectPair}
+              />
+            )}
+          </div>
+          <SelectionDetails
+            selectedPair={selectedPair}
+            selectedNode={selectedNode}
+            servers={servers}
+            rules={rules}
+            policy={policy}
+          />
+        </div>
       )}
     </div>
   )
