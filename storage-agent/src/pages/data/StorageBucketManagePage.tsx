@@ -49,7 +49,7 @@ export default function StorageBucketManagePage() {
   )
 
   return (
-    <div className="mx-auto flex h-full max-w-8xl flex-col">
+    <div className="mx-auto flex min-h-full max-w-8xl flex-col lg:h-full">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">存储桶管理</h1>
@@ -76,7 +76,7 @@ export default function StorageBucketManagePage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[280px_1fr]">
           <Card className="flex min-h-0 flex-col overflow-hidden">
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               <div className="border-b border-border/70 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
@@ -118,7 +118,7 @@ export default function StorageBucketManagePage() {
             </CardContent>
           </Card>
 
-          <div className="flex min-h-0 flex-col gap-4">
+          <div className="flex flex-col gap-4 lg:min-h-0">
             <Card>
               <CardContent className="pt-4">
                 {!selectedBucket ? (
@@ -177,7 +177,7 @@ export default function StorageBucketManagePage() {
               </CardContent>
             </Card>
 
-            <Card className="flex min-h-0 flex-1 flex-col overflow-hidden border-dashed bg-muted/20">
+            <Card className="flex min-h-[580px] flex-col overflow-hidden border-dashed bg-muted/20 lg:min-h-0 lg:flex-1">
               <CardContent className="flex min-h-0 flex-1 flex-col p-2 pt-2">
                 {selectedBucket ? (
                   <BucketReplicateGraph
@@ -195,4 +195,3 @@ export default function StorageBucketManagePage() {
     </div>
   )
 }
-

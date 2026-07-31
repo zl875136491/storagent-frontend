@@ -238,10 +238,28 @@ export interface AIProviderTestResponse {
 /** 存储桶跨站点复制规则状态（与 GET …/replicates 一致） */
 export interface BucketReplicateRuleStatus {
   status: string
+  /** MinIO 规则自身的启停状态；不同于 mc 命令执行状态 status */
+  rule_status?: string
   priority: number
   delete_marker_replication: string
   existing_object_replication: string
   source_selection_criteria: string
+}
+
+export interface BucketReplicationPolicySummary {
+  type: "full_mesh"
+  site_count: number
+  expected_rule_count: number
+  actual_rule_count: number
+  healthy_rule_count: number
+  complete: boolean
+  status: "ready" | "degraded" | string
+  missing_rules?: Array<{ from: string; to: string }>
+  duplicate_rules?: Array<{ from: string; to: string; count: number }>
+  unhealthy_rules?: Array<{ from: string; to: string }>
+  unexpected_rules?: Array<{ from: string; to: string }>
+  unmapped_rule_count?: number
+  read_errors?: Record<string, string>
 }
 
 /** 复制拓扑边上：连线从 from 节点的哪一侧离开 / 进入 to 节点的哪一侧（与 UI 一致，便于存后端） */
@@ -295,6 +313,8 @@ export interface BucketReplicatesResponse {
   /** 全部相关站点 id（含尚无落盘坐标的站点）；优先于 servers 键集合 */
   server_ids?: string[]
   replicates: BucketReplicateRule[]
+  /** 后端基于 MinIO 实际规则计算的全连接策略验收摘要 */
+  policy?: BucketReplicationPolicySummary
   /** 可选：与 replicates 配套的画布布局 */
   layout?: ReplicateGraphLayoutV1
 }
