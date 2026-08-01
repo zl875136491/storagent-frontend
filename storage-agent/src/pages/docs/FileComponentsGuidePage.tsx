@@ -1,524 +1,275 @@
 import { useMemo, useState } from "react"
+import { Download, Eye, EyeOff, KeyRound, Server } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
+
 import { ApiKeyProvider, useApiKey } from "@/components/guides/api-key-context"
-import { CodePreview } from "@/components/guides/code-preview"
 import { FileDownloadDemo } from "@/components/guides/file-download-demo"
 import { FileUploadDemo } from "@/components/guides/file-upload-demo"
-import { GuideEndpointsProvider } from "@/components/guides/guide-endpoints-context"
-import { DocLead, DocNote, DocTitle, useRegisterToc } from "@/components/docs/primitives"
+import {
+  GuideEndpointsProvider,
+  useGuideDemoBackendSelection,
+} from "@/components/guides/guide-endpoints-context"
+import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
+import { DocCodeBlock } from "@/components/docs/code"
+import {
+  DocHeading,
+  DocLead,
+  DocNote,
+  DocTitle,
+  useRegisterToc,
+} from "@/components/docs/primitives"
 import { useGoDoc } from "@/components/docs/nav-context"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
+import {
+  COMPONENT_GUIDE_CODE,
+  COMPONENT_GUIDE_LANGUAGES,
+  generateComponentGuideMarkdown,
+  type ComponentGuideLanguage,
+} from "./file-components-content"
+import { getApiGuideLanguage, isApiGuideLanguage } from "./api-guide-content"
 
 function ApiKeyBox() {
   const { apiKey, setApiKey, clearApiKey } = useApiKey()
   const [draft, setDraft] = useState(apiKey)
   const [show, setShow] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
 
   return (
-    <Card>
-      <CardHeader className="py-4">
-        <CardTitle className="text-base">API Key</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-2">
-          <Label htmlFor="demo-api-key">x-api-key</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="demo-api-key"
-              type={show ? "text" : "password"}
-              placeholder="粘贴你的 API Key"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-            <Button variant="outline" onClick={() => setShow((v) => !v)}>
-              {show ? "隐藏" : "显示"}
-            </Button>
-          </div>
+    <div className="rounded-lg border border-border/70 bg-card/40 p-4">
+      <div className="flex items-start gap-3">
+        <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" aria-hidden />
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">在线演示鉴权</h3>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            上传和下载共用这一枚 APIKey，只在请求头 <code className="font-mono">x-api-key</code> 中发送。
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setApiKey(draft)} disabled={!draft.trim()}>
-            保存
-          </Button>
-          <Button variant="outline" onClick={() => setConfirmOpen(true)}>
-            清除
-          </Button>
-        </div>
-        {apiKey ? <div className="text-sm">已保存（长度：{apiKey.length}）</div> : null}
-      </CardContent>
-
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>确认清除 API Key？</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">
-            清除后，本页上传/下载将无法继续调用，且本地缓存会被删除。
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              取消
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                clearApiKey()
-                setDraft("")
-                setConfirmOpen(false)
-              }}
-            >
-              确认清除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  )
-}
-
-/** 可复制到外部项目的独立上传示例（不依赖本仓库 guides/*） */
-function uploadCode() {
-  return `
-import { useMemo, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Progress } from "@/components/ui/progress"
-
-type Props = {
-  /** Storagent API 根地址，如 https://storagent.example.com */
-  baseURL: string
-  /** 控制台签发的 APIKey，请求头使用 x-api-key */
-  apiKey: string
-  chunkSizeBytes?: number
-  onUploaded?: (result: { bucket: string; objectKey: string }) => void
-}
-
-type InitResp = { upload_id: string; bucket: string; object_key: string }
-type PartResp = { part_number: number; etag: string }
-type CompleteResp = { bucket: string; object_key: string; etag?: string | null; version_id?: string | null }
-
-function joinUrl(baseURL: string, path: string) {
-  return \`\${baseURL.replace(/\\/$/, "")}\${path}\`
-}
-
-async function jsonOrThrow<T>(resp: Response): Promise<T> {
-  const text = await resp.text().catch(() => "")
-  if (!resp.ok) throw new Error(text || \`请求失败: \${resp.status}\`)
-  return (text ? (JSON.parse(text) as T) : (undefined as unknown as T))
-}
-
-function sanitizeEtag(etag: string) {
-  return etag.replace(/^"+|"+$/g, "")
-}
-
-/**
- * 独立上传组件：仅依赖 shadcn 基础组件 + fetch。
- * 鉴权必须用 x-api-key，不要用 Authorization Bearer。
- */
-export function FileUploadDemo({ apiKey, baseURL, chunkSizeBytes, onUploaded }: Props) {
-  const [file, setFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
-  const [result, setResult] = useState<{ bucket: string; objectKey: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [resultOpen, setResultOpen] = useState(false)
-
-  const chunkSize = useMemo(() => chunkSizeBytes ?? 5 * 1024 * 1024, [chunkSizeBytes])
-  const canUpload = Boolean(baseURL && apiKey && file && !uploading)
-
-  const upload = async () => {
-    if (!file) return
-    if (!baseURL) throw new Error("请配置 baseURL")
-    if (!apiKey) throw new Error("apiKey 为空")
-
-    setUploading(true)
-    setError(null)
-    setResult(null)
-    setProgress(null)
-
-    let uploadId = ""
-    let objectKey = ""
-
-    try {
-      const init = await jsonOrThrow<InitResp>(
-        await fetch(joinUrl(baseURL, "/api/files/multipart/init"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({ content_type: file.type || "application/octet-stream" }),
-        }),
-      )
-      uploadId = init.upload_id
-      objectKey = init.object_key
-
-      const totalParts = Math.max(1, Math.ceil(file.size / chunkSize))
-      setProgress({ done: 0, total: totalParts })
-
-      const parts: { part_number: number; etag: string }[] = []
-      for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
-        const start = (partNumber - 1) * chunkSize
-        const end = Math.min(file.size, start + chunkSize)
-        const blob = file.slice(start, end)
-
-        const fd = new FormData()
-        fd.set("upload_id", init.upload_id)
-        fd.set("object_key", init.object_key)
-        fd.set("part_number", String(partNumber))
-        fd.set("file", blob, file.name)
-
-        const part = await jsonOrThrow<PartResp>(
-          await fetch(joinUrl(baseURL, "/api/files/multipart/part"), {
-            method: "POST",
-            headers: { "x-api-key": apiKey },
-            body: fd,
-          }),
-        )
-
-        parts.push({ part_number: part.part_number, etag: sanitizeEtag(part.etag) })
-        setProgress({ done: partNumber, total: totalParts })
-      }
-
-      const complete = await jsonOrThrow<CompleteResp>(
-        await fetch(joinUrl(baseURL, "/api/files/multipart/complete"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            upload_id: init.upload_id,
-            object_key: init.object_key,
-            parts: parts.sort((a, b) => a.part_number - b.part_number),
-          }),
-        }),
-      )
-
-      const finalResult = { bucket: complete.bucket, objectKey: complete.object_key }
-      setResult(finalResult)
-      setResultOpen(true)
-      onUploaded?.(finalResult)
-    } catch (e) {
-      if (uploadId && objectKey) {
-        void fetch(joinUrl(baseURL, "/api/files/multipart/abort"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({ upload_id: uploadId, object_key: objectKey }),
-        }).catch(() => undefined)
-      }
-      setError(e instanceof Error ? e.message : "上传失败")
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">上传文件</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-2">
-          <Label htmlFor="upload-file">选择文件</Label>
+      </div>
+      <div className="mt-4 space-y-2">
+        <Label htmlFor="demo-api-key">APIKey</Label>
+        <div className="flex items-center gap-2">
           <Input
-            id="upload-file"
-            type="file"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            id="demo-api-key"
+            type={show ? "text" : "password"}
+            placeholder="粘贴控制台签发的 APIKey"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
           />
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            title={show ? "隐藏 APIKey" : "显示 APIKey"}
+            aria-label={show ? "隐藏 APIKey" : "显示 APIKey"}
+            onClick={() => setShow((value) => !value)}
+          >
+            {show ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+          </Button>
         </div>
-
-        <Button disabled={!canUpload} onClick={() => void upload()}>
-          {uploading ? "上传中..." : "开始上传"}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" onClick={() => setApiKey(draft)} disabled={!draft.trim()}>
+          保存 APIKey
         </Button>
-
-        {progress ? (
-          <div className="space-y-2">
-            <div className="text-sm">进度：{progress.done}/{progress.total}</div>
-            <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
-          </div>
-        ) : null}
-
-        {error ? <div className="text-sm text-destructive">{error}</div> : null}
-      </CardContent>
-
-      <Dialog open={resultOpen && Boolean(result)} onOpenChange={setResultOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>上传结果</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <pre className="overflow-x-auto rounded-md border bg-muted/30 p-3 text-sm">
-              <code>{JSON.stringify(result, null, 2)}</code>
-            </pre>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setResultOpen(false)}>关闭</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            clearApiKey()
+            setDraft("")
+          }}
+          disabled={!apiKey && !draft}
+        >
+          清除
+        </Button>
+        {apiKey ? <span className="text-[11px] text-muted-foreground">已保存，长度 {apiKey.length}</span> : null}
+      </div>
+      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+        演示密钥仅用于当前浏览器的本地缓存。生产接入时请改由业务服务端保存，避免把 APIKey 放进前端包。
+      </p>
+    </div>
   )
 }
-`.trimStart()
-}
 
-/** 可复制到外部项目的独立下载示例 */
-function downloadCode() {
-  return `
-import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-
-type Props = {
-  baseURL: string
-  apiKey: string
-  defaultObjectKey?: string
-}
-
-type ObjectStatResponse = {
-  bucket: string
-  object_key: string
-  size: number
-  etag: string
-  content_type?: string | null
-  last_modified?: string | null
-}
-
-function joinUrl(baseURL: string, path: string) {
-  return \`\${baseURL.replace(/\\/$/, "")}\${path}\`
-}
-
-async function jsonOrThrow<T>(resp: Response): Promise<T> {
-  const text = await resp.text().catch(() => "")
-  if (!resp.ok) throw new Error(text || \`请求失败: \${resp.status}\`)
-  return (text ? (JSON.parse(text) as T) : (undefined as unknown as T))
-}
-
-function filenameFromObjectKey(objectKey: string) {
-  const trimmed = objectKey.trim().replace(/\\/+$/, "")
-  const seg = trimmed.split("/").filter(Boolean).pop()
-  return seg || "download.bin"
-}
-
-export function FileDownloadDemo({ apiKey, baseURL, defaultObjectKey }: Props) {
-  const [objectKey, setObjectKey] = useState(defaultObjectKey ?? "")
-  const [loading, setLoading] = useState(false)
-  const [stat, setStat] = useState<ObjectStatResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [statOpen, setStatOpen] = useState(false)
-
-  useEffect(() => {
-    if (defaultObjectKey != null && defaultObjectKey !== "") {
-      setObjectKey(defaultObjectKey)
-    }
-  }, [defaultObjectKey])
-
-  const canCall = Boolean(baseURL && apiKey && objectKey.trim() && !loading)
-
-  const fetchStat = async () => {
-    if (!baseURL) throw new Error("请配置 baseURL")
-    if (!apiKey) throw new Error("apiKey 为空")
-    if (!objectKey.trim()) throw new Error("object_key 为空")
-
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await jsonOrThrow<ObjectStatResponse>(
-        await fetch(joinUrl(baseURL, "/api/files/object/stat"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({ object_key: objectKey.trim() }),
-        }),
-      )
-      setStat(data)
-      setStatOpen(true)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "获取元信息失败")
-      setStat(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const download = async () => {
-    if (!baseURL) throw new Error("请配置 baseURL")
-    if (!apiKey) throw new Error("apiKey 为空")
-    if (!objectKey.trim()) throw new Error("object_key 为空")
-
-    setLoading(true)
-    setError(null)
-    try {
-      const qs = new URLSearchParams({
-        object_key: objectKey.trim(),
-        offset: "0",
-        length: "0",
-      })
-      const resp = await fetch(joinUrl(baseURL, \`/api/files/object/download?\${qs.toString()}\`), {
-        method: "GET",
-        headers: { "x-api-key": apiKey },
-      })
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "")
-        throw new Error(text || \`下载失败: \${resp.status}\`)
-      }
-
-      const blob = await resp.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = filenameFromObjectKey(objectKey)
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      window.URL.revokeObjectURL(url)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "下载失败")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">下载文件</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="space-y-2">
-          <Label htmlFor="download-object-key">object_key</Label>
-          <Input
-            id="download-object-key"
-            placeholder="例如：path/to/file.bin"
-            value={objectKey}
-            onChange={(e) => setObjectKey(e.target.value)}
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={!canCall} onClick={() => void fetchStat()}>
-            获取元信息
-          </Button>
-          <Button disabled={!canCall} onClick={() => void download()}>
-            {loading ? "下载中..." : "下载"}
-          </Button>
-        </div>
-
-        {error ? <div className="text-sm text-destructive">{error}</div> : null}
-      </CardContent>
-
-      <Dialog open={statOpen && Boolean(stat)} onOpenChange={setStatOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>对象元数据</DialogTitle>
-          </DialogHeader>
-          <DialogBody>
-            <pre className="overflow-x-auto rounded-md border bg-muted/30 p-3 text-sm">
-              <code>{JSON.stringify(stat, null, 2)}</code>
-            </pre>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setStatOpen(false)}>关闭</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  )
-}
-`.trimStart()
-}
-
-function InnerPage() {
+function ComponentsGuideContent() {
   const goDoc = useGoDoc()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { apiKey } = useApiKey()
+  const { base, setBase } = useGuideDemoBackendSelection()
   const [lastUploadedObjectKey, setLastUploadedObjectKey] = useState<string | null>(null)
 
+  const rawLanguage = searchParams.get("lang")
+  const language: ComponentGuideLanguage = isApiGuideLanguage(rawLanguage) ? rawLanguage : "typescript"
+  const languageMeta = getApiGuideLanguage(language)
+  const code = COMPONENT_GUIDE_CODE[language]
+  const markdownDownloadHref = useMemo(
+    () => `data:text/markdown;charset=utf-8,${encodeURIComponent(generateComponentGuideMarkdown(language))}`,
+    [language],
+  )
   const toc = useMemo(
     () => [
-      { id: "api-key", title: "配置 APIKey", level: 2 as const },
-      { id: "upload-demo", title: "上传 Demo", level: 2 as const },
-      { id: "download-demo", title: "下载 Demo", level: 2 as const },
+      { id: "demo-config", title: "在线演示配置", level: 2 as const },
+      { id: "upload-demo", title: "在线上传", level: 2 as const },
+      { id: "download-demo", title: "在线下载", level: 2 as const },
+      { id: "integration-code", title: "接入代码", level: 2 as const },
     ],
     [],
   )
   useRegisterToc(toc)
 
-  const uploadSnippet = useMemo(() => uploadCode(), [])
-  const downloadSnippet = useMemo(() => downloadCode(), [])
-  const installCommands = useMemo(() => {
-    const comps = "button input card label dialog progress"
-    return {
-      npx: `npx shadcn@latest add ${comps}`,
-      pnpm: `pnpm dlx shadcn@latest add ${comps}`,
-      yarn: `yarn dlx shadcn@latest add ${comps}`,
-      npm: `npm exec --yes shadcn@latest add ${comps}`,
-    } as const
-  }, [])
+  const selectLanguage = (nextLanguage: ComponentGuideLanguage) => {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        next.set("lang", nextLanguage)
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   return (
-    <GuideEndpointsProvider>
-      <div className="space-y-6 pb-10">
-        <div>
+    <div className="pb-10">
+      <div className="flex flex-col gap-5 border-b border-border/70 pb-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <DocTitle>功能组件引导</DocTitle>
           <DocLead>
-            控制台内可直接试用上传/下载；下方代码可拷到外部项目（只依赖 shadcn + fetch）。
+            用一套 APIKey 和服务端点在线验证上传、元信息查询、跨区域定位与下载；下方提供 TypeScript 与 Python 两种客户端实现。
           </DocLead>
-          <DocNote>
-            纯 HTTP 语义见{" "}
-            <button
-              type="button"
-              className="font-medium text-primary underline-offset-4 hover:underline"
-              onClick={() => goDoc("api-guide")}
-            >
-              功能接口引导
-            </button>
-            。鉴权头必须是 <code className="font-mono text-[11px]">x-api-key</code>。
-          </DocNote>
         </div>
-
-        <section id="api-key" className="scroll-m-24">
-          <ApiKeyBox />
-        </section>
-
-        <section id="upload-demo" className="scroll-m-24 space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight">上传 Demo</h2>
-          <FileUploadDemo apiKey={apiKey} onUploaded={(r) => setLastUploadedObjectKey(r.objectKey)} />
-          <CodePreview
-            title="上传组件代码（可复制到外部项目）"
-            installCommands={installCommands}
-            previewLines={16}
-            codeLanguage="tsx"
-            code={uploadSnippet}
-          />
-        </section>
-
-        <section id="download-demo" className="scroll-m-24 space-y-3">
-          <h2 className="text-lg font-semibold tracking-tight">下载 Demo</h2>
-          <FileDownloadDemo apiKey={apiKey} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
-          <CodePreview
-            title="下载组件代码（可复制到外部项目）"
-            installCommands={installCommands}
-            previewLines={16}
-            codeLanguage="tsx"
-            code={downloadSnippet}
-          />
-        </section>
+        <a
+          href={markdownDownloadHref}
+          download={`storagent-file-components-guide-${language}.md`}
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`下载 ${languageMeta.label} 组件接入文档`}
+        >
+          <Download className="h-4 w-4" aria-hidden />
+          下载 Markdown
+        </a>
       </div>
+
+      <div className="sticky top-0 z-30 -mx-4 border-b border-border/70 bg-background px-4 py-3 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-xs font-medium text-foreground">示例语言</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              切换后，上传、下载代码和 Markdown 文档保持一致。
+            </div>
+          </div>
+          <div className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1 sm:w-auto" role="group" aria-label="组件示例语言">
+            {COMPONENT_GUIDE_LANGUAGES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => selectLanguage(item.id)}
+                aria-pressed={language === item.id}
+                className={cn(
+                  "min-w-28 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  language === item.id
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <section id="demo-config" className="mt-8 scroll-m-36">
+        <DocHeading id="demo-config-heading" level={2} className="mt-0">
+          在线演示配置
+        </DocHeading>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <ApiKeyBox />
+          <div className="rounded-lg border border-border/70 bg-card/40 p-4">
+            <div className="flex items-start gap-3">
+              <Server className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden />
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">共享服务端点</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  上传和下载使用同一个已探测的 Storagent API 基址；切换后两处演示同时生效。
+                </p>
+              </div>
+            </div>
+            <div className="mt-4">
+              <GuideBackendSelector value={base} onChange={setBase} />
+            </div>
+          </div>
+        </div>
+        <DocNote>
+          在线演示只验证文件接口。纯 HTTP 语义、请求字段和错误码见{" "}
+          <button
+            type="button"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+            onClick={() => goDoc("api-guide")}
+          >
+            功能接口引导
+          </button>
+          。
+        </DocNote>
+      </section>
+
+      <section id="upload-demo" className="mt-10 scroll-m-36">
+        <DocHeading id="upload-demo-heading" level={2} className="mt-0">
+          在线上传
+        </DocHeading>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          选择文件后，演示会使用上方共享 APIKey 和服务端点完成 multipart 初始化、分片上传与完成操作；成功后 object_key 会自动带入下载演示。
+        </p>
+        <div className="mt-4">
+          <FileUploadDemo
+            apiKey={apiKey}
+            baseURL={base}
+            onUploaded={(result) => setLastUploadedObjectKey(result.objectKey)}
+          />
+        </div>
+      </section>
+
+      <section id="download-demo" className="mt-10 scroll-m-36">
+        <DocHeading id="download-demo-heading" level={2} className="mt-0">
+          在线下载
+        </DocHeading>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          可先获取元信息或定位服务点，再下载对象。若当前服务点没有副本，演示会展示可用节点并支持直接回退下载。
+        </p>
+        <div className="mt-4">
+          <FileDownloadDemo apiKey={apiKey} baseURL={base} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
+        </div>
+      </section>
+
+      <section id="integration-code" className="mt-10 scroll-m-36">
+        <DocHeading id="integration-code-heading" level={2} className="mt-0">
+          接入代码
+        </DocHeading>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          下面是与在线演示相同的上传和下载流程封装。TypeScript 方案面向 Node.js，Python 方案使用 requests；两者都从环境变量读取配置。
+        </p>
+        <div className="mt-5 grid gap-5 xl:grid-cols-2">
+          <DocCodeBlock
+            language={languageMeta.fence}
+            title={`${languageMeta.label} · 上传客户端`}
+            code={code.upload}
+          />
+          <DocCodeBlock
+            language={languageMeta.fence}
+            title={`${languageMeta.label} · 下载客户端`}
+            code={code.download}
+          />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function InnerPage() {
+  return (
+    <GuideEndpointsProvider>
+      <ComponentsGuideContent />
     </GuideEndpointsProvider>
   )
 }

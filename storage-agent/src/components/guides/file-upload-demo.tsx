@@ -7,11 +7,15 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
 import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
+import { cn } from "@/lib/utils"
 
 type Props = {
   apiKey: string
+  /** 页面级共享后端；未提供时组件保留独立选择能力。 */
+  baseURL?: string
   chunkSizeBytes?: number
   onUploaded?: (result: { bucket: string; objectKey: string }) => void
+  className?: string
 }
 
 type InitResp = { upload_id: string; bucket: string; object_key: string }
@@ -32,9 +36,10 @@ function sanitizeEtag(etag: string) {
   return etag.replace(/^"+|"+$/g, "")
 }
 
-export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
-  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
+export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeBytes, onUploaded, className }: Props) {
+  const { base: selectedBaseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
     useGuideDemoBackendSelection()
+  const baseURL = providedBaseURL ?? selectedBaseURL
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
@@ -44,7 +49,10 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
 
   const chunkSize = useMemo(() => chunkSizeBytes ?? 5 * 1024 * 1024, [chunkSizeBytes])
 
-  const canUpload = Boolean(baseURL && apiKey && file && !uploading && !backendListLoading && !backendListError)
+  const canUpload = Boolean(
+    baseURL && apiKey && file && !uploading &&
+    (providedBaseURL !== undefined || (!backendListLoading && !backendListError)),
+  )
 
   const upload = async () => {
     if (!file) return
@@ -137,12 +145,14 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
   }
 
   return (
-    <Card>
+    <Card className={cn("rounded-lg shadow-none", className)}>
       <CardHeader>
         <CardTitle className="text-base">1. 上传组件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+        {providedBaseURL === undefined ? (
+          <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+        ) : null}
 
         <div className="space-y-2">
           <Label htmlFor="upload-file">选择文件</Label>
@@ -185,4 +195,3 @@ export function FileUploadDemo({ apiKey, chunkSizeBytes, onUploaded }: Props) {
     </Card>
   )
 }
-

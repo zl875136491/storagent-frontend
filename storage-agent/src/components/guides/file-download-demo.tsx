@@ -12,10 +12,14 @@ import {
   type ObjectLocationItem,
   type ObjectLocateResponse,
 } from "@/api/client"
+import { cn } from "@/lib/utils"
 
 type Props = {
   apiKey: string
+  /** 页面级共享后端；未提供时组件保留独立选择能力。 */
+  baseURL?: string
   defaultObjectKey?: string
+  className?: string
 }
 
 type ObjectStatResponse = {
@@ -63,9 +67,10 @@ async function downloadFromUrl(url: string, apiKey: string, objectKey: string) {
   window.URL.revokeObjectURL(objUrl)
 }
 
-export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
-  const { base: baseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
+export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObjectKey, className }: Props) {
+  const { base: selectedBaseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
     useGuideDemoBackendSelection()
+  const baseURL = providedBaseURL ?? selectedBaseURL
   const [objectKey, setObjectKey] = useState(defaultObjectKey ?? "")
   const [loading, setLoading] = useState(false)
   const [stat, setStat] = useState<ObjectStatResponse | null>(null)
@@ -82,7 +87,8 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
   }, [defaultObjectKey])
 
   const canCall = Boolean(
-    baseURL && apiKey && objectKey.trim() && !loading && !backendListLoading && !backendListError,
+    baseURL && apiKey && objectKey.trim() && !loading &&
+    (providedBaseURL !== undefined || (!backendListLoading && !backendListError)),
   )
 
   const fetchStat = async () => {
@@ -211,12 +217,14 @@ export function FileDownloadDemo({ apiKey, defaultObjectKey }: Props) {
   }
 
   return (
-    <Card>
+    <Card className={cn("rounded-lg shadow-none", className)}>
       <CardHeader>
         <CardTitle className="text-base">2. 下载组件</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+        {providedBaseURL === undefined ? (
+          <GuideBackendSelector value={baseURL} onChange={setBackendBase} />
+        ) : null}
 
         <div className="space-y-2">
           <Label htmlFor="download-object-key">object_key</Label>
