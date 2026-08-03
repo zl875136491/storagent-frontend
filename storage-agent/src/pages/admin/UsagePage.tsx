@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import * as echarts from "echarts"
+import { zhCN } from "date-fns/locale"
 import {
-  Activity,
+  CalendarDays,
   ChartScatter,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Download,
   MapPin,
   RefreshCw,
   TriangleAlert,
-  Upload,
 } from "lucide-react"
+import type { DateRange } from "react-day-picker"
 import { Navigate } from "react-router-dom"
 
 import {
@@ -26,8 +27,9 @@ import {
 import { showErrorToast } from "../../api/toast"
 import { useAuth } from "../../auth/AuthContext"
 import { Button } from "../../components/ui/button"
-import { Card, CardContent } from "../../components/ui/card"
+import { Calendar } from "../../components/ui/calendar"
 import { Input } from "../../components/ui/input"
+import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover"
 import {
   Table,
   TableBody,
@@ -42,6 +44,7 @@ import { cn } from "../../lib/utils"
 type Dimension = "app" | "api_key"
 type ViewMode = "chart" | "table"
 type Interval = "hour" | "day"
+type UsagePanel = "timeline" | "region"
 
 const EMPTY_TOTALS: UsageTotals = {
   upload_requests: 0,
@@ -50,6 +53,7 @@ const EMPTY_TOTALS: UsageTotals = {
   download_bytes: 0,
 }
 const EVENT_PAGE_SIZE = 50
+const DAY_MS = 86400000
 const SELECT_CLASS =
   "h-9 min-w-0 rounded-md border border-input bg-background px-3 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
@@ -61,6 +65,32 @@ function shanghaiInputToIso(value: string): string | null {
   if (!value) return null
   const date = new Date(`${value}:00+08:00`)
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function inputDayToDate(value: string): Date | undefined {
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number)
+  if (!year || !month || !day) return undefined
+  return new Date(year, month - 1, day, 12)
+}
+
+function dateToInputDay(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function replaceInputDay(value: string, date: Date, time: string): string {
+  return `${dateToInputDay(date)}T${time || value.slice(11, 16) || "00:00"}`
+}
+
+function replaceInputTime(value: string, time: string): string {
+  if (!time) return value
+  return `${value.slice(0, 10)}T${time}`
+}
+
+function displayInputTime(value: string): string {
+  return value ? value.replace("T", " ") : "请选择"
 }
 
 function escapeHtml(value: string): string {
@@ -391,30 +421,153 @@ function Segment<T extends string>({
   )
 }
 
-function SummaryCard({
-  label,
-  value,
-  detail,
-  icon,
+const RANGE_PRESETS = [
+  { id: "today", label: "今天", days: 0 },
+  { id: "24h", label: "过去 24 小时", days: 1 },
+  { id: "7d", label: "过去 7 天", days: 7 },
+  { id: "30d", label: "过去 30 天", days: 30 },
+  { id: "90d", label: "过去 90 天", days: 90 },
+] as const
+
+function useTwoMonthCalendar(): boolean {
+  const [enabled, setEnabled] = useState(() => window.matchMedia("(min-width: 768px)").matches)
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)")
+    const update = () => setEnabled(media.matches)
+    media.addEventListener("change", update)
+    return () => media.removeEventListener("change", update)
+  }, [])
+
+  return enabled
+}
+
+function DateTimeRangePicker({
+  startValue,
+  endValue,
+  onStartChange,
+  onEndChange,
+  onPresetSelect,
 }: {
-  label: string
-  value: string
-  detail: string
-  icon: React.ReactNode
+  startValue: string
+  endValue: string
+  onStartChange: (value: string) => void
+  onEndChange: (value: string) => void
+  onPresetSelect: (days: number) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const initialRange = useMemo<DateRange>(() => ({
+    from: inputDayToDate(startValue),
+    to: inputDayToDate(endValue),
+  }), [endValue, startValue])
+  const [draftRange, setDraftRange] = useState<DateRange>(initialRange)
+  const showTwoMonths = useTwoMonthCalendar()
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) setDraftRange(initialRange)
+    setOpen(nextOpen)
+  }
+
+  const applyPreset = (days: number) => {
+    const now = new Date()
+    const end = toShanghaiInput(now)
+    const start = days === 0
+      ? `${end.slice(0, 10)}T00:00`
+      : toShanghaiInput(new Date(now.getTime() - days * DAY_MS))
+    onStartChange(start)
+    onEndChange(end)
+    onPresetSelect(days)
+    setOpen(false)
+  }
+
+  const handleRangeSelect = (range: DateRange | undefined) => {
+    if (!range?.from) return
+    setDraftRange(range)
+    if (!range.to) return
+
+    const nowInput = toShanghaiInput(new Date())
+    const endDay = dateToInputDay(range.to)
+    onStartChange(replaceInputDay(startValue, range.from, "00:00"))
+    onEndChange(replaceInputDay(endValue, range.to, endDay === nowInput.slice(0, 10) ? nowInput.slice(11, 16) : "23:59"))
+  }
+
   return (
-    <Card className="rounded-lg shadow-none">
-      <CardContent className="flex items-start justify-between gap-3 p-4">
-        <div className="min-w-0">
-          <div className="text-[11px] text-muted-foreground">{label}</div>
-          <div className="mt-1 truncate text-xl font-semibold text-foreground">{value}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">{detail}</div>
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="h-9 w-full min-w-0 justify-start gap-2 rounded-md px-3 font-normal"
+          aria-label="选择统计时间范围"
+        >
+          <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-left text-xs">
+            {displayInputTime(startValue)} 至 {displayInputTime(endValue)}
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        collisionPadding={16}
+        className="max-h-[var(--radix-popover-content-available-height)] w-[calc(100vw-2rem)] max-w-[47rem] overflow-x-hidden overflow-y-auto overscroll-contain p-0 md:w-auto"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <div className="flex flex-col md:flex-row">
+          <div className="border-b border-border p-3 md:w-36 md:shrink-0 md:border-r md:border-b-0">
+            <div className="mb-2 px-2 text-[10px] font-medium text-muted-foreground">常用时间段</div>
+            <div className="grid grid-cols-2 gap-1 md:grid-cols-1">
+              {RANGE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className="rounded-md px-2 py-2 text-left text-xs text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                  onClick={() => applyPreset(preset.days)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="min-w-0">
+            <Calendar
+              mode="range"
+              max={90}
+              selected={draftRange}
+              defaultMonth={draftRange.from}
+              numberOfMonths={showTwoMonths ? 2 : 1}
+              locale={zhCN}
+              labels={{
+                labelNext: () => "下个月",
+                labelPrevious: () => "上个月",
+              }}
+              onSelect={handleRangeSelect}
+            />
+            <div className="grid grid-cols-2 gap-3 border-t border-border p-3">
+              <label className="text-[10px] text-muted-foreground">
+                <span className="mb-1.5 block">开始时间（UTC+8）</span>
+                <Input
+                  type="time"
+                  step="60"
+                  className="h-8 text-xs"
+                  value={startValue.slice(11, 16)}
+                  onChange={(event) => onStartChange(replaceInputTime(startValue, event.target.value))}
+                />
+              </label>
+              <label className="text-[10px] text-muted-foreground">
+                <span className="mb-1.5 block">结束时间（UTC+8）</span>
+                <Input
+                  type="time"
+                  step="60"
+                  className="h-8 text-xs"
+                  value={endValue.slice(11, 16)}
+                  onChange={(event) => onEndChange(replaceInputTime(endValue, event.target.value))}
+                />
+              </label>
+            </div>
+          </div>
         </div>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground ring-1 ring-border/70">
-          {icon}
-        </div>
-      </CardContent>
-    </Card>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -500,7 +653,7 @@ function UsageEventTable({
 export default function UsagePage() {
   const { accessToken, user } = useAuth()
   const initialEnd = useMemo(() => new Date(), [])
-  const [startInput, setStartInput] = useState(() => toShanghaiInput(new Date(initialEnd.getTime() - 7 * 86400000)))
+  const [startInput, setStartInput] = useState(() => toShanghaiInput(new Date(initialEnd.getTime() - 7 * DAY_MS)))
   const [endInput, setEndInput] = useState(() => toShanghaiInput(initialEnd))
   const [dimension, setDimension] = useState<Dimension>("app")
   const [appliedDimension, setAppliedDimension] = useState<Dimension>("app")
@@ -508,6 +661,7 @@ export default function UsagePage() {
   const [interval, setInterval] = useState<Interval>("hour")
   const [view, setView] = useState<ViewMode>("chart")
   const [regionView, setRegionView] = useState<ViewMode>("chart")
+  const [activePanel, setActivePanel] = useState<UsagePanel>("timeline")
   const [options, setOptions] = useState<UsageOptionsResponse>({ applications: [], api_keys: [] })
   const [responses, setResponses] = useState<UsageQueryResponse[]>([])
   const [failures, setFailures] = useState<UsageRegionFailure[]>([])
@@ -519,6 +673,10 @@ export default function UsagePage() {
     const endAt = shanghaiInputToIso(endInput)
     if (!startAt || !endAt || new Date(startAt) >= new Date(endAt)) {
       showErrorToast("请选择有效的开始与结束时间")
+      return
+    }
+    if (new Date(endAt).getTime() - new Date(startAt).getTime() > 90 * DAY_MS) {
+      showErrorToast("单次最多查询 90 天用量")
       return
     }
     setLoading(true)
@@ -599,38 +757,17 @@ export default function UsagePage() {
 
   if (!user?.is_admin) return <Navigate to="/data/basic/region" replace />
 
-  const setQuickRange = (days: number) => {
-    const end = new Date()
-    setEndInput(toShanghaiInput(end))
-    setStartInput(toShanghaiInput(new Date(end.getTime() - days * 86400000)))
-    setInterval(days > 14 ? "day" : "hour")
-  }
-
   return (
     <div className="mx-auto max-w-8xl space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">用量统计</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            汇总各区域上传、下载请求与传输量；所有时间均按 UTC+8 展示。
-          </p>
-        </div>
-        <div className="flex items-center gap-1 rounded-md bg-muted p-0.5">
-          {[{ days: 1, label: "24 小时" }, { days: 7, label: "7 天" }, { days: 30, label: "30 天" }].map((item) => (
-            <button
-              key={item.days}
-              type="button"
-              className="rounded-[5px] px-2.5 py-1.5 text-[11px] text-muted-foreground hover:bg-background hover:text-foreground"
-              onClick={() => setQuickRange(item.days)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h1 className="text-lg font-semibold text-foreground">用量统计</h1>
+        <p className="mt-1 text-xs text-muted-foreground">
+          汇总各区域上传、下载请求与传输量；所有时间均按 UTC+8 展示。
+        </p>
       </div>
 
       <section className="rounded-lg border border-border/70 bg-card/45 p-3" aria-label="统计筛选条件">
-        <div className="grid gap-3 lg:grid-cols-[auto_minmax(12rem,1fr)_minmax(11rem,1fr)_minmax(11rem,1fr)_auto_auto] lg:items-end">
+        <div className="grid gap-3 lg:grid-cols-[auto_minmax(12rem,1fr)_minmax(18rem,1.45fr)_auto_auto] lg:items-end">
           <div>
             <div className="mb-1.5 text-[11px] text-muted-foreground">统计维度</div>
             <Segment
@@ -661,14 +798,16 @@ export default function UsagePage() {
                   ))}
             </select>
           </label>
-          <label className="min-w-0 text-[11px] text-muted-foreground">
-            <span className="mb-1.5 block">开始时间（UTC+8）</span>
-            <Input type="datetime-local" className="h-9 text-xs" value={startInput} onChange={(event) => setStartInput(event.target.value)} />
-          </label>
-          <label className="min-w-0 text-[11px] text-muted-foreground">
-            <span className="mb-1.5 block">结束时间（UTC+8）</span>
-            <Input type="datetime-local" className="h-9 text-xs" value={endInput} onChange={(event) => setEndInput(event.target.value)} />
-          </label>
+          <div className="min-w-0 text-[11px] text-muted-foreground">
+            <span className="mb-1.5 block">统计时间（UTC+8）</span>
+            <DateTimeRangePicker
+              startValue={startInput}
+              endValue={endInput}
+              onStartChange={setStartInput}
+              onEndChange={setEndInput}
+              onPresetSelect={(days) => setInterval(days > 14 ? "day" : "hour")}
+            />
+          </div>
           <label className="text-[11px] text-muted-foreground">
             <span className="mb-1.5 block">聚合粒度</span>
             <select className={SELECT_CLASS} value={interval} onChange={(event) => setInterval(event.target.value as Interval)}>
@@ -695,27 +834,38 @@ export default function UsagePage() {
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="上传请求" value={totals.upload_requests.toLocaleString("zh-CN")} detail={`涉及 ${responses.length} 个区域`} icon={<Upload className="h-4 w-4 text-emerald-600" aria-hidden />} />
-        <SummaryCard label="上传传输量" value={formatBytes(totals.upload_bytes)} detail="成功上传分片的实际字节" icon={<Activity className="h-4 w-4 text-emerald-600" aria-hidden />} />
-        <SummaryCard label="下载请求" value={totals.download_requests.toLocaleString("zh-CN")} detail={`涉及 ${responses.length} 个区域`} icon={<Download className="h-4 w-4 text-blue-600" aria-hidden />} />
-        <SummaryCard label="下载传输量" value={formatBytes(totals.download_bytes)} detail="客户端实际读取的字节" icon={<Activity className="h-4 w-4 text-blue-600" aria-hidden />} />
-      </div>
-
       <section className="rounded-lg border border-border/70 bg-card/45">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-          <div>
-            <h2 className="text-sm font-semibold text-foreground">请求时序</h2>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">纵轴为请求次数，点面积随传输量增大；可滚轮缩放时间范围。</p>
-          </div>
-          <Segment
-            value={view}
-            label="请求时序视图"
-            options={[{ value: "chart", label: "散点图" }, { value: "table", label: "明细" }]}
-            onChange={setView}
-          />
+        <div className={cn(
+          "flex flex-wrap items-center justify-between gap-3 px-4 py-3",
+          activePanel === "timeline" && "border-b border-border/60",
+        )}>
+          <button
+            type="button"
+            className="group flex min-w-0 flex-1 items-center gap-3 text-left"
+            aria-expanded={activePanel === "timeline"}
+            aria-controls="usage-timeline-panel"
+            onClick={() => setActivePanel("timeline")}
+          >
+            <ChartScatter className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-foreground">请求时序</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">纵轴为请求次数，点面积随传输量增大；可滚轮缩放时间范围。</span>
+            </span>
+            <ChevronDown className={cn(
+              "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              activePanel === "timeline" && "rotate-180",
+            )} aria-hidden />
+          </button>
+          {activePanel === "timeline" ? (
+            <Segment
+              value={view}
+              label="请求时序视图"
+              options={[{ value: "chart", label: "散点图" }, { value: "table", label: "明细" }]}
+              onChange={setView}
+            />
+          ) : null}
         </div>
-        <div className="p-3 sm:p-4">
+        {activePanel === "timeline" ? <div id="usage-timeline-panel" className="p-3 sm:p-4">
           {loading ? (
             <div className="flex h-[320px] items-center justify-center text-xs text-muted-foreground">
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden />正在汇总各区域用量...
@@ -732,25 +882,43 @@ export default function UsagePage() {
             <UsageEventTable events={events} regionNames={regionNames} />
           )}
           {truncated ? (
-            <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">当前范围明细较多，列表仅展示各区域最近 2,000 条；汇总指标与图表仍为完整聚合结果。</div>
+            <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">当前范围明细较多，列表仅展示各区域最近 2,000 条；图表仍为完整聚合结果。</div>
           ) : null}
-        </div>
+        </div> : null}
       </section>
 
       <section className="rounded-lg border border-border/70 bg-card/45">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
-          <div>
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><MapPin className="h-4 w-4" aria-hidden />区域用量对比</h2>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">按请求实际进入的区域统计，不重复计算 MinIO 后台副本流量。</p>
-          </div>
-          <Segment
-            value={regionView}
-            label="区域用量视图"
-            options={[{ value: "chart", label: "图表" }, { value: "table", label: "列表" }]}
-            onChange={setRegionView}
-          />
+        <div className={cn(
+          "flex flex-wrap items-center justify-between gap-3 px-4 py-3",
+          activePanel === "region" && "border-b border-border/60",
+        )}>
+          <button
+            type="button"
+            className="group flex min-w-0 flex-1 items-center gap-3 text-left"
+            aria-expanded={activePanel === "region"}
+            aria-controls="usage-region-panel"
+            onClick={() => setActivePanel("region")}
+          >
+            <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-foreground">区域用量对比</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">按请求实际进入的区域统计，不重复计算 MinIO 后台副本流量。</span>
+            </span>
+            <ChevronDown className={cn(
+              "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              activePanel === "region" && "rotate-180",
+            )} aria-hidden />
+          </button>
+          {activePanel === "region" ? (
+            <Segment
+              value={regionView}
+              label="区域用量视图"
+              options={[{ value: "chart", label: "图表" }, { value: "table", label: "列表" }]}
+              onChange={setRegionView}
+            />
+          ) : null}
         </div>
-        <div className="p-3 sm:p-4">
+        {activePanel === "region" ? <div id="usage-region-panel" className="p-3 sm:p-4">
           {loading ? (
             <div className="flex h-[260px] items-center justify-center text-xs text-muted-foreground">正在加载区域数据...</div>
           ) : regionRows.length === 0 ? (
@@ -783,7 +951,7 @@ export default function UsagePage() {
               </TableBody>
             </Table>
           )}
-        </div>
+        </div> : null}
       </section>
     </div>
   )
