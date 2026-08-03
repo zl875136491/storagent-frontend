@@ -294,7 +294,7 @@ function UsageScatterChart({ points, dimension }: { points: UsagePoint[]; dimens
     chart.setOption(option, true)
   }, [chartRef, dark, dimension, points])
 
-  return <div ref={containerRef} className="h-[360px] min-h-[280px] w-full" />
+  return <div ref={containerRef} className="h-full min-h-0 w-full flex-1" />
 }
 
 interface RegionRow extends UsageTotals {
@@ -387,7 +387,7 @@ function RegionUsageChart({ rows }: { rows: RegionRow[] }) {
     }
     chart.setOption(option, true)
   }, [chartRef, dark, rows])
-  return <div ref={containerRef} className="h-[300px] min-h-[260px] w-full" />
+  return <div ref={containerRef} className="h-full min-h-0 w-full flex-1" />
 }
 
 function Segment<T extends string>({
@@ -583,44 +583,46 @@ function UsageEventTable({
   const safePage = Math.min(page, pageCount - 1)
   const rows = events.slice(safePage * EVENT_PAGE_SIZE, (safePage + 1) * EVENT_PAGE_SIZE)
   return (
-    <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>发生时间（UTC+8）</TableHead>
-            <TableHead>操作</TableHead>
-            <TableHead>APP</TableHead>
-            <TableHead>APIKey</TableHead>
-            <TableHead>区域</TableHead>
-            <TableHead className="text-right">传输量</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((event) => (
-            <TableRow key={`${event.region}-${event.id}`}>
-              <TableCell>{formatDateTime(event.occurred_at)}</TableCell>
-              <TableCell>
-                <span className={cn(
-                  "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
-                  event.operation === "upload"
-                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                    : "bg-blue-500/10 text-blue-700 dark:text-blue-400",
-                )}>
-                  {event.operation === "upload" ? "上传" : "下载"}
-                </span>
-              </TableCell>
-              <TableCell>
-                <div className="font-medium text-foreground">{event.app_shown_name || event.app_name}</div>
-                <div className="text-[10px] text-muted-foreground">{event.app_name}</div>
-              </TableCell>
-              <TableCell>{event.api_key_hint || event.api_key_id.slice(0, 12)}</TableCell>
-              <TableCell>{regionNames.get(event.region) || event.region}</TableCell>
-              <TableCell className="text-right font-medium">{formatBytes(event.bytes_transferred)}</TableCell>
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-auto">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-card">
+            <TableRow>
+              <TableHead>发生时间（UTC+8）</TableHead>
+              <TableHead>操作</TableHead>
+              <TableHead>APP</TableHead>
+              <TableHead>APIKey</TableHead>
+              <TableHead>区域</TableHead>
+              <TableHead className="text-right">传输量</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
+          </TableHeader>
+          <TableBody>
+            {rows.map((event) => (
+              <TableRow key={`${event.region}-${event.id}`}>
+                <TableCell>{formatDateTime(event.occurred_at)}</TableCell>
+                <TableCell>
+                  <span className={cn(
+                    "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    event.operation === "upload"
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                      : "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+                  )}>
+                    {event.operation === "upload" ? "上传" : "下载"}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <div className="font-medium text-foreground">{event.app_shown_name || event.app_name}</div>
+                  <div className="text-[10px] text-muted-foreground">{event.app_name}</div>
+                </TableCell>
+                <TableCell>{event.api_key_hint || event.api_key_id.slice(0, 12)}</TableCell>
+                <TableCell>{regionNames.get(event.region) || event.region}</TableCell>
+                <TableCell className="text-right font-medium">{formatBytes(event.bytes_transferred)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="mt-3 flex shrink-0 items-center justify-between border-t border-border/60 pt-3 text-[11px] text-muted-foreground">
         <span>共 {events.length.toLocaleString("zh-CN")} 条请求记录</span>
         <div className="flex items-center gap-2">
           <Button
@@ -646,7 +648,7 @@ function UsageEventTable({
           </Button>
         </div>
       </div>
-    </>
+    </div>
   )
 }
 
@@ -758,15 +760,15 @@ export default function UsagePage() {
   if (!user?.is_admin) return <Navigate to="/data/basic/region" replace />
 
   return (
-    <div className="mx-auto max-w-8xl space-y-4">
-      <div>
+    <div className="mx-auto flex min-h-full w-full max-w-8xl flex-col gap-4 lg:h-full lg:min-h-0">
+      <div className="shrink-0">
         <h1 className="text-lg font-semibold text-foreground">用量统计</h1>
         <p className="mt-1 text-xs text-muted-foreground">
           汇总各区域上传、下载请求与传输量；所有时间均按 UTC+8 展示。
         </p>
       </div>
 
-      <section className="rounded-lg border border-border/70 bg-card/45 p-3" aria-label="统计筛选条件">
+      <section className="shrink-0 rounded-lg border border-border/70 bg-card/45 p-3" aria-label="统计筛选条件">
         <div className="grid gap-3 lg:grid-cols-[auto_minmax(12rem,1fr)_minmax(18rem,1.45fr)_auto_auto] lg:items-end">
           <div>
             <div className="mb-1.5 text-[11px] text-muted-foreground">统计维度</div>
@@ -834,7 +836,10 @@ export default function UsagePage() {
         </div>
       ) : null}
 
-      <section className="rounded-lg border border-border/70 bg-card/45">
+      <section className={cn(
+        "flex flex-col rounded-lg border border-border/70 bg-card/45 lg:min-h-0",
+        activePanel === "timeline" ? "min-h-[26rem] flex-1" : "shrink-0",
+      )}>
         <div className={cn(
           "flex flex-wrap items-center justify-between gap-3 px-4 py-3",
           activePanel === "timeline" && "border-b border-border/60",
@@ -865,13 +870,13 @@ export default function UsagePage() {
             />
           ) : null}
         </div>
-        {activePanel === "timeline" ? <div id="usage-timeline-panel" className="p-3 sm:p-4">
+        {activePanel === "timeline" ? <div id="usage-timeline-panel" className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
           {loading ? (
-            <div className="flex h-[320px] items-center justify-center text-xs text-muted-foreground">
+            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden />正在汇总各区域用量...
             </div>
           ) : !hasData ? (
-            <div className="flex h-[260px] flex-col items-center justify-center text-center">
+            <div className="flex min-h-[20rem] flex-1 flex-col items-center justify-center text-center lg:min-h-0">
               <ChartScatter className="h-8 w-8 text-muted-foreground/55" aria-hidden />
               <div className="mt-3 text-sm font-medium text-foreground">所选范围暂无传输记录</div>
               <div className="mt-1 text-xs text-muted-foreground">完成新的上传或下载后，成功请求会出现在这里。</div>
@@ -887,7 +892,10 @@ export default function UsagePage() {
         </div> : null}
       </section>
 
-      <section className="rounded-lg border border-border/70 bg-card/45">
+      <section className={cn(
+        "flex flex-col rounded-lg border border-border/70 bg-card/45 lg:min-h-0",
+        activePanel === "region" ? "min-h-[26rem] flex-1" : "shrink-0",
+      )}>
         <div className={cn(
           "flex flex-wrap items-center justify-between gap-3 px-4 py-3",
           activePanel === "region" && "border-b border-border/60",
@@ -918,15 +926,15 @@ export default function UsagePage() {
             />
           ) : null}
         </div>
-        {activePanel === "region" ? <div id="usage-region-panel" className="p-3 sm:p-4">
+        {activePanel === "region" ? <div id="usage-region-panel" className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
           {loading ? (
-            <div className="flex h-[260px] items-center justify-center text-xs text-muted-foreground">正在加载区域数据...</div>
+            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">正在加载区域数据...</div>
           ) : regionRows.length === 0 ? (
-            <div className="flex h-[180px] items-center justify-center text-xs text-muted-foreground">暂无区域统计数据</div>
+            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">暂无区域统计数据</div>
           ) : regionView === "chart" ? (
             <RegionUsageChart rows={regionRows} />
           ) : (
-            <Table>
+            <div className="min-h-0 flex-1 overflow-auto"><Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>区域</TableHead>
@@ -949,7 +957,7 @@ export default function UsagePage() {
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </Table></div>
           )}
         </div> : null}
       </section>
