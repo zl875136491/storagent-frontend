@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Download, Eye, EyeOff, KeyRound, Server } from "lucide-react"
+import { Download, Eye, EyeOff, FileCode2, KeyRound, Server } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 
 import { ApiKeyProvider, useApiKey } from "@/components/guides/api-key-context"
@@ -30,6 +30,27 @@ import {
   type ComponentGuideLanguage,
 } from "./file-components-content"
 import { getApiGuideLanguage, isApiGuideLanguage } from "./api-guide-content"
+
+function LanguageFileIcon({ language }: { language: ComponentGuideLanguage }) {
+  const label = language === "typescript" ? "TS" : "PY"
+  return (
+    <span
+      className={cn(
+        "relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border",
+        language === "typescript"
+          ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+          : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+      )}
+      title={`${label} Markdown`}
+      aria-hidden
+    >
+      <FileCode2 className="h-3.5 w-3.5 opacity-40" />
+      <span className="absolute -bottom-1 -right-1 rounded-sm bg-background px-0.5 font-mono text-[7px] font-bold leading-3">
+        {label}
+      </span>
+    </span>
+  )
+}
 
 function ApiKeyBox() {
   const { apiKey, setApiKey, clearApiKey } = useApiKey()
@@ -146,8 +167,9 @@ function ComponentsGuideContent() {
           className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`下载 ${languageMeta.label} 组件接入文档`}
         >
-          <Download className="h-4 w-4" aria-hidden />
-          下载 Markdown
+          <LanguageFileIcon language={language} />
+          下载 {languageMeta.label} Markdown
+          <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         </a>
       </div>
 
@@ -247,18 +269,20 @@ function ComponentsGuideContent() {
           接入代码
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          下面是与在线演示相同的上传和下载流程封装。TypeScript 方案面向 Node.js，Python 方案使用 requests；两者都从环境变量读取配置。
+          {language === "typescript"
+            ? "完整 React 组件集成上传、进度、object_key 回填、元信息、定位和跨节点下载，只依赖 React，加入项目后即可引入。"
+            : "完整 Python 客户端类封装上传、元信息、定位和流式下载，调用方可取得 object_key、完整上传响应或下载结果字典。"}
         </p>
-        <div className="mt-5 grid gap-5 xl:grid-cols-2">
+        <div className="mt-5 space-y-5">
           <DocCodeBlock
             language={languageMeta.fence}
-            title={`${languageMeta.label} · 上传客户端`}
-            code={code.upload}
+            title={`${code.filename} · ${code.implementationTitle}`}
+            code={code.implementation}
           />
           <DocCodeBlock
             language={languageMeta.fence}
-            title={`${languageMeta.label} · 下载客户端`}
-            code={code.download}
+            title={`${languageMeta.label} · ${code.usageTitle}`}
+            code={code.usage}
           />
         </div>
       </section>
