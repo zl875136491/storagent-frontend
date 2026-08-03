@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Download, Eye, EyeOff, FileCode2, KeyRound, Server } from "lucide-react"
+import { Download, Eye, EyeOff, KeyRound, Server } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 
 import { ApiKeyProvider, useApiKey } from "@/components/guides/api-key-context"
@@ -11,6 +11,7 @@ import {
 } from "@/components/guides/guide-endpoints-context"
 import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
 import { DocCodeBlock } from "@/components/docs/code"
+import { LanguageBrandIcon } from "@/components/docs/language-brand-icon"
 import {
   DocHeading,
   DocLead,
@@ -30,27 +31,6 @@ import {
   type ComponentGuideLanguage,
 } from "./file-components-content"
 import { getApiGuideLanguage, isApiGuideLanguage } from "./api-guide-content"
-
-function LanguageFileIcon({ language }: { language: ComponentGuideLanguage }) {
-  const label = language === "typescript" ? "TS" : "PY"
-  return (
-    <span
-      className={cn(
-        "relative inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border",
-        language === "typescript"
-          ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"
-          : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-      )}
-      title={`${label} Markdown`}
-      aria-hidden
-    >
-      <FileCode2 className="h-3.5 w-3.5 opacity-40" />
-      <span className="absolute -bottom-1 -right-1 rounded-sm bg-background px-0.5 font-mono text-[7px] font-bold leading-3">
-        {label}
-      </span>
-    </span>
-  )
-}
 
 function ApiKeyBox() {
   const { apiKey, setApiKey, clearApiKey } = useApiKey()
@@ -167,7 +147,7 @@ function ComponentsGuideContent() {
           className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`下载 ${languageMeta.label} 组件接入文档`}
         >
-          <LanguageFileIcon language={language} />
+          <LanguageBrandIcon language={language} className="h-4 w-4" />
           下载 {languageMeta.label} Markdown
           <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         </a>

@@ -3,6 +3,7 @@ import { Download, KeyRound, Server, ShieldCheck } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 import { ApiEndpoint, ApiExamples, ApiParamTable } from "@/components/docs/api"
 import { DocCodeBlock, DocSplit } from "@/components/docs/code"
+import { LanguageBrandIcon } from "@/components/docs/language-brand-icon"
 import {
   DocHeading,
   DocLead,
@@ -75,8 +76,9 @@ export default function ApiGuidePage() {
           className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`下载 ${languageMeta.label} 接入文档`}
         >
-          <Download className="h-4 w-4" />
-          下载 Markdown
+          <LanguageBrandIcon language={language} className="h-4 w-4" />
+          下载 {languageMeta.label} Markdown
+          <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         </a>
       </div>
 
