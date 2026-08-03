@@ -21,12 +21,14 @@ export const COMPONENT_GUIDE_CODE: Record<ComponentGuideLanguage, ComponentGuide
     implementationTitle: "可直接引入的 React 组件",
     usageTitle: "页面调用示例",
     filename: "StoragentFiles.tsx",
-    implementation: `import { useEffect, useMemo, useState } from "react"
+    implementation: `import { useEffect, useMemo, useRef, useState } from "react"
 
 type Location = {
   region: string
   shown_name: string
   endpoint: string
+  stat_url: string
+  stat_body: { object_key: string }
   download_url: string
 }
 
@@ -47,12 +49,20 @@ type ApiErrorBody = {
   data?: { available_at?: Location[] }
 }
 
+export type DownloadProgress = {
+  status: "downloading" | "completed" | "cancelled"
+  receivedBytes: number
+  totalBytes: number | null
+  speedBytesPerSecond: number
+}
+
 export type StoragentFilesProps = {
   baseURL: string
   apiKey: string
   defaultObjectKey?: string
   chunkSizeBytes?: number
   onUploaded?: (result: { bucket: string; objectKey: string }) => void
+  onDownloadProgress?: (progress: DownloadProgress) => void
   onError?: (error: Error) => void
 }
 
@@ -75,6 +85,17 @@ function filenameFromObjectKey(objectKey: string) {
   return objectKey.split("/").filter(Boolean).pop() || "download.bin"
 }
 
+function formatBytes(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1)
+  return \`\${(size / 1024 ** index).toFixed(index === 0 ? 0 : 1)} \${units[index]}\`
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError"
+}
+
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement("a")
@@ -92,6 +113,7 @@ export function StoragentFiles({
   defaultObjectKey = "",
   chunkSizeBytes = 5 * 1024 * 1024,
   onUploaded,
+  onDownloadProgress,
   onError,
 }: StoragentFilesProps) {
   const [file, setFile] = useState<File | null>(null)
@@ -101,15 +123,18 @@ export function StoragentFiles({
   const [stat, setStat] = useState<ObjectStat | null>(null)
   const [locations, setLocations] = useState<Location[]>([])
   const [message, setMessage] = useState("")
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
+  const downloadProgressRef = useRef<DownloadProgress | null>(null)
+  const downloadAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (defaultObjectKey) setObjectKey(defaultObjectKey)
   }, [defaultObjectKey])
 
-  const ready = useMemo(
-    () => Boolean(baseURL && apiKey && !busy),
-    [apiKey, baseURL, busy],
-  )
+  useEffect(() => () => downloadAbortRef.current?.abort(), [])
+
+  const configured = useMemo(() => Boolean(baseURL && apiKey), [apiKey, baseURL])
+  const ready = configured && !busy
 
   const fail = (reason: unknown) => {
     const error = reason instanceof Error ? reason : new Error(String(reason))
@@ -117,8 +142,9 @@ export function StoragentFiles({
     onError?.(error)
   }
 
-  const requestJSON = async <T,>(path: string, init: RequestInit): Promise<T> => {
-    const response = await fetch(joinURL(baseURL, path), {
+  const requestJSON = async <T,>(pathOrURL: string, init: RequestInit): Promise<T> => {
+    const url = pathOrURL.startsWith("http") ? pathOrURL : joinURL(baseURL, pathOrURL)
+    const response = await fetch(url, {
       ...init,
       headers: { "x-api-key": apiKey, ...(init.headers ?? {}) },
     })
@@ -236,15 +262,39 @@ export function StoragentFiles({
     }
   }
 
-  const download = async (downloadURL?: string) => {
-    if (!objectKey.trim() || !ready) return
+  const publishDownloadProgress = (next: DownloadProgress) => {
+    downloadProgressRef.current = next
+    setDownloadProgress(next)
+    onDownloadProgress?.(next)
+  }
+
+  const download = async (location?: Location) => {
+    if (!objectKey.trim() || !configured || busy) return
+    const controller = new AbortController()
+    downloadAbortRef.current = controller
     setBusy(true)
     setMessage("")
+    publishDownloadProgress({
+      status: "downloading",
+      receivedBytes: 0,
+      totalBytes: null,
+      speedBytesPerSecond: 0,
+    })
     try {
       const query = new URLSearchParams({ object_key: objectKey.trim(), offset: "0", length: "0" })
+      const metadata = await requestJSON<ObjectStat>(
+        location?.stat_url || "/api/files/object/stat",
+        {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(location?.stat_body || { object_key: objectKey.trim() }),
+        },
+      )
+      const totalBytes = metadata.size
       const response = await fetch(
-        downloadURL || joinURL(baseURL, \`/api/files/object/download?\${query}\`),
-        { headers: { "x-api-key": apiKey } },
+        location?.download_url || joinURL(baseURL, \`/api/files/object/download?\${query}\`),
+        { signal: controller.signal, headers: { "x-api-key": apiKey } },
       )
       if (!response.ok) {
         const body = await readBody(response)
@@ -252,21 +302,79 @@ export function StoragentFiles({
         if (remote?.length) {
           setLocations(remote)
           setMessage("当前节点没有该对象，请选择可用服务点下载")
+          setDownloadProgress(null)
+          downloadProgressRef.current = null
           return
         }
         throw new Error((body.json as ApiErrorBody | null)?.msg || body.text || \`HTTP \${response.status}\`)
       }
-      saveBlob(await response.blob(), filenameFromObjectKey(objectKey))
+      if (!response.body) throw new Error("当前浏览器不支持流式下载进度")
+
+      const reader = response.body.getReader()
+      const chunks: BlobPart[] = []
+      const startedAt = performance.now()
+      let lastAt = startedAt
+      let lastBytes = 0
+      let receivedBytes = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value.slice().buffer)
+        receivedBytes += value.byteLength
+        const now = performance.now()
+        if (lastBytes === 0 || now - lastAt >= 250) {
+          const speed = ((receivedBytes - lastBytes) * 1000) / Math.max(1, now - lastAt)
+          publishDownloadProgress({
+            status: "downloading",
+            receivedBytes,
+            totalBytes,
+            speedBytesPerSecond: speed,
+          })
+          lastAt = now
+          lastBytes = receivedBytes
+        }
+      }
+
+      const averageSpeed = (receivedBytes * 1000) / Math.max(1, performance.now() - startedAt)
+      if (controller.signal.aborted) throw new DOMException("Download cancelled", "AbortError")
+      saveBlob(
+        new Blob(chunks, { type: response.headers.get("Content-Type") || "application/octet-stream" }),
+        filenameFromObjectKey(objectKey),
+      )
+      publishDownloadProgress({
+        status: "completed",
+        receivedBytes,
+        totalBytes,
+        speedBytesPerSecond: averageSpeed,
+      })
     } catch (error) {
-      fail(error)
+      if (isAbortError(error)) {
+        const current = downloadProgressRef.current
+        if (current) publishDownloadProgress({ ...current, status: "cancelled", speedBytesPerSecond: 0 })
+        setMessage("下载已取消")
+      } else {
+        const remote = (error as Error & { body?: ApiErrorBody }).body?.data?.available_at
+        if (remote?.length) {
+          setLocations(remote)
+          setDownloadProgress(null)
+          downloadProgressRef.current = null
+          setMessage("当前节点没有该对象，请选择可用服务点下载")
+        } else {
+          setDownloadProgress(null)
+          downloadProgressRef.current = null
+          fail(error)
+        }
+      }
     } finally {
+      if (downloadAbortRef.current === controller) downloadAbortRef.current = null
       setBusy(false)
     }
   }
 
   return (
     <section aria-label="Storagent 文件组件" className="storagent-files">
-      <fieldset disabled={!ready}>
+      <fieldset disabled={!configured}>
         <legend>上传文件</legend>
         <input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
         <button type="button" disabled={!file || !ready} onClick={() => void upload()}>
@@ -275,17 +383,55 @@ export function StoragentFiles({
         {progress ? <progress value={progress.done} max={progress.total} /> : null}
       </fieldset>
 
-      <fieldset disabled={!ready}>
+      <fieldset disabled={!configured}>
         <legend>查询与下载</legend>
         <input
           value={objectKey}
           placeholder="object_key"
-          onChange={(event) => setObjectKey(event.target.value)}
+          disabled={busy}
+          onChange={(event) => {
+            setObjectKey(event.target.value)
+            setDownloadProgress(null)
+            downloadProgressRef.current = null
+          }}
         />
-        <button type="button" onClick={() => void getStat()}>获取元信息</button>
-        <button type="button" onClick={() => void locate()}>定位服务点</button>
-        <button type="button" onClick={() => void download()}>下载</button>
+        <button type="button" disabled={busy} onClick={() => void getStat()}>获取元信息</button>
+        <button type="button" disabled={busy} onClick={() => void locate()}>定位服务点</button>
+        <button type="button" disabled={busy} onClick={() => void download()}>下载</button>
       </fieldset>
+
+      {downloadProgress ? (
+        <div aria-live="polite">
+          <strong>
+            {downloadProgress.status === "downloading"
+              ? "正在下载"
+              : downloadProgress.status === "completed"
+                ? "下载完成"
+                : "下载已取消"}
+          </strong>
+          <progress
+            value={downloadProgress.totalBytes == null
+              ? 0
+              : downloadProgress.totalBytes === 0
+                ? downloadProgress.status === "completed" ? 100 : 0
+                : (downloadProgress.receivedBytes / downloadProgress.totalBytes) * 100}
+            max={100}
+          />
+          <span>
+            {formatBytes(downloadProgress.receivedBytes)} / {downloadProgress.totalBytes == null
+              ? "正在获取文件大小"
+              : formatBytes(downloadProgress.totalBytes)} · {downloadProgress.totalBytes == null
+                ? "--"
+                : downloadProgress.totalBytes === 0
+                  ? downloadProgress.status === "completed" ? "100%" : "0%"
+                  : \`\${Math.min(100, downloadProgress.receivedBytes * 100 / downloadProgress.totalBytes).toFixed(1)}%\`
+              } · {formatBytes(downloadProgress.speedBytesPerSecond)}/s
+          </span>
+          {downloadProgress.status === "downloading" ? (
+            <button type="button" onClick={() => downloadAbortRef.current?.abort()}>取消下载</button>
+          ) : null}
+        </div>
+      ) : null}
 
       {message ? <p role="status">{message}</p> : null}
       {stat ? <pre>{JSON.stringify(stat, null, 2)}</pre> : null}
@@ -294,7 +440,7 @@ export function StoragentFiles({
           {locations.map((location) => (
             <li key={location.endpoint}>
               {location.shown_name} ({location.region})
-              <button type="button" onClick={() => void download(location.download_url)}>
+              <button type="button" disabled={busy} onClick={() => void download(location)}>
                 从此节点下载
               </button>
             </li>
@@ -312,6 +458,7 @@ export function FilesPage() {
       baseURL={import.meta.env.VITE_STORAGENT_BASE_URL}
       apiKey={import.meta.env.VITE_STORAGENT_API_KEY}
       onUploaded={({ objectKey }) => console.log("object_key:", objectKey)}
+      onDownloadProgress={(progress) => console.log("download:", progress)}
       onError={(error) => console.error(error)}
     />
   )
@@ -324,8 +471,11 @@ export function FilesPage() {
     implementation: `from __future__ import annotations
 
 import mimetypes
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, overload
+from threading import Event
+from time import monotonic
+from typing import Any, Callable, Literal, overload
 
 import requests
 
@@ -335,6 +485,26 @@ class StoragentError(RuntimeError):
         self.status = status
         self.body = body
         super().__init__((body or {}).get("msg") or f"Storagent HTTP {status}")
+
+
+class DownloadCancelled(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class DownloadProgress:
+    downloaded_bytes: int
+    total_bytes: int | None
+    bytes_per_second: float
+    elapsed_seconds: float
+
+    @property
+    def percent(self) -> float | None:
+        if self.total_bytes is None:
+            return None
+        if self.total_bytes == 0:
+            return 100.0
+        return min(100.0, self.downloaded_bytes * 100 / self.total_bytes)
 
 
 class StoragentFilesClient:
@@ -451,7 +621,14 @@ class StoragentFilesClient:
             params={"object_key": object_key, "offset": 0, "length": 0},
         )
 
-    def download_object(self, object_key: str, output_path: str | Path) -> dict[str, Any]:
+    def download_object(
+        self,
+        object_key: str,
+        output_path: str | Path,
+        *,
+        on_progress: Callable[[DownloadProgress], None] | None = None,
+        cancel_event: Event | None = None,
+    ) -> dict[str, Any]:
         location: dict[str, Any] | None = None
         try:
             metadata = self.stat_object(object_key)
@@ -463,12 +640,21 @@ class StoragentFilesClient:
                 if not available:
                     raise FileNotFoundError(object_key) from error
                 location = available[0]
-                metadata = {"object_key": object_key}
+                metadata = self._request(
+                    "POST",
+                    location["stat_url"],
+                    json=location.get("stat_body") or {"object_key": object_key},
+                ).json()
             else:
                 raise
 
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
+        partial_path = path.with_name(path.name + ".part")
+        total_bytes = int(metadata["size"]) if metadata.get("size") is not None else None
+        if cancel_event and cancel_event.is_set():
+            raise DownloadCancelled(f"download cancelled before start: {object_key}")
+
         if location:
             response = self._request("GET", location["download_url"], stream=True)
         else:
@@ -479,16 +665,66 @@ class StoragentFilesClient:
                 stream=True,
             )
 
-        with path.open("wb") as target:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
+        started_at = monotonic()
+        last_report_at = started_at
+        last_report_bytes = 0
+        downloaded_bytes = 0
+        completed = False
+
+        try:
+            with partial_path.open("wb") as target:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if cancel_event and cancel_event.is_set():
+                        raise DownloadCancelled(
+                            f"download cancelled after {downloaded_bytes} bytes: {object_key}"
+                        )
+                    if not chunk:
+                        continue
                     target.write(chunk)
+                    downloaded_bytes += len(chunk)
+
+                    now = monotonic()
+                    if on_progress and (
+                        last_report_bytes == 0 or now - last_report_at >= 0.25
+                    ):
+                        on_progress(DownloadProgress(
+                            downloaded_bytes=downloaded_bytes,
+                            total_bytes=total_bytes,
+                            bytes_per_second=(downloaded_bytes - last_report_bytes)
+                            / max(0.001, now - last_report_at),
+                            elapsed_seconds=now - started_at,
+                        ))
+                        last_report_at = now
+                        last_report_bytes = downloaded_bytes
+
+            if cancel_event and cancel_event.is_set():
+                raise DownloadCancelled(
+                    f"download cancelled after {downloaded_bytes} bytes: {object_key}"
+                )
+            elapsed_seconds = max(0.001, monotonic() - started_at)
+            final_progress = DownloadProgress(
+                downloaded_bytes=downloaded_bytes,
+                total_bytes=total_bytes,
+                bytes_per_second=downloaded_bytes / elapsed_seconds,
+                elapsed_seconds=elapsed_seconds,
+            )
+            if on_progress:
+                on_progress(final_progress)
+            partial_path.replace(path)
+            completed = True
+        finally:
+            response.close()
+            if not completed:
+                partial_path.unlink(missing_ok=True)
 
         return {
             "object_key": object_key,
             "output_path": str(path),
             "metadata": metadata,
             "source": location,
+            "downloaded_bytes": downloaded_bytes,
+            "elapsed_seconds": final_progress.elapsed_seconds,
+            "average_bytes_per_second": final_progress.bytes_per_second,
         }
 
     def close(self) -> None:
@@ -500,8 +736,19 @@ class StoragentFilesClient:
     def __exit__(self, *_: object) -> None:
         self.close()`,
     usage: `import os
+from threading import Event
 
-from storagent_files import StoragentFilesClient
+from storagent_files import DownloadProgress, StoragentFilesClient
+
+
+def show_download_progress(progress: DownloadProgress) -> None:
+    percent = "--" if progress.percent is None else f"{progress.percent:.1f}%"
+    speed_mib = progress.bytes_per_second / 1024 / 1024
+    print(f"download {percent} · {speed_mib:.2f} MiB/s")
+
+
+cancel_download = Event()
+# GUI 或任务队列的“取消”处理器中调用 cancel_download.set()。
 
 
 with StoragentFilesClient(
@@ -515,7 +762,12 @@ with StoragentFilesClient(
     print("upload result:", upload_result)
 
     metadata = files.stat_object(object_key)
-    download_result = files.download_object(object_key, "./downloads/example.bin")
+    download_result = files.download_object(
+        object_key,
+        "./downloads/example.bin",
+        on_progress=show_download_progress,
+        cancel_event=cancel_download,
+    )
     print("metadata:", metadata)
     print("download result:", download_result)`,
   },
@@ -537,17 +789,28 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "## 给开发者与 AI 的实施目标",
     "",
     isTypeScript
-      ? "将完整组件文件加入 React 项目后直接引入。组件覆盖文件选择、分片上传、object_key 回填、元信息查询、服务点定位、当前节点下载与跨区域回退下载。"
-      : "将客户端类文件加入 Python 项目后直接实例化。类对外提供上传、元信息、定位和下载方法；上传可返回 object_key 或完整 JSON，下载返回结果字典。",
+      ? "将完整组件文件加入 React 项目后直接引入。组件覆盖文件选择、分片上传、object_key 回填、元信息查询、服务点定位、当前节点与跨区域回退下载，并显示下载进度、速度和取消动作。"
+      : "将客户端类文件加入 Python 项目后直接实例化。类对外提供上传、元信息、定位和下载方法；上传可返回 object_key 或完整 JSON，下载支持进度回调、取消事件并返回结果字典。",
     "",
     "## 安全约束",
     "",
     "- APIKey 只使用 `x-api-key` 请求头，不得放入 URL 或日志。",
     "- `stat` 使用 POST JSON；`locate` 与 `download` 的 object_key 使用标准 URL 编码。",
-    "- 上传异常时调用 multipart abort；下载大文件采用流式处理。",
+    "- 上传异常时调用 multipart abort；下载大文件采用流式处理，不得先将完整响应载入内存后才更新进度。",
+    "- 下载前使用 POST stat 获取准确总大小；下载过程中至少展示已接收字节、总大小、百分比和实时速度。",
+    "- 用户取消下载时必须立即中断网络读取，并且不得保存或保留可被误用的残缺文件。",
     isTypeScript
       ? "- 浏览器组件适合可信内网或临时演示。互联网生产系统应由业务服务端代持 APIKey。"
       : "- APIKey 应由服务端环境变量或密钥管理系统注入。",
+    "",
+    "## 下载进度与取消契约",
+    "",
+    "1. 下载前调用 `POST /api/files/object/stat`，使用响应中的 `size` 作为总字节数；跨节点下载使用定位结果中的 `stat_url` 和 `stat_body`。",
+    "2. 读取下载响应流时累计已接收字节，并按不高于每 250ms 一次的频率更新速度和百分比，避免高频 UI 刷新。",
+    "3. 只有响应流完整结束后才生成最终下载文件。取消、网络错误或服务错误均不得产出最终文件。",
+    isTypeScript
+      ? "4. React 组件通过 `onDownloadProgress` 向业务模块上报 `status`、`receivedBytes`、`totalBytes` 与 `speedBytesPerSecond`；取消按钮调用 `AbortController.abort()`。"
+      : "4. Python 类通过 `on_progress(DownloadProgress)` 回调上报进度；业务线程调用 `cancel_event.set()` 后，下载循环抛出 `DownloadCancelled` 并删除 `.part` 临时文件。",
     "",
     "## 安装与文件位置",
     "",
@@ -570,7 +833,9 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "- [ ] 上传结果可供外部业务模块取得 object_key 或完整响应。",
     "- [ ] stat 使用 POST JSON，能够处理业务码 404032。",
     "- [ ] 当前节点无副本时能从 available_at 选择节点继续下载。",
-    "- [ ] 下载结果可被外部业务模块继续处理。",
+    "- [ ] 当前节点和跨节点下载均持续上报已接收字节、总大小、百分比与速度。",
+    "- [ ] 下载可以由用户或调用模块取消，取消后不产生最终文件。",
+    "- [ ] 下载完成结果可被外部业务模块继续处理。",
     "",
   ].join("\n")
 }

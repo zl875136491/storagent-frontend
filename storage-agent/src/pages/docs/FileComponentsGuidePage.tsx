@@ -138,7 +138,7 @@ function ComponentsGuideContent() {
         <div className="min-w-0">
           <DocTitle>功能组件引导</DocTitle>
           <DocLead>
-            用一套 APIKey 和服务端点在线验证上传、元信息查询、跨区域定位与下载；下方提供 TypeScript 与 Python 两种客户端实现。
+            用一套 APIKey 和服务端点在线验证上传、元信息查询、跨区域定位与可取消下载；下方提供 TypeScript 与 Python 两种客户端实现。
           </DocLead>
         </div>
         <a
@@ -237,7 +237,7 @@ function ComponentsGuideContent() {
           在线下载
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          可先获取元信息或定位服务点，再下载对象。若当前服务点没有副本，演示会展示可用节点并支持直接回退下载。
+          下载过程实时展示完成比例、已接收数据量与传输速度，并可随时取消。若当前服务点没有副本，演示会展示可用节点并让跨节点下载沿用同一套进度控制。
         </p>
         <div className="mt-4">
           <FileDownloadDemo apiKey={apiKey} baseURL={base} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
@@ -250,8 +250,8 @@ function ComponentsGuideContent() {
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           {language === "typescript"
-            ? "完整 React 组件集成上传、进度、object_key 回填、元信息、定位和跨节点下载，只依赖 React，加入项目后即可引入。"
-            : "完整 Python 客户端类封装上传、元信息、定位和流式下载，调用方可取得 object_key、完整上传响应或下载结果字典。"}
+            ? "完整 React 组件集成上传、object_key 回填、元信息、定位，以及带进度、速度和取消能力的跨节点下载；只依赖 React，加入项目后即可引入。"
+            : "完整 Python 客户端类封装上传、元信息、定位和流式下载；下载支持进度回调与取消事件，调用方可取得 object_key、完整上传响应或下载结果字典。"}
         </p>
         <div className="mt-5 space-y-5">
           <DocCodeBlock
