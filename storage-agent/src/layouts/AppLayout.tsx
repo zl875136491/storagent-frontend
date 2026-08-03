@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import {
   BookOpen,
   Boxes,
+  ChartScatter,
   ChevronDown,
   Database,
   FileStack,
@@ -301,6 +302,13 @@ function AppShell() {
                     {({ isActive }) => (
                       <SidebarMenuButton active={isActive} icon={<Users aria-hidden />}>
                         角色管理
+                      </SidebarMenuButton>
+                    )}
+                  </NavLink>
+                  <NavLink to="/admin/usage" onClick={handleNavClick}>
+                    {({ isActive }) => (
+                      <SidebarMenuButton active={isActive} icon={<ChartScatter aria-hidden />}>
+                        用量统计
                       </SidebarMenuButton>
                     )}
                   </NavLink>

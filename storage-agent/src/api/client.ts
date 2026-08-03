@@ -254,6 +254,85 @@ export interface AIProviderTestResponse {
   latency_ms: number
 }
 
+export interface UsageApplicationOption {
+  name: string
+  shown_name: string
+}
+
+export interface UsageAPIKeyOption {
+  id: string
+  hint: string
+  app_name: string
+  app_shown_name: string
+}
+
+export interface UsageOptionsResponse {
+  applications: UsageApplicationOption[]
+  api_keys: UsageAPIKeyOption[]
+}
+
+export interface UsageTotals {
+  upload_requests: number
+  upload_bytes: number
+  download_requests: number
+  download_bytes: number
+}
+
+export interface UsagePoint extends UsageTotals {
+  period_start: string
+  app_name: string
+  app_shown_name: string
+  api_key_id: string
+  api_key_hint: string
+  region: string
+  first_at: string
+  last_at: string
+}
+
+export interface UsageEventItem {
+  id: string
+  occurred_at: string
+  app_name: string
+  app_shown_name: string
+  api_key_id: string
+  api_key_hint: string
+  operation: "upload" | "download"
+  bytes_transferred: number
+  region: string
+}
+
+export interface UsageQueryResponse {
+  region: string
+  /** 前端跨区域汇总时由公开服务点目录补充 */
+  region_name?: string
+  start_at: string
+  end_at: string
+  interval: "hour" | "day"
+  totals: UsageTotals
+  points: UsagePoint[]
+  events: UsageEventItem[]
+  truncated: boolean
+}
+
+export interface UsageQueryParams {
+  start_at: string
+  end_at: string
+  interval: "hour" | "day"
+  app_name?: string
+  api_key_id?: string
+}
+
+export interface UsageRegionFailure {
+  endpoint: string
+  region: string
+  message: string
+}
+
+export interface UsageAcrossRegionsResponse {
+  data: UsageQueryResponse[]
+  failures: UsageRegionFailure[]
+}
+
 /** 存储桶跨站点复制规则状态（与 GET …/replicates 一致） */
 export interface BucketReplicateRuleStatus {
   status: string
@@ -1128,6 +1207,120 @@ export async function fetchPublicEndpointsApi(
   accessToken?: string,
 ): Promise<PublicEndpointsResponse> {
   return apiGet<PublicEndpointsResponse>("/api/public/endpoints", accessToken)
+}
+
+export async function fetchUsageOptionsApi(
+  accessToken?: string,
+): Promise<UsageOptionsResponse> {
+  return apiGet<UsageOptionsResponse>("/api/usage/options", accessToken)
+}
+
+function buildUsageQuery(params: UsageQueryParams): string {
+  const query = new URLSearchParams({
+    start_at: params.start_at,
+    end_at: params.end_at,
+    interval: params.interval,
+  })
+  if (params.app_name) query.set("app_name", params.app_name)
+  if (params.api_key_id) query.set("api_key_id", params.api_key_id)
+  return query.toString()
+}
+
+async function fetchUsageAtEndpoint(
+  endpoint: string,
+  region: string,
+  regionName: string,
+  params: UsageQueryParams,
+  accessToken?: string,
+): Promise<UsageQueryResponse> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), 30_000)
+  try {
+    const headers = new Headers()
+    const token = authTokenGetter?.() ?? accessToken
+    if (token) headers.set("Authorization", `Bearer ${token}`)
+    const response = await fetch(
+      `${endpoint.replace(/\/$/, "")}/api/usage?${buildUsageQuery(params)}`,
+      { method: "GET", headers, signal: controller.signal },
+    )
+    const text = await response.text().catch(() => "")
+    if (!response.ok) {
+      const parsed = parseApiErrorBody(text)
+      const detail = typeof parsed?.data === "string" ? parsed.data : parsed?.msg
+      throw new Error(detail || `请求失败 (${response.status})`)
+    }
+    const parsed = JSON.parse(text) as UsageQueryResponse
+    return {
+      ...parsed,
+      region: parsed.region || region,
+      region_name: regionName || parsed.region_name || parsed.region || region,
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("请求超时")
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+/**
+ * 用量事件保留在产生请求的区域数据库；这里按区域选择一个主服务并并发汇总。
+ * 单个区域故障时保留其余区域的结果，由页面明确展示缺失范围。
+ */
+export async function fetchUsageAcrossRegionsApi(
+  params: UsageQueryParams,
+  accessToken?: string,
+): Promise<UsageAcrossRegionsResponse> {
+  const endpoints = await fetchPublicEndpointsApi(accessToken)
+  const selected = new Map<string, PublicEndpointsResponse["data"][number]>()
+  for (const item of endpoints.data) {
+    const previous = selected.get(item.region_id)
+    if (!previous || (!previous.master && item.master)) {
+      selected.set(item.region_id, item)
+    }
+  }
+
+  if (selected.size === 0) {
+    selected.set("current", {
+      region_id: "current",
+      server_id: "current",
+      name: "current",
+      shown_name: "当前区域",
+      master: true,
+      endpoint: requireApiBaseUrl(),
+    })
+  }
+
+  const targets = [...selected.values()]
+  const results = await Promise.allSettled(
+    targets.map(async (item) => ({
+      item,
+      response: await fetchUsageAtEndpoint(
+        item.endpoint,
+        item.region_id,
+        item.shown_name,
+        params,
+        accessToken,
+      ),
+    })),
+  )
+  const data: UsageQueryResponse[] = []
+  const failures: UsageRegionFailure[] = []
+  results.forEach((result, index) => {
+    const item = targets[index]
+    if (result.status === "fulfilled") {
+      data.push(result.value.response)
+    } else {
+      failures.push({
+        endpoint: item.endpoint,
+        region: item.shown_name || item.region_id,
+        message: result.reason instanceof Error ? result.reason.message : "请求失败",
+      })
+    }
+  })
+  return { data, failures }
 }
 
 /** 对象在远端副本节点的下载指引 */

@@ -14,7 +14,8 @@ import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 
 export default function RegionPage() {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
+  const isAdmin = user?.is_admin === true
   const [regions, setRegions] = useState<Region[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -70,11 +71,11 @@ export default function RegionPage() {
             维护系统中的区域信息，供 MinIO 服务等模块进行关联选择。
           </p>
         </div>
-        <div className="sticky top-3">
+        {isAdmin ? <div className="sticky top-3">
           <Button size="md" onClick={() => setShowCreateModal(true)}>
             新建区域
           </Button>
-        </div>
+        </div> : null}
       </div>
 
       {loading ? (
@@ -91,7 +92,7 @@ export default function RegionPage() {
               暂无区域数据
             </div>
             <div className="text-xs text-muted-foreground">
-              点击右上角「新建区域」按钮，创建第一个区域。
+              {isAdmin ? "点击右上角「新建区域」按钮，创建第一个区域。" : "暂无可查看的区域。"}
             </div>
           </CardContent>
         </Card>
@@ -127,7 +128,7 @@ export default function RegionPage() {
         </div>
       )}
 
-      {showCreateModal && (
+      {isAdmin && showCreateModal && (
         <Modal title="新建区域" onClose={() => setShowCreateModal(false)}>
           <div className="space-y-4 p-1 text-sm">
             <div>
@@ -185,4 +186,3 @@ export default function RegionPage() {
     </div>
   )
 }
-

@@ -21,6 +21,7 @@ import { Card, CardContent } from "../../components/ui/card"
 import { DialogFooter } from "../../components/ui/dialog"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
+import { formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
 
 type ApprovalPhase = "confirm" | "streaming" | "finished"
@@ -73,7 +74,8 @@ function StatusGlyph({
 }
 
 export default function ApplicationPage() {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
+  const isAdmin = user?.is_admin === true
   const { beginBlock, endBlock } = useNavigationLeaveBlock()
 
   const [applications, setApplications] = useState<Application[]>([])
@@ -304,7 +306,7 @@ export default function ApplicationPage() {
                         <span className="inline-flex items-center justify-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
                           已授权
                         </span>
-                      ) : (
+                      ) : isAdmin ? (
                         <Button
                           type="button"
                           size="sm"
@@ -315,6 +317,10 @@ export default function ApplicationPage() {
                         >
                           授权
                         </Button>
+                      ) : (
+                        <span className="inline-flex items-center justify-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                          待管理员授权
+                        </span>
                       )}
                     </span>
                   </div>
@@ -330,7 +336,7 @@ export default function ApplicationPage() {
                   <div>
                     <div className="text-muted-foreground/70">创建时间</div>
                     <div className="mt-0.5 text-xs text-foreground/80">
-                      {app.created_at.replace("T", " ")}
+                      {formatDateTime(app.created_at)}
                     </div>
                   </div>
                   <div>
@@ -342,7 +348,7 @@ export default function ApplicationPage() {
                   <div>
                     <div className="text-muted-foreground/70">授权时间</div>
                     <div className="mt-0.5 text-xs text-foreground/80">
-                      {app.enabled_at ? app.enabled_at.replace("T", " ") : "-"}
+                      {formatDateTime(app.enabled_at)}
                     </div>
                   </div>
                 </div>
@@ -432,7 +438,7 @@ export default function ApplicationPage() {
           </div>
         </Modal>
       )}
-      {approvalTarget && (
+      {isAdmin && approvalTarget && (
         <Modal
           title={approvalModalTitle}
           onClose={() => {
@@ -486,7 +492,7 @@ export default function ApplicationPage() {
                   <div>
                     <div className="text-muted-foreground/70">创建时间</div>
                     <div className="mt-0.5 text-foreground/90">
-                      {approvalTarget.created_at.replace("T", " ")}
+                      {formatDateTime(approvalTarget.created_at)}
                     </div>
                   </div>
                 </div>

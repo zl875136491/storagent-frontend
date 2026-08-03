@@ -18,6 +18,7 @@ import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { CheckIcon } from "lucide-react"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
+import { formatDateTime } from "../../lib/format"
 
 export default function APIKeyPage() {
   const { accessToken, user } = useAuth()
@@ -203,7 +204,7 @@ export default function APIKeyPage() {
                     </span>
                     <div className="text-[10px] text-muted-foreground/80">失效时间</div>
                     <div className="mt-0.5 text-[11px] font-medium text-primary">
-                      {item.expired_at ? item.expired_at.replace("T", " ") : "永久有效"}
+                      {formatDateTime(item.expired_at, "永久有效")}
                     </div>
                   </div>
                 </div>
@@ -375,9 +376,7 @@ export default function APIKeyPage() {
               <div>
                 <div className="text-muted-foreground/70">失效时间</div>
                 <div className="mt-0.5 text-foreground/90">
-                  {createdApiKey.expired_at
-                    ? createdApiKey.expired_at.replace("T", " ")
-                    : "永久有效"}
+                  {formatDateTime(createdApiKey.expired_at, "永久有效")}
                 </div>
               </div>
             </div>
@@ -434,4 +433,3 @@ export default function APIKeyPage() {
     </div>
   )
 }
-

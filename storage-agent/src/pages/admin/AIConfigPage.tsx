@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { Switch } from "../../components/ui/switch"
+import { formatDateTime } from "../../lib/format"
 
 type FormState = AIProviderUpdateRequest & {
   api_key: string
@@ -216,7 +217,7 @@ export default function AIConfigPage() {
               <CardTitle>模型提供商</CardTitle>
               <CardDescription>
                 {config?.updated_at
-                  ? `最近由 ${config.updated_by || "管理员"} 更新于 ${new Date(config.updated_at).toLocaleString()}`
+                  ? `最近由 ${config.updated_by || "管理员"} 更新于 ${formatDateTime(config.updated_at)}`
                   : "尚未保存配置"}
               </CardDescription>
             </div>
