@@ -510,12 +510,6 @@ export default function BucketPage() {
                             value={treemapSelection.name}
                             label={treemapSelection.isDirectory ? "目录名" : "文件名"}
                           />
-                          {treemapSelection.objectKey ? (
-                            <CopyTextButton
-                              value={`${treemapSelection.bucketName}/${treemapSelection.objectKey}`}
-                              label="完整对象路径"
-                            />
-                          ) : null}
                         </div>
                       </div>
                     ) : null}
@@ -526,14 +520,18 @@ export default function BucketPage() {
                       <div className="pointer-events-none absolute right-0 top-7 z-20 hidden w-72 rounded-md border border-border bg-background/95 p-2 text-[11px] leading-relaxed text-muted-foreground shadow-lg group-hover:block">
                         <div>当前服务器总占用空间：{formatBytes(totalSize)}</div>
                         <div className="mt-1">
-                          点击文件块后可复制文件名或对象路径，使用树图路径导航切换目录层级。
+                          点击文件块后可查看对象信息，使用树图路径导航切换目录层级。
                         </div>
                       </div>
                     </div>
                     <BucketTreemap buckets={buckets} onSelect={setTreemapSelection} />
                   </>
                 ) : (
-                  <BucketFileInventory key={selectedServerId} buckets={buckets} />
+                  <BucketFileInventory
+                    key={selectedServerId}
+                    buckets={buckets}
+                    serverId={selectedServerId}
+                  />
                 )}
               </div>
             </div>

@@ -196,6 +196,23 @@ export interface BucketsResponse {
   ttl_seconds: number
 }
 
+export interface AdminObjectDownloadLinkRequest {
+  bucket: string
+  object_key: string
+}
+
+/** 管理员运维使用的一次性对象下载链接。链接由 Storagent 兑换，不暴露 MinIO 凭证。 */
+export interface AdminObjectDownloadLinkResponse {
+  message?: string
+  download_url?: string
+  /** 兼容早期接口字段，正式响应优先使用 download_url。 */
+  url?: string
+  expires_at?: string | null
+  expires_in_seconds?: number
+  single_use?: boolean
+  filename?: string
+}
+
 export interface StorageBucketAppInfo {
   shown_name?: string
   description?: string
@@ -1001,6 +1018,18 @@ export async function fetchBucketsApi(
 ): Promise<BucketsResponse> {
   const suffix = refresh ? "?refresh=true" : ""
   return apiGet<BucketsResponse>(`/api/storage/${minioServerId}/details${suffix}`, accessToken)
+}
+
+export async function createAdminObjectDownloadLinkApi(
+  minioServerId: string,
+  payload: AdminObjectDownloadLinkRequest,
+  accessToken?: string,
+): Promise<AdminObjectDownloadLinkResponse> {
+  return apiPost<AdminObjectDownloadLinkRequest, AdminObjectDownloadLinkResponse>(
+    `/api/storage/${encodeURIComponent(minioServerId)}/objects/presigned-download`,
+    payload,
+    accessToken,
+  )
 }
 
 export async function fetchStorageBucketsApi(
