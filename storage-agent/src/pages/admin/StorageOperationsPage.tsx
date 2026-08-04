@@ -481,7 +481,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
         <div className="flex items-center gap-2"><Gauge className="h-4 w-4 text-amber-600" aria-hidden /><span className="text-muted-foreground">物理容量</span><strong>{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</strong></div>
         <div className="ml-auto flex items-center gap-2 text-muted-foreground">
           <Activity className="h-4 w-4" aria-hidden />
-          自动自愈 {data.auto_heal_enabled ? "已启用" : "已停用"} · {data.auto_heal_authority_region}
+          自动跟踪 {data.auto_heal_enabled ? "已启用" : "已停用"} · {data.auto_heal_authority_region}
           <Button variant="ghost" size="icon" className="h-7 w-7" title="刷新集群状态" aria-label="刷新集群状态" disabled={refreshing} onClick={() => void load(true)}>
             <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden />
           </Button>
@@ -564,8 +564,8 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
               <div className="border-t border-border/70 pt-4">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <div className="text-xs font-medium">自愈扫描</div>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground">{healStatus?.status === "healing" ? `已扫描 ${healStatus.scanned_items} 项` : "当前无主动修复扫描"}</div>
+                    <div className="text-xs font-medium">原生自愈</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">{healStatus?.status === "healing" ? `已扫描 ${healStatus.scanned_items} 项` : "当前没有进行中的自愈"}</div>
                   </div>
                   <Button
                     variant="outline"
@@ -574,7 +574,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                     onClick={() => setHealDialog(true)}
                   >
                     <Wrench className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                    深度修复
+                    自愈巡检
                   </Button>
                 </div>
                 {selectedJob ? (
@@ -591,16 +591,16 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
 
       <Dialog open={healDialog} onOpenChange={setHealDialog}>
         <DialogContent className="max-w-md rounded-lg">
-          <DialogHeader><DialogTitle>启动深度修复扫描</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>启动自愈巡检</DialogTitle></DialogHeader>
           <DialogBody>
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">目标集群：{selected?.shown_name} · {selected?.server}</div>
-            <p className="text-xs leading-5 text-muted-foreground">扫描由 MinIO 原生 Heal 执行，运行期间可继续读写。系统会记录任务状态，并阻止同一集群重复启动。</p>
+            <p className="text-xs leading-5 text-muted-foreground">MinIO 会在服务端自动修复损坏或缺失的数据。本操作读取原生 Heal 状态并记录巡检结果，不会中断集群读写。</p>
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" disabled={startingHeal} onClick={() => setHealDialog(false)}>取消</Button>
             <Button disabled={startingHeal} onClick={() => void startHeal()}>
               {startingHeal ? <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : <Wrench className="mr-1.5 h-3.5 w-3.5" aria-hidden />}
-              开始扫描
+              开始巡检
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -618,7 +618,7 @@ export default function StorageOperationsPage() {
       <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">存储运维</h1>
-          <p className="mt-1 text-xs text-muted-foreground">复制数据收敛、五地 MinIO 集群健康与修复任务。</p>
+          <p className="mt-1 text-xs text-muted-foreground">复制数据收敛、五地 MinIO 集群健康与原生自愈跟踪。</p>
         </div>
         <div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="tablist" aria-label="存储运维视图">
           <button
