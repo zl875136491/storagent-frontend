@@ -218,6 +218,13 @@ export type StorageOperationHealth =
   | "critical"
   | "unreachable"
 
+export type ReplicationResyncStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "failed"
+  | "unknown"
+
 export interface ReplicationTargetMetric {
   source: string
   target: string
@@ -235,6 +242,13 @@ export interface ReplicationTargetMetric {
   failed_count: number
   failed_bytes: number
   current_rate_bps: number
+  resync_status?: ReplicationResyncStatus
+  resync_reset_id?: string
+  resync_started_at?: string | null
+  resync_updated_at?: string | null
+  resync_completed_bytes?: number
+  resync_object_count?: number
+  resync_current_object?: string
 }
 
 export interface ReplicationSourceMetric {
