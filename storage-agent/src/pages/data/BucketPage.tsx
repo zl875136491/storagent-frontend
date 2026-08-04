@@ -9,52 +9,78 @@ import {
   type MinioServer,
 } from "../../api/client"
 import { Card, CardContent } from "../../components/ui/card"
-import { Database, InfoIcon, RefreshCw } from "lucide-react"
+import { Database, InfoIcon, LayoutGrid, RefreshCw, Table2 } from "lucide-react"
 import { Button } from "../../components/ui/button"
+import {
+  BucketFileInventory,
+  CopyTextButton,
+} from "../../components/storage/BucketFileInventory"
+import { formatBytes, formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
 
-function formatBytes(size: number): string {
-  if (!Number.isFinite(size) || size <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB", "TB"]
-  const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1)
-  const value = size / 1024 ** index
-  return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[index]}`
-}
+type InventoryView = "treemap" | "files"
 
 function formatCacheTime(value?: string): string {
-  if (!value) return "—"
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return "—"
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(date)
+  return formatDateTime(value, "—")
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
 }
 
 interface TreemapNode {
   name: string
   value?: number
   children?: TreemapNode[]
+  bucketName: string
+  objectKey: string
+  rawSize: number
+  lastModified: string
+  isDirectory: boolean
 }
 
 interface TreemapTooltipInfo extends echarts.DefaultLabelFormatterCallbackParams {
   treePathInfo?: Array<{ name: string }>
 }
 
-function buildTreemapNodes(files: BucketFileItem[]): TreemapNode[] {
+interface TreemapSelection {
+  bucketName: string
+  name: string
+  objectKey: string
+  size: number
+  lastModified: string
+  isDirectory: boolean
+}
+
+function displayBucketName(name: string): string {
+  return name.replace(/^Bucket:\s*/i, "")
+}
+
+function buildTreemapNodes(
+  files: BucketFileItem[],
+  bucketName: string,
+  parentPath = "",
+): TreemapNode[] {
   const toNode = (item: BucketFileItem): TreemapNode => {
     const hasChildren = Array.isArray(item.children) && item.children.length > 0
+    const objectKey = parentPath ? `${parentPath}/${item.name}` : item.name
     return {
       name: item.name,
       // 仅在叶子节点上设置 value，让上层节点自动聚合
       value: hasChildren ? undefined : Math.max(item.size || 0, 1),
-      children: hasChildren ? item.children!.map(toNode) : undefined,
+      children: hasChildren
+        ? buildTreemapNodes(item.children!, bucketName, objectKey)
+        : undefined,
+      bucketName,
+      objectKey,
+      rawSize: item.size || 0,
+      lastModified: item.last_modified,
+      isDirectory: hasChildren,
     }
   }
 
@@ -63,9 +89,10 @@ function buildTreemapNodes(files: BucketFileItem[]): TreemapNode[] {
 
 interface BucketTreemapProps {
   buckets: BucketInfo[]
+  onSelect: (selection: TreemapSelection) => void
 }
 
-function BucketTreemap({ buckets }: BucketTreemapProps) {
+function BucketTreemap({ buckets, onSelect }: BucketTreemapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<echarts.EChartsType | null>(null)
 
@@ -73,18 +100,38 @@ function BucketTreemap({ buckets }: BucketTreemapProps) {
     if (!containerRef.current) return
     const chart = echarts.init(containerRef.current)
     chartRef.current = chart
-
-    const handleResize = () => {
-      chart.resize()
-    }
-    window.addEventListener("resize", handleResize)
+    const observer = new ResizeObserver(() => chart.resize())
+    observer.observe(containerRef.current)
 
     return () => {
-      window.removeEventListener("resize", handleResize)
+      observer.disconnect()
       chart.dispose()
       chartRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    const handleClick = (params: echarts.ECElementEvent) => {
+      const node = params.data as TreemapNode | undefined
+      if (!node?.bucketName) return
+      onSelect({
+        bucketName: node.bucketName,
+        name: node.name,
+        objectKey: node.objectKey,
+        size: node.rawSize,
+        lastModified: node.lastModified,
+        isDirectory: node.isDirectory,
+      })
+    }
+
+    chart.on("click", handleClick)
+    return () => {
+      chart.off("click", handleClick)
+    }
+  }, [onSelect])
 
   useEffect(() => {
     const chart = chartRef.current
@@ -96,8 +143,13 @@ function BucketTreemap({ buckets }: BucketTreemapProps) {
     }
 
     const data = buckets.map(bucket => ({
-      name: bucket.name,
-      children: buildTreemapNodes(bucket.files),
+      name: displayBucketName(bucket.name),
+      children: buildTreemapNodes(bucket.files, displayBucketName(bucket.name)),
+      bucketName: displayBucketName(bucket.name),
+      objectKey: "",
+      rawSize: bucket.total_size || 0,
+      lastModified: bucket.created_at,
+      isDirectory: true,
     }))
 
     const styles = getComputedStyle(document.documentElement)
@@ -106,10 +158,17 @@ function BucketTreemap({ buckets }: BucketTreemapProps) {
     const accent = styles.getPropertyValue("--accent").trim() || "#6366f1"
     const muted = styles.getPropertyValue("--muted-foreground").trim() || "#6b7280"
     const fg = styles.getPropertyValue("--foreground").trim() || "#020617"
+    const popover = styles.getPropertyValue("--popover").trim() || "#ffffff"
+    const border = styles.getPropertyValue("--border").trim() || "#e5e7eb"
 
     const option: echarts.EChartsCoreOption = {
       backgroundColor: "transparent",
       tooltip: {
+        backgroundColor: popover,
+        borderColor: border,
+        borderWidth: 1,
+        extraCssText: "border-radius:6px;box-shadow:0 12px 32px rgba(0,0,0,.22);padding:10px 12px;",
+        textStyle: { color: fg },
         formatter: (params: echarts.TooltipComponentFormatterCallbackParams) => {
           const info = (Array.isArray(params) ? params[0] : params) as
             | TreemapTooltipInfo
@@ -123,8 +182,8 @@ function BucketTreemap({ buckets }: BucketTreemapProps) {
             .join(" / ")
 
           return [
-            `<div style="font-size:12px;color:${fg};font-weight:600;margin-bottom:2px;">${name}</div>`,
-            `<div style="font-size:11px;color:${muted};">路径：${path}</div>`,
+            `<div style="font-size:12px;color:${fg};font-weight:600;margin-bottom:2px;">${escapeHtml(String(name))}</div>`,
+            `<div style="font-size:11px;color:${muted};">路径：${escapeHtml(path)}</div>`,
             typeof value === "number"
               ? `<div style="font-size:11px;color:${muted};margin-top:2px;">大小：${formatBytes(
                   value,
@@ -187,9 +246,12 @@ function BucketTreemap({ buckets }: BucketTreemapProps) {
 
 export default function BucketPage() {
   const { accessToken } = useAuth()
+  const [view, setView] = useState<InventoryView>("treemap")
+  const [treemapSelection, setTreemapSelection] = useState<TreemapSelection | null>(null)
   const [servers, setServers] = useState<MinioServer[]>([])
   const [serversLoading, setServersLoading] = useState(true)
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null)
+  const bucketRequestSeq = useRef(0)
 
   const [buckets, setBuckets] = useState<BucketInfo[]>([])
   const [bucketsLoading, setBucketsLoading] = useState(false)
@@ -221,30 +283,37 @@ export default function BucketPage() {
   }, [])
 
   const loadBuckets = useCallback(async (refresh = false) => {
-    if (!selectedServerId) {
+    const requestSeq = ++bucketRequestSeq.current
+    const serverId = selectedServerId
+    if (!serverId) {
       setBuckets([])
       setCacheInfo(null)
+      setBucketsLoading(false)
       return
     }
-      setBucketsLoading(true)
-      try {
-        const resp = await fetchBucketsApi(
-          selectedServerId,
-          accessToken ?? undefined,
-          refresh,
-        )
-        setBuckets(resp.data)
-        setCacheInfo({
-          hit: Boolean(resp.cache_hit),
-          cachedAt: resp.cached_at,
-          expiresAt: resp.expires_at,
-          ttlSeconds: resp.ttl_seconds,
-        })
-      } catch {
-        // 错误已由 api client toast 展示
-      } finally {
+    if (refresh) setTreemapSelection(null)
+    setBucketsLoading(true)
+    try {
+      const resp = await fetchBucketsApi(
+        serverId,
+        accessToken ?? undefined,
+        refresh,
+      )
+      if (requestSeq !== bucketRequestSeq.current) return
+      setBuckets(resp.data)
+      setCacheInfo({
+        hit: Boolean(resp.cache_hit),
+        cachedAt: resp.cached_at,
+        expiresAt: resp.expires_at,
+        ttlSeconds: resp.ttl_seconds,
+      })
+    } catch {
+      // 错误已由 api client toast 展示
+    } finally {
+      if (requestSeq === bucketRequestSeq.current) {
         setBucketsLoading(false)
       }
+    }
   }, [accessToken, selectedServerId])
 
   useEffect(() => {
@@ -261,13 +330,23 @@ export default function BucketPage() {
     [buckets],
   )
 
+  const selectServer = (serverId: string) => {
+    if (serverId === selectedServerId) return
+    bucketRequestSeq.current += 1
+    setSelectedServerId(serverId)
+    setBuckets([])
+    setCacheInfo(null)
+    setBucketsLoading(true)
+    setTreemapSelection(null)
+  }
+
   return (
     <div className="mx-auto max-w-8xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">服务器文件详情</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            按 MinIO 服务查看各存储桶的空间占用与目录结构，以树图方式直观展示。
+            按 MinIO 服务查看各存储桶的空间占用、目录结构与缓存文件清单。
           </p>
         </div>
       </div>
@@ -298,8 +377,16 @@ export default function BucketPage() {
                     active
                       ? "ring-2 ring-emerald-500"
                       : "hover:-translate-y-0.5 hover:ring-emerald-400/70"
-                  }`}
-                  onClick={() => setSelectedServerId(server.id)}
+                  } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={active}
+                  onClick={() => selectServer(server.id)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return
+                    event.preventDefault()
+                    selectServer(server.id)
+                  }}
                 >
                   <CardContent className="pt-4 text-[11px] text-muted-foreground flex flex-row gap-2">
                     <div className="mb-1 flex items-center justify-between gap-2">
@@ -349,10 +436,44 @@ export default function BucketPage() {
                 </span>
                 <span className="text-muted-foreground">生成 {formatCacheTime(cacheInfo?.cachedAt)}</span>
                 <span className="text-muted-foreground">到期 {formatCacheTime(cacheInfo?.expiresAt)}</span>
+                <div
+                  className="ml-auto flex items-center rounded-md border border-border bg-muted/40 p-0.5"
+                  role="group"
+                  aria-label="文件详情视图"
+                >
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 gap-1.5 rounded-sm px-2.5",
+                      view === "treemap" && "bg-background text-foreground shadow-sm hover:bg-background",
+                    )}
+                    aria-pressed={view === "treemap"}
+                    onClick={() => setView("treemap")}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
+                    树形图
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 gap-1.5 rounded-sm px-2.5",
+                      view === "files" && "bg-background text-foreground shadow-sm hover:bg-background",
+                    )}
+                    aria-pressed={view === "files"}
+                    onClick={() => setView("files")}
+                  >
+                    <Table2 className="h-3.5 w-3.5" aria-hidden />
+                    文件列表
+                  </Button>
+                </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="ml-auto h-7 w-7"
+                  className="h-7 w-7 rounded-md"
                   disabled={bucketsLoading}
                   title="忽略缓存并重新读取 MinIO"
                   aria-label="刷新服务器文件详情"
@@ -362,18 +483,58 @@ export default function BucketPage() {
                 </Button>
               </div>
               <div className="relative h-[calc(100vh-344px)] min-h-[420px]">
-                <div className="absolute right-3 top-3 z-10 group">
-                  <div className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border border-muted-foreground/60 bg-background/80 text-[10px] font-medium text-muted-foreground backdrop-blur-sm">
-                    <InfoIcon className="h-4 w-4" />
-                  </div>
-                  <div className="pointer-events-none absolute right-0 top-7 z-20 hidden w-72 rounded-md border border-border bg-background/95 p-2 text-[11px] leading-relaxed text-muted-foreground shadow-lg group-hover:block">
-                    <div>当前服务器总占用空间：{formatBytes(totalSize)}</div>
-                    <div className="mt-1">
-                      点击树图中的块可查看对应目录或文件的路径与大小，使用上方路径导航在各级目录间切换。
+                {view === "treemap" ? (
+                  <>
+                    {treemapSelection ? (
+                      <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-5rem)] items-center gap-2 rounded-md border border-border bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur-sm">
+                        <div className="min-w-0">
+                          <div
+                            className="truncate text-[11px] font-medium text-foreground"
+                            title={treemapSelection.name}
+                          >
+                            {treemapSelection.name}
+                          </div>
+                          <div
+                            className="truncate font-mono text-[10px] text-muted-foreground"
+                            title={`${treemapSelection.bucketName}/${treemapSelection.objectKey}`}
+                          >
+                            {treemapSelection.bucketName}
+                            {treemapSelection.objectKey ? `/${treemapSelection.objectKey}` : ""}
+                          </div>
+                          <div className="mt-0.5 text-[10px] text-muted-foreground">
+                            {formatBytes(treemapSelection.size)} · {formatCacheTime(treemapSelection.lastModified)}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-0.5 border-l border-border/70 pl-1.5">
+                          <CopyTextButton
+                            value={treemapSelection.name}
+                            label={treemapSelection.isDirectory ? "目录名" : "文件名"}
+                          />
+                          {treemapSelection.objectKey ? (
+                            <CopyTextButton
+                              value={`${treemapSelection.bucketName}/${treemapSelection.objectKey}`}
+                              label="完整对象路径"
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="absolute right-3 top-3 z-10 group">
+                      <div className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border border-muted-foreground/60 bg-background/80 text-[10px] font-medium text-muted-foreground backdrop-blur-sm">
+                        <InfoIcon className="h-4 w-4" />
+                      </div>
+                      <div className="pointer-events-none absolute right-0 top-7 z-20 hidden w-72 rounded-md border border-border bg-background/95 p-2 text-[11px] leading-relaxed text-muted-foreground shadow-lg group-hover:block">
+                        <div>当前服务器总占用空间：{formatBytes(totalSize)}</div>
+                        <div className="mt-1">
+                          点击文件块后可复制文件名或对象路径，使用树图路径导航切换目录层级。
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <BucketTreemap buckets={buckets} />
+                    <BucketTreemap buckets={buckets} onSelect={setTreemapSelection} />
+                  </>
+                ) : (
+                  <BucketFileInventory key={selectedServerId} buckets={buckets} />
+                )}
               </div>
             </div>
           )}

@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Activity,
+  Box,
   CheckCircle2,
   CircleAlert,
+  CircleX,
+  Clock3,
   DatabaseZap,
   Gauge,
   HardDrive,
   LoaderCircle,
+  Info,
   RefreshCw,
   RotateCcw,
   ServerCog,
   ShieldCheck,
   WifiOff,
   Wrench,
+  X,
 } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
 import {
@@ -120,14 +125,6 @@ function ReplicationStatus({ status }: { status: StorageOperationHealth }) {
   )
 }
 
-function worseReplicationStatus(
-  first: StorageOperationHealth,
-  second: StorageOperationHealth,
-): StorageOperationHealth {
-  const priority: StorageOperationHealth[] = ["unreachable", "critical", "degraded", "syncing", "healthy"]
-  return priority.indexOf(first) <= priority.indexOf(second) ? first : second
-}
-
 function ClusterStatus({ status }: { status: ClusterHealthItem["status"] }) {
   const meta = status === "online"
     ? { label: "在线", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", Icon: CheckCircle2 }
@@ -156,15 +153,90 @@ interface LinkRow {
   target: ReplicationTargetMetric
 }
 
-function resyncOperationTitle(target: ReplicationTargetMetric): string {
-  if (target.resync_status === "running") {
-    const progress = target.resync_object_count || target.resync_completed_bytes
-      ? ` · 已处理 ${target.resync_object_count ?? 0} 个对象 / ${formatBytes(target.resync_completed_bytes ?? 0)}`
-      : ""
-    return `补传运行中${progress}`
+type ActionNotice = {
+  kind: "success" | "info" | "error"
+  title: string
+  description: string
+}
+
+function resyncStatusMeta(target: ReplicationTargetMetric) {
+  switch (target.resync_status) {
+    case "running":
+      return { label: "补传中", className: "text-sky-700 dark:text-sky-300", Icon: LoaderCircle }
+    case "completed":
+      return { label: "已完成", className: "text-emerald-700 dark:text-emerald-300", Icon: CheckCircle2 }
+    case "partial":
+      return { label: "部分失败", className: "text-amber-700 dark:text-amber-300", Icon: CircleAlert }
+    case "failed":
+      return { label: "补传失败", className: "text-rose-700 dark:text-rose-300", Icon: CircleX }
   }
-  if (!target.resync_status || target.resync_status === "unknown") return "补传状态暂不可用"
-  return "为此链路启动对象补传"
+  if (!target.arn) {
+    return { label: "规则缺失", className: "text-rose-700 dark:text-rose-300", Icon: CircleX }
+  }
+  if (!target.online) {
+    return { label: "目标离线", className: "text-rose-700 dark:text-rose-300", Icon: WifiOff }
+  }
+  if (target.resync_status === "unknown") {
+    return { label: "状态未知", className: "text-amber-700 dark:text-amber-300", Icon: CircleAlert }
+  }
+  return { label: "未执行", className: "text-muted-foreground", Icon: DatabaseZap }
+}
+
+function resyncElapsed(target: ReplicationTargetMetric): string {
+  if (!target.resync_started_at) return "—"
+  const started = new Date(target.resync_started_at).getTime()
+  const updated = target.resync_status === "running"
+    ? Date.now()
+    : new Date(target.resync_updated_at ?? "").getTime()
+  if (!Number.isFinite(started) || !Number.isFinite(updated) || updated < started) return "—"
+  return formatDuration(Math.round((updated - started) / 1000))
+}
+
+function resyncProgressText(target: ReplicationTargetMetric): string {
+  if (target.resync_status === "idle" || !target.resync_status) return "尚无任务记录"
+  if (target.resync_status === "unknown") return "无法读取 MinIO 状态"
+  const processed = `${(target.resync_object_count ?? 0).toLocaleString("zh-CN")} 个 · ${formatBytes(target.resync_completed_bytes ?? 0)}`
+  if (target.resync_status === "partial") {
+    return `${target.resync_failed_count ?? 0} 个失败 · ${processed}`
+  }
+  if (target.resync_status === "failed") {
+    return target.resync_error || `${target.resync_failed_count ?? 0} 个对象失败`
+  }
+  return processed
+}
+
+function resyncGuidance(target: ReplicationTargetMetric): string {
+  switch (target.resync_status) {
+    case "running":
+      return "MinIO 正在扫描并补传。原生接口不提供待扫描总量，因此无法计算百分比；请以已处理对象、数据量和耗时判断推进，不要重复启动。"
+    case "completed":
+      return "本次补传已完成。表格中的“历史累计失败”不会因补传成功清零，请结合本次失败数、近 1 小时失败和两端对象一致性判断结果。"
+    case "partial":
+      return "本次扫描完成，但仍有对象补传失败。待链路稳定后可再次补传；若连续失败，请人工检查源节点 MinIO 日志、目标桶写权限、容量和版本控制状态。"
+    case "failed":
+      return "任务未完成。请先检查两端在线状态、目标容量和复制规则，再查看源节点 MinIO 日志定位具体对象后重试。"
+  }
+  if (!target.arn) return "当前方向没有可用复制规则。先执行“校准规则”，确认链路恢复后再启动补传。"
+  if (!target.online) return "目标站点当前不可达。先恢复目标 MinIO、网络和容量状态，刷新确认在线后再补传。"
+  if (target.resync_status === "unknown") {
+    return "后端暂时无法读取 MinIO 补传状态。为避免重复任务，当前不允许启动；请刷新，仍失败时检查源节点管理 API 和 mc 日志。"
+  }
+  return "MinIO 未返回该方向的补传记录。启动后页面会自动轮询；若仍没有记录，请根据操作反馈检查复制规则、目标在线状态和源节点 MinIO 日志。"
+}
+
+function actionErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error)
+  try {
+    const parsed = JSON.parse(raw) as { data?: { reason?: string }; msg?: string; message?: string }
+    return parsed.data?.reason || parsed.msg || parsed.message || "请求失败"
+  } catch {
+    return raw || "请求失败"
+  }
+}
+
+function resyncOperationTitle(target: ReplicationTargetMetric): string {
+  const meta = resyncStatusMeta(target)
+  return `${meta.label} · ${resyncProgressText(target)}`
 }
 
 function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
@@ -176,6 +248,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   const [resyncing, setResyncing] = useState(false)
   const [resyncTarget, setResyncTarget] = useState<LinkRow | null>(null)
   const [olderThan, setOlderThan] = useState("")
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null)
 
   const load = useCallback(async (
     quiet = false,
@@ -222,9 +295,18 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
     () => bucket?.sources.flatMap((source) => source.targets.map((target) => ({ source, target }))) ?? [],
     [bucket],
   )
+  const inspectedResync = useMemo(() => {
+    if (!resyncTarget) return null
+    return links.find(({ source, target }) => (
+      source.server === resyncTarget.source.server
+      && target.target === resyncTarget.target.target
+    )) ?? resyncTarget
+  }, [links, resyncTarget])
   const hasRunningResync = useMemo(
-    () => links.some(({ target }) => target.resync_status === "running"),
-    [links],
+    () => data?.buckets.some((item) => (
+      item.sources.some((source) => source.targets.some((target) => target.resync_status === "running"))
+    )) ?? false,
+    [data],
   )
   const bucketSummary = useMemo(() => {
     const sources = bucket?.sources ?? []
@@ -234,6 +316,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       queued: sources.reduce((sum, item) => sum + item.queued_count, 0),
       queuedBytes: sources.reduce((sum, item) => sum + item.queued_bytes, 0),
       mrf: sources.reduce((sum, item) => sum + item.mrf_failed_last_5m, 0),
+      recentFailed: sources.reduce((sum, item) => sum + (item.recent_failed_count ?? 0), 0),
     }
   }, [bucket])
 
@@ -241,29 +324,59 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
     if (!bucket) return
     setReconciling(true)
     try {
-      await reconcileReplicationApi(bucket.bucket, accessToken)
+      const response = await reconcileReplicationApi(bucket.bucket, accessToken)
+      setActionNotice({
+        kind: "success",
+        title: response.message,
+        description: `${bucket.bucket} 的全连接规则已重新校准，请结合链路状态确认目标均在线。`,
+      })
       await load(true)
+    } catch (error) {
+      setActionNotice({
+        kind: "error",
+        title: "复制规则校准失败",
+        description: `${actionErrorMessage(error)}。请检查 MinIO 管理接口与站点连通性后重试。`,
+      })
     } finally {
       setReconciling(false)
     }
   }
 
   const startResync = async () => {
-    if (!bucket || !resyncTarget) return
+    if (!bucket || !inspectedResync) return
     setResyncing(true)
     try {
-      await startReplicationResyncApi(
+      const response = await startReplicationResyncApi(
         bucket.bucket,
         {
-          source_server: resyncTarget.target.source,
-          target_server: resyncTarget.target.target,
+          source_server: inspectedResync.target.source,
+          target_server: inspectedResync.target.target,
           older_than: olderThan.trim() || null,
         },
         accessToken,
       )
+      const alreadyRunning = response.detail.already_running === true
+      setActionNotice({
+        kind: alreadyRunning ? "info" : "success",
+        title: response.message,
+        description: alreadyRunning
+          ? "系统已接管现有任务并继续轮询，无需再次操作。"
+          : "系统将每 10 秒读取 MinIO 原生状态；补传结束后会保留完成或失败结果。",
+      })
       setResyncTarget(null)
       setOlderThan("")
-      await load(true)
+      await load(true, false, bucket.bucket)
+    } catch (error) {
+      const reason = actionErrorMessage(error)
+      const alreadyRunning = /already in progress|already running|正在运行/i.test(reason)
+      setActionNotice({
+        kind: alreadyRunning ? "info" : "error",
+        title: alreadyRunning ? "已有补传任务" : "补传未启动",
+        description: alreadyRunning
+          ? "MinIO 已有相同方向任务，页面会刷新并跟踪现有进度。"
+          : `${reason}。请先刷新确认规则与目标在线；仍失败时检查源节点 MinIO 日志、目标容量和写权限。`,
+      })
+      if (alreadyRunning) await load(true, false, bucket.bucket)
     } finally {
       setResyncing(false)
     }
@@ -272,15 +385,24 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   useEffect(() => {
     if (!hasRunningResync) return undefined
     const timer = window.setInterval(() => {
-      void load(true, false, selectedBucket ?? undefined)
+      void load(true, false)
     }, 10_000)
     return () => window.clearInterval(timer)
-  }, [hasRunningResync, load, selectedBucket])
+  }, [hasRunningResync, load])
 
   if (loading) return <LoadingState label="正在读取五地复制状态..." />
   if (!data) return <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">复制状态暂不可用</div>
 
   const summary = data.summary
+  const inspectedTarget = inspectedResync?.target ?? null
+  const inspectedMeta = inspectedTarget ? resyncStatusMeta(inspectedTarget) : null
+  const InspectedIcon = inspectedMeta?.Icon
+  const canStartInspected = Boolean(
+    inspectedTarget?.arn
+    && inspectedTarget.online
+    && inspectedTarget.resync_status !== "running"
+    && inspectedTarget.resync_status !== "unknown",
+  )
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="grid shrink-0 grid-cols-2 border-b border-border/70 md:grid-cols-6">
@@ -296,19 +418,41 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
           <div className="text-[11px] text-muted-foreground">等待复制</div>
           <div className="mt-1 text-sm font-semibold">{summary.queued_count} · {formatBytes(summary.queued_bytes)}</div>
         </div>
-        <div className="border-b border-border/60 px-4 py-3 md:border-b-0 md:border-r">
-          <div className="text-[11px] text-muted-foreground">累计失败</div>
+        <div className="border-b border-border/60 px-4 py-3 md:border-b-0 md:border-r" title="MinIO 进程生命周期累计值，补传成功后不会清零">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">历史累计失败 <Info className="h-3 w-3" aria-hidden /></div>
           <div className="mt-1 text-sm font-semibold">{summary.failed_count} · {formatBytes(summary.failed_bytes)}</div>
         </div>
         <div className="border-r border-border/60 px-4 py-3">
-          <div className="text-[11px] text-muted-foreground">近期漏复制</div>
-          <div className="mt-1 text-sm font-semibold">{summary.mrf_failed_last_5m}</div>
+          <div className="text-[11px] text-muted-foreground">近 1 小时失败</div>
+          <div className="mt-1 text-sm font-semibold">{summary.recent_failed_count ?? 0} · {formatBytes(summary.recent_failed_bytes ?? 0)}</div>
         </div>
         <div className="px-4 py-3">
           <div className="text-[11px] text-muted-foreground">当前吞吐</div>
           <div className="mt-1 text-sm font-semibold">{formatRate(summary.current_rate_bps)}</div>
         </div>
       </div>
+
+      {actionNotice ? (
+        <div className={cn(
+          "flex shrink-0 items-start gap-2 border-b px-4 py-2.5 text-xs",
+          actionNotice.kind === "success" && "border-emerald-500/20 bg-emerald-500/5 text-emerald-800 dark:text-emerald-200",
+          actionNotice.kind === "info" && "border-sky-500/20 bg-sky-500/5 text-sky-800 dark:text-sky-200",
+          actionNotice.kind === "error" && "border-rose-500/20 bg-rose-500/5 text-rose-800 dark:text-rose-200",
+        )} role="status">
+          {actionNotice.kind === "success"
+            ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            : actionNotice.kind === "info"
+              ? <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
+          <div className="min-w-0 flex-1">
+            <div className="font-medium">{actionNotice.title}</div>
+            <div className="mt-0.5 text-[11px] opacity-80">{actionNotice.description}</div>
+          </div>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label="关闭操作提示" onClick={() => setActionNotice(null)}>
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="min-h-0 border-b border-border/70 lg:border-b-0 lg:border-r">
@@ -352,7 +496,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">{bucket?.bucket ?? "未选择存储桶"}</div>
               <div className="text-[10px] text-muted-foreground">
-                链路 {bucketSummary.actual}/{bucketSummary.expected} · 等待 {bucketSummary.queued}（{formatBytes(bucketSummary.queuedBytes)}）· 近期漏复制 {bucketSummary.mrf} · {formatDateTime(data.generated_at)}
+                链路 {bucketSummary.actual}/{bucketSummary.expected} · 等待 {bucketSummary.queued}（{formatBytes(bucketSummary.queuedBytes)}）· 近 1 小时失败 {bucketSummary.recentFailed} · 近期漏复制 {bucketSummary.mrf} · {formatDateTime(data.generated_at)}
               </div>
             </div>
             <Button variant="outline" size="sm" disabled={!bucket || reconciling} onClick={() => void reconcile()}>
@@ -360,7 +504,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
               校准规则
             </Button>
           </div>
-          <div className="docs-scroll min-h-0 flex-1 overflow-auto">
+          <div className="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
                 <TableRow>
@@ -368,16 +512,16 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
                   <TableHead>目标状态</TableHead>
                   <TableHead className="text-right">实时延迟</TableHead>
                   <TableHead className="text-right">已复制</TableHead>
-                  <TableHead className="text-right">失败</TableHead>
+                  <TableHead className="text-right" title="近 1 小时失败 / MinIO 进程生命周期历史累计失败">近期 / 历史失败</TableHead>
                   <TableHead className="text-right">当前吞吐</TableHead>
                   <TableHead>最后在线</TableHead>
-                  <TableHead className="w-12 text-right">操作</TableHead>
+                  <TableHead className="w-48">补传任务</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {links.map(({ source, target }) => {
-                  const resyncRunning = target.resync_status === "running"
-                  const resyncStatusUnknown = !target.resync_status || target.resync_status === "unknown"
+                  const resyncMeta = resyncStatusMeta(target)
+                  const ResyncIcon = resyncMeta.Icon
                   const operationTitle = resyncOperationTitle(target)
                   return (
                     <TableRow key={`${source.server}:${target.target}`}>
@@ -385,35 +529,32 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
                         <div className="font-medium">{source.server} → {target.target}</div>
                         <div className="mt-0.5 max-w-48 truncate font-mono text-[10px] text-muted-foreground" title={target.endpoint}>{target.endpoint || "规则缺失"}</div>
                       </TableCell>
-                      <TableCell><ReplicationStatus status={worseReplicationStatus(source.status, target.status)} /></TableCell>
+                      <TableCell><ReplicationStatus status={target.status} /></TableCell>
                       <TableCell className="text-right font-mono">{target.online ? `${Math.round(target.latency_current_ms)} ms` : "—"}</TableCell>
                       <TableCell className="text-right">{target.replication_count} · {formatBytes(target.completed_bytes)}</TableCell>
-                      <TableCell className={cn("text-right", target.failed_count > 0 && "text-rose-600")}>{target.failed_count} · {formatBytes(target.failed_bytes)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className={cn((target.recent_failed_count ?? 0) > 0 && "font-medium text-rose-600")}>{target.recent_failed_count ?? 0} · {formatBytes(target.recent_failed_bytes ?? 0)}</div>
+                        <div className="mt-0.5 text-[10px] text-muted-foreground" title="历史累计值不会因补传成功清零">历史 {target.failed_count} · {formatBytes(target.failed_bytes)}</div>
+                      </TableCell>
                       <TableCell className="text-right">{formatRate(target.current_rate_bps)}</TableCell>
                       <TableCell>{formatDateTime(target.last_online)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell>
                         <Button
-                          variant={resyncRunning ? "secondary" : "ghost"}
-                          size="icon"
+                          variant="ghost"
+                          size="sm"
                           className={cn(
-                            "h-7 w-7",
-                            resyncRunning && "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+                            "h-auto min-h-9 w-full justify-start gap-2 px-2 py-1 text-left",
+                            resyncMeta.className,
                           )}
                           title={operationTitle}
-                          aria-label={resyncRunning
-                            ? `${source.server} 到 ${target.target} 补传运行中`
-                            : `补传 ${source.server} 到 ${target.target}`}
-                          disabled={
-                            !target.arn
-                            || !target.online
-                            || resyncRunning
-                            || resyncStatusUnknown
-                          }
+                          aria-label={`查看 ${source.server} 到 ${target.target} 补传状态`}
                           onClick={() => setResyncTarget({ source, target })}
                         >
-                          {resyncRunning
-                            ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                            : <DatabaseZap className="h-3.5 w-3.5" aria-hidden />}
+                          <ResyncIcon className={cn("h-4 w-4 shrink-0", target.resync_status === "running" && "animate-spin")} aria-hidden />
+                          <span className="min-w-0">
+                            <span className="block text-[11px] font-medium">{resyncMeta.label}</span>
+                            <span className="block max-w-36 truncate text-[10px] opacity-75">{resyncProgressText(target)}</span>
+                          </span>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -429,28 +570,80 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       </div>
 
       <Dialog open={Boolean(resyncTarget)} onOpenChange={(open) => !open && setResyncTarget(null)}>
-        <DialogContent className="max-w-md rounded-lg">
-          <DialogHeader><DialogTitle>启动对象补传</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-lg rounded-lg">
+          <DialogHeader><DialogTitle>对象补传状态</DialogTitle></DialogHeader>
           <DialogBody>
-            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
-              {bucket?.bucket} · {resyncTarget?.target.source} → {resyncTarget?.target.target}
+            <div className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 text-xs">
+              <div>
+                <div className="font-medium">{bucket?.bucket} · {inspectedTarget?.source} → {inspectedTarget?.target}</div>
+                <div className="mt-1 font-mono text-[10px] text-muted-foreground">{inspectedTarget?.endpoint || "复制规则未建立"}</div>
+              </div>
+              {inspectedMeta && InspectedIcon ? (
+                <span className={cn("inline-flex shrink-0 items-center gap-1.5 font-medium", inspectedMeta.className)}>
+                  <InspectedIcon className={cn("h-4 w-4", inspectedTarget?.resync_status === "running" && "animate-spin")} aria-hidden />
+                  {inspectedMeta.label}
+                </span>
+              ) : null}
             </div>
-            <div>
-              <Label htmlFor="resync-older-than" className="mb-1.5 block text-xs">仅补传早于指定时长的对象</Label>
-              <Input
-                id="resync-older-than"
-                value={olderThan}
-                onChange={(event) => setOlderThan(event.target.value)}
-                placeholder="留空表示全部，例如 7d12h"
-              />
-            </div>
+
+            {inspectedTarget?.resync_status === "running" ? (
+              <div className="flex items-center gap-2 rounded-md bg-sky-500/10 px-3 py-2 text-[11px] text-sky-800 dark:text-sky-200" role="status">
+                <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                <span>任务持续运行中，MinIO 未提供待扫描总量，因此不显示百分比。</span>
+              </div>
+            ) : null}
+
+            {inspectedTarget ? (
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                <div><div className="text-[10px] text-muted-foreground">已处理对象</div><div className="mt-0.5 font-medium">{(inspectedTarget.resync_object_count ?? 0).toLocaleString("zh-CN")}</div></div>
+                <div><div className="text-[10px] text-muted-foreground">已处理数据</div><div className="mt-0.5 font-medium">{formatBytes(inspectedTarget.resync_completed_bytes ?? 0)}</div></div>
+                <div><div className="text-[10px] text-muted-foreground">本次失败</div><div className={cn("mt-0.5 font-medium", (inspectedTarget.resync_failed_count ?? 0) > 0 && "text-amber-700 dark:text-amber-300")}>{inspectedTarget.resync_failed_count ?? 0} 个 · {formatBytes(inspectedTarget.resync_failed_bytes ?? 0)}</div></div>
+                <div><div className="text-[10px] text-muted-foreground">任务耗时</div><div className="mt-0.5 font-medium">{resyncElapsed(inspectedTarget)}</div></div>
+                <div><div className="text-[10px] text-muted-foreground">开始时间</div><div className="mt-0.5">{formatDateTime(inspectedTarget.resync_started_at)}</div></div>
+                <div><div className="text-[10px] text-muted-foreground">{inspectedTarget.resync_status === "running" ? "最后更新" : "完成时间"}</div><div className="mt-0.5">{formatDateTime(inspectedTarget.resync_updated_at)}</div></div>
+              </div>
+            ) : null}
+
+            {inspectedTarget?.resync_current_object ? (
+              <div className="rounded-md bg-muted/50 px-3 py-2 text-[10px]">
+                <span className="text-muted-foreground">最后处理对象：</span>
+                <span className="break-all font-mono">{inspectedTarget.resync_current_object}</span>
+              </div>
+            ) : null}
+
+            {inspectedTarget ? (
+              <div className={cn(
+                "rounded-md border px-3 py-2 text-xs leading-5",
+                inspectedTarget.resync_status === "partial" || inspectedTarget.resync_status === "failed"
+                  ? "border-amber-500/30 bg-amber-500/5"
+                  : "border-border bg-muted/20",
+              )}>
+                <div className="flex gap-2"><Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden /><span>{resyncGuidance(inspectedTarget)}</span></div>
+                {inspectedTarget.resync_error ? <div className="mt-2 break-words font-mono text-[10px] text-rose-600">{inspectedTarget.resync_error}</div> : null}
+              </div>
+            ) : null}
+
+            {canStartInspected ? (
+              <div>
+                <Label htmlFor="resync-older-than" className="mb-1.5 block text-xs">仅补传早于指定时长的对象</Label>
+                <Input
+                  id="resync-older-than"
+                  value={olderThan}
+                  onChange={(event) => setOlderThan(event.target.value)}
+                  placeholder="留空表示全部，例如 7d12h"
+                />
+                <p className="mt-1.5 text-[10px] text-muted-foreground">留空会扫描规则生效时间之前的全部已有对象；运行期间不能重复启动同一方向。</p>
+              </div>
+            ) : null}
           </DialogBody>
           <DialogFooter>
-            <Button variant="outline" disabled={resyncing} onClick={() => setResyncTarget(null)}>取消</Button>
-            <Button disabled={resyncing} onClick={() => void startResync()}>
-              {resyncing ? <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : <DatabaseZap className="mr-1.5 h-3.5 w-3.5" aria-hidden />}
-              启动补传
-            </Button>
+            <Button variant="outline" disabled={resyncing} onClick={() => setResyncTarget(null)}>关闭</Button>
+            {canStartInspected ? (
+              <Button disabled={resyncing} onClick={() => void startResync()}>
+                {resyncing ? <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : <DatabaseZap className="mr-1.5 h-3.5 w-3.5" aria-hidden />}
+                {inspectedTarget?.resync_status === "idle" ? "启动补传" : "再次补传"}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -460,6 +653,13 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
 
 function latestJobFor(server: string, jobs: StorageOperationItem[]): StorageOperationItem | null {
   return jobs.find((job) => job.server === server) ?? null
+}
+
+function operationStatusLabel(status: StorageOperationItem["status"]): string {
+  if (status === "queued") return "排队中"
+  if (status === "running") return "执行中"
+  if (status === "succeeded") return "已完成"
+  return "失败"
 }
 
 function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
@@ -513,9 +713,12 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
 
   const selected = data?.clusters.find((item) => item.server === selectedServer) ?? null
   const selectedJob = selected ? latestJobFor(selected.server, jobs) : null
-  const capacityPercent = selected && selected.raw_capacity_bytes > 0
-    ? (selected.raw_used_bytes / selected.raw_capacity_bytes) * 100
-    : 0
+
+  const openHealDialog = (server: string) => {
+    setHealStatus(null)
+    setSelectedServer(server)
+    setHealDialog(true)
+  }
 
   const startHeal = async () => {
     if (!selected) return
@@ -535,125 +738,119 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
   const summary = data.summary
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 border-b border-border/70 px-4 py-3 text-xs">
-        <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden /><span className="text-muted-foreground">在线集群</span><strong>{summary.online_clusters} / {summary.cluster_count}</strong></div>
-        <div className="flex items-center gap-2"><HardDrive className="h-4 w-4 text-sky-600" aria-hidden /><span className="text-muted-foreground">磁盘</span><strong>{summary.online_disks} 在线 · {summary.offline_disks} 离线 · {summary.healing_disks} 修复中</strong></div>
-        <div className="flex items-center gap-2"><Gauge className="h-4 w-4 text-amber-600" aria-hidden /><span className="text-muted-foreground">物理容量</span><strong>{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</strong></div>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-7 gap-y-3 border-b border-border/70 bg-muted/10 px-4 py-3 text-xs">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden />
+          <span className="text-muted-foreground">集群在线</span>
+          <strong>{summary.online_clusters} / {summary.cluster_count}</strong>
+          {summary.degraded_clusters > 0 ? <span className="text-amber-600">{summary.degraded_clusters} 降级</span> : null}
+          {summary.offline_clusters > 0 ? <span className="text-rose-600">{summary.offline_clusters} 离线</span> : null}
+        </div>
+        <div className="flex items-center gap-2"><HardDrive className="h-4 w-4 text-sky-600" aria-hidden /><span className="text-muted-foreground">磁盘</span><strong>{summary.online_disks} 在线</strong><span className={cn(summary.offline_disks > 0 ? "text-rose-600" : "text-muted-foreground")}>{summary.offline_disks} 离线</span><span className="text-muted-foreground">{summary.healing_disks} 修复中</span></div>
+        <div className="flex min-w-56 items-center gap-2">
+          <Gauge className="h-4 w-4 text-amber-600" aria-hidden />
+          <span className="text-muted-foreground">物理容量</span>
+          <strong>{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</strong>
+          <Progress className="h-1.5 w-24" value={summary.raw_capacity_bytes ? summary.raw_used_bytes / summary.raw_capacity_bytes * 100 : 0} />
+        </div>
+        <div className="flex items-center gap-2"><Box className="h-4 w-4 text-violet-600" aria-hidden /><span className="text-muted-foreground">对象</span><strong>{summary.object_count.toLocaleString("zh-CN")}</strong><span className="text-muted-foreground">逻辑 {formatBytes(summary.logical_usage_bytes)}</span></div>
         <div className="ml-auto flex items-center gap-2 text-muted-foreground">
           <Activity className="h-4 w-4" aria-hidden />
-          自动跟踪 {data.auto_heal_enabled ? "已启用" : "已停用"} · {data.auto_heal_authority_region}
+          自动跟踪 {data.auto_heal_enabled ? "已启用" : "已停用"} · 权威区域 {data.auto_heal_authority_region}
           <Button variant="ghost" size="icon" className="h-7 w-7" title="刷新集群状态" aria-label="刷新集群状态" disabled={refreshing} onClick={() => void load(true)}>
             <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden />
           </Button>
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="docs-scroll min-h-0 overflow-auto border-b border-border/70 xl:border-b-0 xl:border-r">
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background">
-              <TableRow>
-                <TableHead>集群</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>磁盘</TableHead>
-                <TableHead>容量</TableHead>
-                <TableHead className="text-right">对象</TableHead>
-                <TableHead className="text-right">探测耗时</TableHead>
-                <TableHead>运行时间</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.clusters.map((cluster) => (
-                <TableRow
-                  key={cluster.server}
-                  data-state={selectedServer === cluster.server ? "selected" : undefined}
-                  className="cursor-pointer"
-                  onClick={() => setSelectedServer(cluster.server)}
-                >
-                  <TableCell>
-                    <div className="font-medium">{cluster.shown_name} · {cluster.server}</div>
-                    <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{cluster.endpoint}</div>
-                  </TableCell>
-                  <TableCell><ClusterStatus status={cluster.status} /></TableCell>
-                  <TableCell>{cluster.online_disks} / {cluster.online_disks + cluster.offline_disks}</TableCell>
-                  <TableCell>
-                    <div>{formatBytes(cluster.raw_used_bytes)} / {formatBytes(cluster.raw_capacity_bytes)}</div>
-                    <Progress className="mt-1 h-1.5 w-28" value={cluster.raw_capacity_bytes ? cluster.raw_used_bytes / cluster.raw_capacity_bytes * 100 : 0} />
-                  </TableCell>
-                  <TableCell className="text-right">{cluster.object_count.toLocaleString("zh-CN")}</TableCell>
-                  <TableCell className="text-right font-mono">{Math.round(cluster.command_latency_ms)} ms</TableCell>
-                  <TableCell>{formatDuration(cluster.uptime_seconds)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+      <div className="docs-scroll min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="grid min-h-full auto-rows-[minmax(280px,1fr)] grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          {data.clusters.map((cluster) => {
+            const capacityPercent = cluster.raw_capacity_bytes > 0
+              ? cluster.raw_used_bytes / cluster.raw_capacity_bytes * 100
+              : 0
+            const clusterJob = latestJobFor(cluster.server, jobs)
+            const jobActive = clusterJob?.status === "queued" || clusterJob?.status === "running"
+            return (
+              <article key={cluster.server} className="flex min-h-0 flex-col rounded-md border border-border/80 bg-background">
+                <header className="flex items-start justify-between gap-3 border-b border-border/60 px-3.5 py-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-semibold">{cluster.shown_name}集群</h2>
+                    <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={cluster.endpoint}>{cluster.server} · {cluster.endpoint}</p>
+                  </div>
+                  <ClusterStatus status={cluster.status} />
+                </header>
 
-        <aside className="docs-scroll min-h-0 overflow-y-auto p-4">
-          {selected ? (
-            <div className="space-y-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold">{selected.shown_name}集群</h2>
-                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">{selected.version || selected.endpoint}</p>
-                </div>
-                <ClusterStatus status={selected.status} />
-              </div>
+                <div className="docs-scroll min-h-0 flex-1 overflow-y-auto px-3.5 py-3">
+                  {cluster.error ? <div className="mb-3 rounded-md bg-rose-500/10 px-2.5 py-2 text-[11px] text-rose-700 dark:text-rose-300">{cluster.error}</div> : null}
 
-              {selected.error ? <div className="rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">{selected.error}</div> : null}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><HardDrive className="h-3 w-3" aria-hidden />磁盘</div><div className="mt-0.5 text-xs font-medium">{cluster.online_disks} / {cluster.online_disks + cluster.offline_disks} 在线</div></div>
+                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Box className="h-3 w-3" aria-hidden />对象</div><div className="mt-0.5 text-xs font-medium">{cluster.object_count.toLocaleString("zh-CN")}</div></div>
+                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Activity className="h-3 w-3" aria-hidden />探测耗时</div><div className="mt-0.5 font-mono text-xs font-medium">{cluster.reachable ? `${Math.round(cluster.command_latency_ms)} ms` : "—"}</div></div>
+                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock3 className="h-3 w-3" aria-hidden />运行时间</div><div className="mt-0.5 text-xs font-medium">{cluster.reachable ? formatDuration(cluster.uptime_seconds) : "—"}</div></div>
+                  </div>
 
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-[11px]"><span className="text-muted-foreground">物理容量使用率</span><span>{capacityPercent.toFixed(1)}%</span></div>
-                <Progress value={capacityPercent} />
-                <div className="flex justify-between text-[10px] text-muted-foreground"><span>{formatBytes(selected.raw_used_bytes)}</span><span>{formatBytes(selected.raw_capacity_bytes)}</span></div>
-              </div>
+                  <div className="mt-4">
+                    <div className="flex items-center justify-between text-[10px]"><span className="text-muted-foreground">物理容量</span><span className="font-medium">{capacityPercent.toFixed(1)}%</span></div>
+                    <Progress className="mt-1.5 h-1.5" value={capacityPercent} />
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground"><span>{formatBytes(cluster.raw_used_bytes)} 已用</span><span>{formatBytes(cluster.raw_capacity_bytes)} 总量</span></div>
+                  </div>
 
-              <div>
-                <div className="mb-2 text-[11px] font-medium text-muted-foreground">磁盘明细</div>
-                <div className="space-y-1.5">
-                  {selected.drives.map((drive) => (
-                    <div key={drive.endpoint} className="rounded-md border border-border/70 px-2.5 py-2 text-[11px]">
-                      <div className="flex items-center justify-between gap-2"><span className="truncate font-mono">{drive.endpoint}</span><span className={drive.state === "ok" ? "text-emerald-600" : "text-rose-600"}>{drive.state}</span></div>
-                      <div className="mt-1 flex justify-between text-muted-foreground"><span>{formatBytes(drive.used_bytes)} / {formatBytes(drive.total_bytes)}</span><span>等待 {drive.waiting_operations}</span></div>
+                  <div className="mt-4 border-t border-border/60 pt-3">
+                    <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground"><span>驱动器</span><span>{cluster.healing_disks > 0 ? `${cluster.healing_disks} 修复中` : `${cluster.drives.length} 个`}</span></div>
+                    <div className="divide-y divide-border/50">
+                      {cluster.drives.map((drive) => (
+                        <div key={`${drive.endpoint}:${drive.path}`} className="py-1.5 text-[10px]">
+                          <div className="flex items-center justify-between gap-2"><span className="truncate font-mono" title={drive.endpoint}>{drive.endpoint || drive.path}</span><span className={drive.state.toLowerCase() === "ok" || drive.state.toLowerCase() === "online" ? "text-emerald-600" : "text-rose-600"}>{drive.state}</span></div>
+                          <div className="mt-0.5 flex justify-between text-muted-foreground"><span>{formatBytes(drive.used_bytes)} / {formatBytes(drive.total_bytes)}</span><span>等待 {drive.waiting_operations}</span></div>
+                        </div>
+                      ))}
+                      {cluster.drives.length === 0 ? <div className="py-2 text-[10px] text-muted-foreground">暂无驱动器明细</div> : null}
                     </div>
-                  ))}
-                  {selected.drives.length === 0 ? <div className="text-xs text-muted-foreground">没有可用的磁盘明细</div> : null}
+                  </div>
                 </div>
-              </div>
 
-              <div className="border-t border-border/70 pt-4">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-medium">原生自愈</div>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground">{healStatus?.status === "healing" ? `已扫描 ${healStatus.scanned_items} 项` : "当前没有进行中的自愈"}</div>
+                <footer className="flex items-center justify-between gap-2 border-t border-border/60 px-3.5 py-2.5">
+                  <div className="min-w-0 text-[10px]">
+                    {clusterJob ? (
+                      <>
+                        <div className={cn("truncate font-medium", clusterJob.status === "failed" && "text-rose-600", clusterJob.status === "running" && "text-sky-600")}>{operationStatusLabel(clusterJob.status)} · {clusterJob.message || "自愈巡检"}</div>
+                        <div className="mt-0.5 text-muted-foreground">{formatDateTime(clusterJob.created_at)}</div>
+                      </>
+                    ) : (
+                      <><div className="font-medium">原生自愈</div><div className="mt-0.5 text-muted-foreground">最近检查 {formatDateTime(cluster.checked_at)}</div></>
+                    )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!selected.reachable || selectedJob?.status === "queued" || selectedJob?.status === "running"}
-                    onClick={() => setHealDialog(true)}
-                  >
-                    <Wrench className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                    自愈巡检
+                  <Button variant="outline" size="sm" className="shrink-0" disabled={!cluster.reachable || jobActive} onClick={() => openHealDialog(cluster.server)}>
+                    {jobActive ? <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : <Wrench className="mr-1.5 h-3.5 w-3.5" aria-hidden />}
+                    {jobActive ? "巡检中" : "自愈巡检"}
                   </Button>
-                </div>
-                {selectedJob ? (
-                  <div className="rounded-md bg-muted/50 px-3 py-2 text-[11px]">
-                    <div className="flex items-center justify-between gap-2"><span>{selectedJob.message || "维护任务"}</span><span className="font-mono uppercase text-muted-foreground">{selectedJob.status}</span></div>
-                    <div className="mt-1 text-[10px] text-muted-foreground">{formatDateTime(selectedJob.created_at)} · {selectedJob.actor}</div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : <div className="text-xs text-muted-foreground">请选择一个集群</div>}
-        </aside>
+                </footer>
+              </article>
+            )
+          })}
+        </div>
       </div>
 
       <Dialog open={healDialog} onOpenChange={setHealDialog}>
         <DialogContent className="max-w-md rounded-lg">
-          <DialogHeader><DialogTitle>启动自愈巡检</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>集群自愈巡检</DialogTitle></DialogHeader>
           <DialogBody>
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">目标集群：{selected?.shown_name} · {selected?.server}</div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div><div className="text-[10px] text-muted-foreground">MinIO Heal 状态</div><div className="mt-0.5 font-medium">{healStatus ? (healStatus.status === "healing" ? "修复中" : healStatus.status === "idle" ? "空闲" : healStatus.status) : "正在读取..."}</div></div>
+              <div><div className="text-[10px] text-muted-foreground">已扫描项目</div><div className="mt-0.5 font-medium">{healStatus?.scanned_items.toLocaleString("zh-CN") ?? "—"}</div></div>
+              <div><div className="text-[10px] text-muted-foreground">待修复磁盘</div><div className="mt-0.5 font-medium">{healStatus?.heal_disks.length ?? "—"}</div></div>
+              <div><div className="text-[10px] text-muted-foreground">离线节点</div><div className="mt-0.5 font-medium">{healStatus?.offline_nodes.length ?? "—"}</div></div>
+            </div>
+            {selectedJob ? (
+              <div className="rounded-md bg-muted/40 px-3 py-2 text-[11px]">
+                <div className="flex items-center justify-between gap-2"><span>{selectedJob.message || "最近一次自愈巡检"}</span><span className="text-muted-foreground">{operationStatusLabel(selectedJob.status)}</span></div>
+                <div className="mt-1 text-[10px] text-muted-foreground">{formatDateTime(selectedJob.created_at)} · {selectedJob.actor}</div>
+              </div>
+            ) : null}
+            {healStatus?.error ? <div className="rounded-md bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">{healStatus.error}</div> : null}
             <p className="text-xs leading-5 text-muted-foreground">MinIO 会在服务端自动修复损坏或缺失的数据。本操作读取原生 Heal 状态并记录巡检结果，不会中断集群读写。</p>
           </DialogBody>
           <DialogFooter>
@@ -704,7 +901,10 @@ export default function StorageOperationsPage() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/80 bg-background">
+      <div className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden",
+        view === "replication" && "rounded-lg border border-border/80 bg-background",
+      )}>
         {view === "replication"
           ? <ReplicationWorkspace accessToken={accessToken ?? undefined} />
           : <ClusterWorkspace accessToken={accessToken ?? undefined} />}

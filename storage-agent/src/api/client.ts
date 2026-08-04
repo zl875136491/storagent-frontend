@@ -222,6 +222,7 @@ export type ReplicationResyncStatus =
   | "idle"
   | "running"
   | "completed"
+  | "partial"
   | "failed"
   | "unknown"
 
@@ -241,6 +242,8 @@ export interface ReplicationTargetMetric {
   completed_bytes: number
   failed_count: number
   failed_bytes: number
+  recent_failed_count: number
+  recent_failed_bytes: number
   current_rate_bps: number
   resync_status?: ReplicationResyncStatus
   resync_reset_id?: string
@@ -248,7 +251,10 @@ export interface ReplicationTargetMetric {
   resync_updated_at?: string | null
   resync_completed_bytes?: number
   resync_object_count?: number
+  resync_failed_count?: number
+  resync_failed_bytes?: number
   resync_current_object?: string
+  resync_error?: string
 }
 
 export interface ReplicationSourceMetric {
@@ -261,6 +267,8 @@ export interface ReplicationSourceMetric {
   queued_bytes: number
   failed_count: number
   failed_bytes: number
+  recent_failed_count: number
+  recent_failed_bytes: number
   mrf_failed_last_5m: number
   retries_total: number
   current_rate_bps: number
@@ -291,6 +299,8 @@ export interface ReplicationOperationsResponse {
     queued_bytes: number
     failed_count: number
     failed_bytes: number
+    recent_failed_count: number
+    recent_failed_bytes: number
     mrf_failed_last_5m: number
     current_rate_bps: number
   }
@@ -366,6 +376,14 @@ export interface StorageOperationItem {
   created_at: string
   started_at: string | null
   finished_at: string | null
+}
+
+export interface ReplicationOperationResponse {
+  message: string
+  bucket: string
+  source_server?: string | null
+  target_server?: string | null
+  detail: Record<string, unknown>
 }
 
 export interface ClusterHealStatusResponse {
@@ -1017,8 +1035,8 @@ export async function startReplicationResyncApi(
   bucket: string,
   payload: { source_server: string; target_server: string; older_than?: string | null },
   accessToken?: string,
-): Promise<{ message: string }> {
-  return apiPost<typeof payload, { message: string }>(
+): Promise<ReplicationOperationResponse> {
+  return apiPost<typeof payload, ReplicationOperationResponse>(
     `/api/storage/operations/replication/${encodeURIComponent(bucket)}/resync`,
     payload,
     accessToken,
