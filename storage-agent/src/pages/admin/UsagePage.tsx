@@ -135,11 +135,68 @@ function useChart(): {
   return { containerRef, chartRef }
 }
 
-type ScatterValue = [number, number, number, string, string, string, string, string]
+type UsageOperation = "upload" | "download"
+type ScatterValue = [number, number, number, string, string, string, string, string, UsageOperation, string]
+
+interface EntityScatterGroup {
+  key: string
+  label: string
+  upload: ScatterValue[]
+  download: ScatterValue[]
+}
+
+const UPLOAD_COLOR = "#10b981"
+const DOWNLOAD_COLOR = "#3b82f6"
+const ENTITY_COLORS_LIGHT = [
+  "#0f766e",
+  "#2563eb",
+  "#d97706",
+  "#db2777",
+  "#7c3aed",
+  "#0891b2",
+  "#65a30d",
+  "#dc2626",
+  "#4f46e5",
+  "#ea580c",
+]
+const ENTITY_COLORS_DARK = [
+  "#2dd4bf",
+  "#60a5fa",
+  "#fbbf24",
+  "#f472b6",
+  "#a78bfa",
+  "#22d3ee",
+  "#a3e635",
+  "#f87171",
+  "#818cf8",
+  "#fb923c",
+]
+const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat("zh-CN", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+})
+
+function formatCompactNumber(value: number): string {
+  return COMPACT_NUMBER_FORMATTER.format(value)
+}
+
+function tooltipMetricRow(label: string, value: string, color?: string): string {
+  const marker = color
+    ? `<span style="display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:${color}"></span>`
+    : ""
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:7px"><span style="color:var(--usage-tooltip-muted)">${marker}${escapeHtml(label)}</span><strong style="font-weight:600">${escapeHtml(value)}</strong></div>`
+}
 
 function entityLabel(point: UsagePoint, dimension: Dimension): string {
-  if (dimension === "app") return point.app_shown_name || point.app_name
+  if (dimension === "app") {
+    const shownName = point.app_shown_name || point.app_name
+    return shownName === point.app_name ? shownName : `${shownName} · ${point.app_name}`
+  }
   return `${point.api_key_hint || point.api_key_id.slice(0, 12)} · ${point.app_shown_name || point.app_name}`
+}
+
+function entityKey(point: UsagePoint, dimension: Dimension): string {
+  return dimension === "app" ? point.app_name : point.api_key_id
 }
 
 function aggregateChartPoints(points: UsagePoint[], dimension: Dimension): UsagePoint[] {
@@ -187,26 +244,21 @@ function UsageScatterChart({ points, dimension }: { points: UsagePoint[]; dimens
     const foreground = dark ? "#f4f4f5" : "#27272a"
     const muted = dark ? "#a1a1aa" : "#71717a"
     const grid = dark ? "rgba(113,113,122,.22)" : "rgba(113,113,122,.16)"
-    const groups = new Map<
-      string,
-      { name: string; operation: "upload" | "download"; data: ScatterValue[] }
-    >()
+    const fontFamily = getComputedStyle(document.body).fontFamily || "sans-serif"
+    const groupMap = new Map<string, EntityScatterGroup>()
+    let scatterPointCount = 0
 
     for (const point of points) {
       const timestamp = parseBackendDate(point.period_start)?.getTime()
       if (!timestamp) continue
+      const key = entityKey(point, dimension)
       const label = entityLabel(point, dimension)
+      const group = groupMap.get(key) ?? { key, label, upload: [], download: [] }
       for (const operation of ["upload", "download"] as const) {
         const requests = point[`${operation}_requests`]
         if (requests <= 0) continue
         const bytes = point[`${operation}_bytes`]
-        const key = `${label}\u0000${operation}`
-        const group = groups.get(key) ?? {
-          name: `${label} · ${operation === "upload" ? "上传" : "下载"}`,
-          operation,
-          data: [],
-        }
-        group.data.push([
+        group[operation].push([
           timestamp,
           requests,
           bytes,
@@ -215,86 +267,235 @@ function UsageScatterChart({ points, dimension }: { points: UsagePoint[]; dimens
           point.region,
           point.first_at,
           point.last_at,
+          operation,
+          key,
         ])
-        groups.set(key, group)
+        scatterPointCount += 1
       }
+      groupMap.set(key, group)
     }
 
-    const maxBytes = Math.max(1, ...points.flatMap((point) => [point.upload_bytes, point.download_bytes]))
-    const series = [...groups.values()].map((group) => ({
-      name: group.name,
-      type: "scatter" as const,
-      symbol: group.operation === "upload" ? "circle" : "diamond",
-      data: group.data,
-      symbolSize: (rawValue: unknown) => {
-        const bytes = Number((rawValue as ScatterValue)[2] ?? 0)
-        return Math.max(9, Math.min(42, 9 + Math.sqrt(bytes / maxBytes) * 33))
-      },
+    const groups = [...groupMap.values()]
+      .filter((group) => group.upload.length > 0 || group.download.length > 0)
+      .sort((a, b) => a.label.localeCompare(b.label, "zh-CN") || a.key.localeCompare(b.key))
+    const labelCounts = new Map<string, number>()
+    for (const group of groups) {
+      labelCounts.set(group.label, (labelCounts.get(group.label) ?? 0) + 1)
+    }
+    const seriesNameByKey = new Map(groups.map((group) => [
+      group.key,
+      (labelCounts.get(group.label) ?? 0) > 1
+        ? `${group.label} · ${group.key.slice(0, 8)}`
+        : group.label,
+    ]))
+    let minByteLog = Number.POSITIVE_INFINITY
+    let maxByteLog = Number.NEGATIVE_INFINITY
+    for (const group of groups) {
+      for (const operation of ["upload", "download"] as const) {
+        for (const value of group[operation]) {
+          if (value[2] <= 0) continue
+          const byteLog = Math.log1p(value[2])
+          if (byteLog < minByteLog) minByteLog = byteLog
+          if (byteLog > maxByteLog) maxByteLog = byteLog
+        }
+      }
+    }
+    const hasPositiveBytes = Number.isFinite(minByteLog) && Number.isFinite(maxByteLog)
+    if (!hasPositiveBytes) {
+      minByteLog = 0
+      maxByteLog = 0
+    }
+    const byteLogRange = maxByteLog - minByteLog
+    const symbolSize = (rawValue: unknown) => {
+      const bytes = Number((rawValue as ScatterValue)[2] ?? 0)
+      if (bytes <= 0) return 9
+      if (byteLogRange <= Number.EPSILON) return 20
+      const normalized = (Math.log1p(bytes) - minByteLog) / byteLogRange
+      return 10 + Math.max(0, Math.min(1, normalized)) * 25
+    }
+
+    const entityColors = dark ? ENTITY_COLORS_DARK : ENTITY_COLORS_LIGHT
+    const colorByEntity = new Map<string, string>()
+    const series = groups.flatMap((group, groupIndex) => {
+      const color = entityColors[groupIndex % entityColors.length]
+      const offsetRadius = groupIndex === 0
+        ? 0
+        : Math.min(5, 1.5 + Math.sqrt(groupIndex) * 0.75)
+      const offsetAngle = groupIndex * 2.399963229728653
+      const entityOffsetX = Math.cos(offsetAngle) * offsetRadius
+      const entityOffsetY = Math.sin(offsetAngle) * offsetRadius
+      colorByEntity.set(group.key, color)
+      return (["upload", "download"] as const)
+        .filter((operation) => group[operation].length > 0)
+        .map((operation) => ({
+          id: `${group.key}:${operation}`,
+          name: seriesNameByKey.get(group.key) ?? group.label,
+          type: "scatter" as const,
+          symbol: operation === "upload" ? "circle" : "diamond",
+          symbolOffset: [
+            entityOffsetX + (operation === "upload" ? -2 : 2),
+            entityOffsetY,
+          ],
+          data: group[operation],
+          symbolSize,
+          itemStyle: {
+            color,
+            opacity: 0.76,
+            borderColor: dark ? "#18181b" : "#ffffff",
+            borderWidth: 1.5,
+            shadowBlur: scatterPointCount <= 2000 ? 9 : 0,
+            shadowColor: color,
+          },
+          progressive: 1000,
+          progressiveThreshold: 3000,
+          emphasis: {
+            scale: 1.16,
+            focus: "self" as const,
+            itemStyle: { opacity: 1, borderWidth: 2, shadowBlur: scatterPointCount <= 2000 ? 14 : 0 },
+          },
+        }))
+    })
+
+    const legendData = groups.map((group) => ({
+      name: seriesNameByKey.get(group.key) ?? group.label,
+      icon: "roundRect",
       itemStyle: {
-        color: group.operation === "upload" ? "#10b981" : "#3b82f6",
-        opacity: 0.78,
-        shadowBlur: 7,
-        shadowColor: group.operation === "upload" ? "rgba(16,185,129,.28)" : "rgba(59,130,246,.28)",
+        color: colorByEntity.get(group.key),
       },
-      emphasis: { scale: 1.15, itemStyle: { opacity: 1 } },
     }))
 
+    const colorForValue = (value: ScatterValue): string => {
+      return colorByEntity.get(value[9]) ?? foreground
+    }
+
     const option: echarts.EChartsOption = {
-      animationDuration: 320,
-      grid: { left: 54, right: 22, top: 52, bottom: 58, containLabel: false },
+      animation: scatterPointCount <= 3000,
+      animationDuration: 420,
+      animationEasing: "cubicOut",
+      aria: {
+        enabled: true,
+        description: "上传与下载请求时序散点图，纵轴表示请求次数，气泡面积表示传输量。",
+      },
+      textStyle: { fontFamily },
+      grid: { left: 18, right: 28, top: 56, bottom: 64, containLabel: true },
       legend: {
         type: "scroll",
-        top: 4,
-        left: 8,
-        right: 8,
-        textStyle: { color: muted, fontSize: 10 },
-        pageTextStyle: { color: muted },
+        top: 8,
+        left: 10,
+        right: 205,
+        itemWidth: 10,
+        itemHeight: 8,
+        itemGap: 16,
+        textStyle: { color: foreground, fontSize: 11 },
+        pageTextStyle: { color: muted, fontSize: 10 },
+        pageIconColor: foreground,
+        pageIconInactiveColor: dark ? "#52525b" : "#d4d4d8",
+        data: legendData,
       },
       tooltip: {
         trigger: "item",
+        confine: true,
+        extraCssText: `--usage-tooltip-muted:${muted};box-shadow:0 12px 32px rgba(0,0,0,.18);border-radius:6px;padding:12px 14px;`,
         borderWidth: 1,
         backgroundColor: dark ? "rgba(24,24,27,.96)" : "rgba(255,255,255,.98)",
         borderColor: dark ? "#3f3f46" : "#e4e4e7",
-        textStyle: { color: foreground, fontSize: 11 },
+        textStyle: { color: foreground, fontSize: 11, lineHeight: 17 },
         formatter: (params: echarts.TooltipComponentFormatterCallbackParams) => {
           const item = (Array.isArray(params) ? params[0] : params) as echarts.DefaultLabelFormatterCallbackParams
           const value = item.value as unknown as ScatterValue
-          const operation = item.seriesName?.endsWith("上传") ? "上传" : "下载"
+          const operation = value[8] === "upload" ? "上传" : "下载"
+          const color = colorForValue(value)
           return [
-            `<strong>${escapeHtml(value[3])} · ${operation}</strong>`,
-            `时间桶：${escapeHtml(formatChartTime(new Date(value[0])))}`,
-            `请求次数：${Number(value[1]).toLocaleString("zh-CN")} 次`,
-            `传输量：${escapeHtml(formatBytes(Number(value[2])))}`,
-            `APIKey：${escapeHtml(value[4])}`,
-            `区域：${escapeHtml(value[5])}`,
-            `发生范围：${escapeHtml(formatDateTime(value[6]))} 至 ${escapeHtml(formatDateTime(value[7]))}`,
-          ].join("<br/>")
+            `<div style="min-width:236px"><div style="font-size:12px;font-weight:600">${escapeHtml(value[3])}</div>`,
+            `<div style="margin-top:2px;color:var(--usage-tooltip-muted);font-size:10px">${escapeHtml(formatChartTime(new Date(value[0])))} · ${escapeHtml(value[5])}</div>`,
+            tooltipMetricRow(`${operation}请求`, `${Number(value[1]).toLocaleString("zh-CN")} 次`, color),
+            tooltipMetricRow("传输量", formatBytes(Number(value[2]))),
+            `<div style="height:1px;margin:10px 0 7px;background:${dark ? "#3f3f46" : "#e4e4e7"}"></div>`,
+            `<div style="color:var(--usage-tooltip-muted);font-size:10px">${dimension === "app" ? "范围" : "APIKey"} · ${escapeHtml(value[4])}</div>`,
+            `<div style="margin-top:3px;color:var(--usage-tooltip-muted);font-size:10px">发生于 ${escapeHtml(formatDateTime(value[6]))} 至 ${escapeHtml(formatDateTime(value[7]))}</div></div>`,
+          ].join("")
         },
       },
       xAxis: {
         type: "time",
-        axisLabel: { color: muted, fontSize: 10, formatter: (value: number) => formatChartTime(new Date(value)) },
+        boundaryGap: ["2%", "2%"],
+        axisPointer: {
+          show: true,
+          snap: false,
+          lineStyle: { color: dark ? "#71717a" : "#a1a1aa", type: "dashed" },
+          label: {
+            show: true,
+            color: dark ? "#18181b" : "#ffffff",
+            backgroundColor: dark ? "#d4d4d8" : "#3f3f46",
+            formatter: (params) => formatChartTime(new Date(Number(params.value))),
+          },
+        },
+        axisLabel: {
+          color: muted,
+          fontSize: 10,
+          hideOverlap: true,
+          margin: 12,
+          formatter: (value: number) => formatChartTime(new Date(value)),
+        },
         axisLine: { lineStyle: { color: grid } },
+        axisTick: { show: false },
         splitLine: { show: true, lineStyle: { color: grid, type: "dashed" } },
       },
       yAxis: {
         type: "value",
         minInterval: 1,
         name: "请求次数",
-        nameTextStyle: { color: muted, fontSize: 10 },
-        axisLabel: { color: muted, fontSize: 10 },
+        nameGap: 18,
+        nameTextStyle: { color: muted, fontSize: 10, align: "left" },
+        axisLabel: { color: muted, fontSize: 10, formatter: (value: number) => formatCompactNumber(value) },
+        axisLine: { show: false },
+        axisTick: { show: false },
         splitLine: { lineStyle: { color: grid, type: "dashed" } },
       },
       dataZoom: [
-        { type: "inside", xAxisIndex: 0 },
-        { type: "slider", xAxisIndex: 0, height: 16, bottom: 12, borderColor: "transparent" },
+        { type: "inside", xAxisIndex: 0, filterMode: "filter", zoomOnMouseWheel: true },
+        {
+          type: "slider",
+          xAxisIndex: 0,
+          filterMode: "filter",
+          height: 18,
+          bottom: 14,
+          borderColor: "transparent",
+          backgroundColor: dark ? "rgba(63,63,70,.28)" : "rgba(228,228,231,.55)",
+          fillerColor: dark ? "rgba(113,113,122,.28)" : "rgba(113,113,122,.15)",
+          dataBackground: {
+            lineStyle: { color: dark ? "#71717a" : "#a1a1aa", opacity: 0.45 },
+            areaStyle: { color: dark ? "#52525b" : "#d4d4d8", opacity: 0.18 },
+          },
+          selectedDataBackground: {
+            lineStyle: { color: DOWNLOAD_COLOR, opacity: 0.65 },
+            areaStyle: { color: DOWNLOAD_COLOR, opacity: 0.12 },
+          },
+          handleStyle: { color: dark ? "#a1a1aa" : "#71717a", borderColor: "transparent" },
+          moveHandleStyle: { color: dark ? "#a1a1aa" : "#71717a", opacity: 0.55 },
+          textStyle: { color: muted, fontSize: 9 },
+        },
       ],
       series,
+      media: [{
+        query: { maxWidth: 639 },
+        option: {
+          grid: { left: 14, right: 20, top: 78, bottom: 64, containLabel: true },
+          legend: { left: 8, right: 8, top: 6 },
+        },
+      }],
     }
     chart.setOption(option, true)
   }, [chartRef, dark, dimension, points])
 
-  return <div ref={containerRef} className="h-full min-h-0 w-full flex-1" />
+  return (
+    <div className="relative h-full min-h-0 w-full flex-1">
+      <div ref={containerRef} className="h-full min-h-0 w-full" />
+      <div className="pointer-events-none absolute top-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground sm:top-[11px] sm:right-[18px] sm:left-auto sm:translate-x-0">
+        ● 上传&nbsp;&nbsp;◆ 下载&nbsp;&nbsp;·&nbsp;&nbsp;大小 = 传输量
+      </div>
+    </div>
+  )
 }
 
 interface RegionRow extends UsageTotals {
@@ -308,82 +509,164 @@ function RegionUsageChart({ rows }: { rows: RegionRow[] }) {
   useEffect(() => {
     const chart = chartRef.current
     if (!chart) return
+    const foreground = dark ? "#f4f4f5" : "#27272a"
     const muted = dark ? "#a1a1aa" : "#71717a"
     const grid = dark ? "rgba(113,113,122,.22)" : "rgba(113,113,122,.16)"
+    const fontFamily = getComputedStyle(document.body).fontFamily || "sans-serif"
     const option: echarts.EChartsOption = {
-      grid: { left: 34, right: 44, top: 42, bottom: 32, containLabel: true },
-      legend: { top: 3, textStyle: { color: muted, fontSize: 10 } },
+      animationDuration: 420,
+      animationEasing: "cubicOut",
+      aria: {
+        enabled: true,
+        description: "各区域上传与下载用量对比图，左侧为数据传输量，右侧为请求次数。",
+      },
+      textStyle: { fontFamily },
+      title: [
+        { text: "数据传输量", left: "9%", top: 42, textStyle: { color: muted, fontSize: 10, fontWeight: 400 } },
+        { text: "请求次数", left: "56%", top: 42, textStyle: { color: muted, fontSize: 10, fontWeight: 400 } },
+      ],
+      grid: [
+        { left: 20, right: "53%", top: 72, bottom: 30, containLabel: true },
+        { left: "53%", right: 24, top: 72, bottom: 30, containLabel: true },
+      ],
+      legend: {
+        top: 7,
+        left: "center",
+        itemWidth: 10,
+        itemHeight: 8,
+        itemGap: 20,
+        textStyle: { color: foreground, fontSize: 11 },
+        data: [
+          { name: "上传", icon: "roundRect" },
+          { name: "下载", icon: "roundRect" },
+        ],
+      },
       tooltip: {
         trigger: "axis",
+        confine: true,
+        axisPointer: { type: "shadow", shadowStyle: { color: dark ? "rgba(113,113,122,.10)" : "rgba(113,113,122,.08)" } },
+        extraCssText: `--usage-tooltip-muted:${muted};box-shadow:0 12px 32px rgba(0,0,0,.18);border-radius:6px;padding:12px 14px;`,
+        borderWidth: 1,
+        backgroundColor: dark ? "rgba(24,24,27,.96)" : "rgba(255,255,255,.98)",
+        borderColor: dark ? "#3f3f46" : "#e4e4e7",
+        textStyle: { color: foreground, fontSize: 11 },
         formatter: (params: echarts.TooltipComponentFormatterCallbackParams) => {
           const items = (Array.isArray(params) ? params : [params]) as echarts.DefaultLabelFormatterCallbackParams[]
           const title = escapeHtml(String(items[0]?.name || ""))
           const lines = items.map((item) => {
-            const name = String(item.seriesName || "")
+            const operation = String(item.seriesName || "")
+            const isRequest = Number(item.seriesIndex) >= 2
+            const name = `${operation}${isRequest ? "请求" : "传输量"}`
             const raw = Array.isArray(item.value) ? item.value[1] : item.value
-            const display = name.endsWith("请求")
+            const display = isRequest
               ? `${Number(raw).toLocaleString("zh-CN")} 次`
               : formatBytes(Number(raw))
-            return `${item.marker || ""}${escapeHtml(name)}：${escapeHtml(display)}`
+            const color = operation === "上传" ? UPLOAD_COLOR : DOWNLOAD_COLOR
+            return tooltipMetricRow(name, display, color)
           })
-          return [`<strong>${title}</strong>`, ...lines].join("<br/>")
+          return [`<div style="min-width:190px;font-size:12px;font-weight:600">${title}</div>`, ...lines].join("")
         },
       },
-      xAxis: {
-        type: "category",
-        data: rows.map((row) => row.shownName),
-        axisLabel: { color: muted, fontSize: 10 },
-        axisLine: { lineStyle: { color: grid } },
-      },
-      yAxis: [
+      xAxis: [
         {
           type: "value",
-          name: "传输量",
-          nameTextStyle: { color: muted, fontSize: 10 },
-          axisLabel: { color: muted, fontSize: 10, formatter: (value: number) => formatBytes(value) },
+          gridIndex: 0,
+          axisLabel: { color: muted, fontSize: 10, hideOverlap: true, formatter: (value: number) => formatBytes(value) },
+          axisLine: { show: false },
+          axisTick: { show: false },
           splitLine: { lineStyle: { color: grid, type: "dashed" } },
         },
         {
           type: "value",
-          name: "请求数",
-          nameTextStyle: { color: muted, fontSize: 10 },
-          axisLabel: { color: muted, fontSize: 10 },
-          splitLine: { show: false },
+          gridIndex: 1,
+          minInterval: 1,
+          axisLabel: { color: muted, fontSize: 10, hideOverlap: true, formatter: (value: number) => formatCompactNumber(value) },
+          axisLine: { show: false },
+          axisTick: { show: false },
+          splitLine: { lineStyle: { color: grid, type: "dashed" } },
+        },
+      ],
+      yAxis: [
+        {
+          type: "category",
+          gridIndex: 0,
+          inverse: true,
+          data: rows.map((row) => row.shownName),
+          axisLabel: { color: foreground, fontSize: 10, width: 76, overflow: "truncate", margin: 10 },
+          axisLine: { show: false },
+          axisTick: { show: false },
+        },
+        {
+          type: "category",
+          gridIndex: 1,
+          inverse: true,
+          data: rows.map((row) => row.shownName),
+          axisLabel: { show: false, color: foreground, fontSize: 10, width: 76, overflow: "truncate", margin: 10 },
+          axisLine: { show: false },
+          axisTick: { show: false },
         },
       ],
       series: [
         {
-          name: "上传传输量",
+          name: "上传",
           type: "bar",
+          xAxisIndex: 0,
+          yAxisIndex: 0,
           data: rows.map((row) => row.upload_bytes),
-          itemStyle: { color: "#10b981", borderRadius: [3, 3, 0, 0] },
+          barMaxWidth: 16,
+          barGap: "28%",
+          itemStyle: { color: UPLOAD_COLOR, borderRadius: [0, 3, 3, 0] },
+          emphasis: { itemStyle: { color: dark ? "#34d399" : "#059669" } },
         },
         {
-          name: "下载传输量",
+          name: "下载",
           type: "bar",
+          xAxisIndex: 0,
+          yAxisIndex: 0,
           data: rows.map((row) => row.download_bytes),
-          itemStyle: { color: "#3b82f6", borderRadius: [3, 3, 0, 0] },
+          barMaxWidth: 16,
+          itemStyle: { color: DOWNLOAD_COLOR, borderRadius: [0, 3, 3, 0] },
+          emphasis: { itemStyle: { color: dark ? "#60a5fa" : "#2563eb" } },
         },
         {
-          name: "上传请求",
-          type: "line",
+          name: "上传",
+          type: "bar",
+          xAxisIndex: 1,
           yAxisIndex: 1,
           data: rows.map((row) => row.upload_requests),
-          symbolSize: 7,
-          lineStyle: { color: "#059669", width: 1.5 },
-          itemStyle: { color: "#059669" },
+          barMaxWidth: 16,
+          barGap: "28%",
+          itemStyle: { color: dark ? "rgba(52,211,153,.68)" : "rgba(16,185,129,.72)", borderRadius: [0, 3, 3, 0] },
+          emphasis: { itemStyle: { color: dark ? "#34d399" : "#059669" } },
         },
         {
-          name: "下载请求",
-          type: "line",
+          name: "下载",
+          type: "bar",
+          xAxisIndex: 1,
           yAxisIndex: 1,
           data: rows.map((row) => row.download_requests),
-          symbol: "diamond",
-          symbolSize: 7,
-          lineStyle: { color: "#2563eb", width: 1.5 },
-          itemStyle: { color: "#2563eb" },
+          barMaxWidth: 16,
+          itemStyle: { color: dark ? "rgba(96,165,250,.68)" : "rgba(59,130,246,.72)", borderRadius: [0, 3, 3, 0] },
+          emphasis: { itemStyle: { color: dark ? "#60a5fa" : "#2563eb" } },
         },
       ],
+      media: [{
+        query: { maxWidth: 720 },
+        option: {
+          title: [
+            { text: "数据传输量", left: 82, top: 42, textStyle: { color: muted, fontSize: 10, fontWeight: 400 } },
+            { text: "请求次数", left: 82, top: "54%", textStyle: { color: muted, fontSize: 10, fontWeight: 400 } },
+          ],
+          grid: [
+            { left: 16, right: 20, top: 70, height: "31%", containLabel: true },
+            { left: 16, right: 20, top: "62%", bottom: 22, containLabel: true },
+          ],
+          yAxis: [
+            {},
+            { axisLabel: { show: true, color: foreground, fontSize: 10, width: 76, overflow: "truncate", margin: 10 } },
+          ],
+        },
+      }],
     }
     chart.setOption(option, true)
   }, [chartRef, dark, rows])
@@ -928,9 +1211,15 @@ export default function UsagePage() {
         </div>
         {activePanel === "region" ? <div id="usage-region-panel" className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
           {loading ? (
-            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">正在加载区域数据...</div>
-          ) : regionRows.length === 0 ? (
-            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">暂无区域统计数据</div>
+            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden />正在加载区域数据...
+            </div>
+          ) : !hasData || regionRows.length === 0 ? (
+            <div className="flex min-h-[20rem] flex-1 flex-col items-center justify-center text-center lg:min-h-0">
+              <MapPin className="h-8 w-8 text-muted-foreground/55" aria-hidden />
+              <div className="mt-3 text-sm font-medium text-foreground">所选范围暂无区域用量</div>
+              <div className="mt-1 text-xs text-muted-foreground">新的上传或下载请求会按实际接入区域汇总到这里。</div>
+            </div>
           ) : regionView === "chart" ? (
             <RegionUsageChart rows={regionRows} />
           ) : (
