@@ -14,6 +14,7 @@ import {
   Sparkles,
   UserRound,
   Users,
+  Wrench,
 } from "lucide-react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
@@ -309,6 +310,13 @@ function AppShell() {
                     {({ isActive }) => (
                       <SidebarMenuButton active={isActive} icon={<ChartScatter aria-hidden />}>
                         用量统计
+                      </SidebarMenuButton>
+                    )}
+                  </NavLink>
+                  <NavLink to="/admin/storage-operations" onClick={handleNavClick}>
+                    {({ isActive }) => (
+                      <SidebarMenuButton active={isActive} icon={<Wrench aria-hidden />}>
+                        存储运维
                       </SidebarMenuButton>
                     )}
                   </NavLink>
