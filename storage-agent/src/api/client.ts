@@ -190,6 +190,10 @@ export interface BucketInfo {
 
 export interface BucketsResponse {
   data: BucketInfo[]
+  cache_hit: boolean
+  cached_at: string
+  expires_at: string
+  ttl_seconds: number
 }
 
 export interface StorageBucketAppInfo {
@@ -205,6 +209,162 @@ export interface StorageBucketItem {
 
 export interface StorageBucketsResponse {
   data: StorageBucketItem[]
+}
+
+export type StorageOperationHealth =
+  | "healthy"
+  | "syncing"
+  | "degraded"
+  | "critical"
+  | "unreachable"
+
+export interface ReplicationTargetMetric {
+  source: string
+  target: string
+  arn: string
+  endpoint: string
+  status: StorageOperationHealth
+  online: boolean
+  latency_current_ms: number
+  latency_average_ms: number
+  latency_maximum_ms: number
+  total_downtime_seconds: number
+  last_online: string | null
+  replication_count: number
+  completed_bytes: number
+  failed_count: number
+  failed_bytes: number
+  current_rate_bps: number
+}
+
+export interface ReplicationSourceMetric {
+  server: string
+  status: StorageOperationHealth
+  reachable: boolean
+  command_latency_ms: number
+  error: string
+  queued_count: number
+  queued_bytes: number
+  failed_count: number
+  failed_bytes: number
+  mrf_failed_last_5m: number
+  retries_total: number
+  current_rate_bps: number
+  expected_target_count: number
+  actual_target_count: number
+  targets: ReplicationTargetMetric[]
+}
+
+export interface ReplicationBucketMetric {
+  bucket: string
+  shown_name: string
+  status: StorageOperationHealth
+  sources: ReplicationSourceMetric[]
+}
+
+export interface ReplicationOperationsResponse {
+  generated_at: string
+  servers: string[]
+  summary: {
+    status: StorageOperationHealth
+    bucket_count: number
+    source_count: number
+    reachable_source_count: number
+    expected_link_count: number
+    actual_link_count: number
+    online_link_count: number
+    queued_count: number
+    queued_bytes: number
+    failed_count: number
+    failed_bytes: number
+    mrf_failed_last_5m: number
+    current_rate_bps: number
+  }
+  buckets: ReplicationBucketMetric[]
+}
+
+export interface ClusterDriveHealth {
+  endpoint: string
+  path: string
+  state: string
+  total_bytes: number
+  used_bytes: number
+  available_bytes: number
+  waiting_operations: number
+}
+
+export interface ClusterHealthItem {
+  id: string
+  server: string
+  region: string
+  shown_name: string
+  endpoint: string
+  status: "online" | "degraded" | "offline"
+  reachable: boolean
+  error: string
+  checked_at: string
+  command_latency_ms: number
+  version: string
+  uptime_seconds: number
+  bucket_count: number
+  object_count: number
+  version_count: number
+  delete_marker_count: number
+  logical_usage_bytes: number
+  raw_capacity_bytes: number
+  raw_used_bytes: number
+  online_disks: number
+  offline_disks: number
+  healing_disks: number
+  drives: ClusterDriveHealth[]
+}
+
+export interface ClusterHealthResponse {
+  generated_at: string
+  auto_heal_enabled: boolean
+  auto_heal_authority_region: string
+  summary: {
+    status: "online" | "degraded" | "offline"
+    cluster_count: number
+    online_clusters: number
+    degraded_clusters: number
+    offline_clusters: number
+    online_disks: number
+    offline_disks: number
+    healing_disks: number
+    raw_capacity_bytes: number
+    raw_used_bytes: number
+    logical_usage_bytes: number
+    object_count: number
+  }
+  clusters: ClusterHealthItem[]
+}
+
+export interface StorageOperationItem {
+  id: string
+  kind: "cluster_heal"
+  status: "queued" | "running" | "succeeded" | "failed"
+  server: string
+  bucket: string
+  actor: string
+  message: string
+  result: Record<string, unknown>
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface ClusterHealStatusResponse {
+  server: string
+  reachable: boolean
+  status: string
+  scanned_items: number
+  offline_nodes: string[]
+  heal_disks: Array<Record<string, unknown>>
+  sets: Array<Record<string, unknown>>
+  error: string
+  checked_at: string
+  latest_operation: StorageOperationItem | null
 }
 
 export type AIProviderProtocol = "chat_completions" | "responses"
@@ -474,7 +634,11 @@ async function authorizedFetch(
     headers.set("Authorization", `Bearer ${token}`)
   }
 
-  const timeoutMs = path.startsWith("/api/ai/") ? 120_000 : 30_000
+  const timeoutMs = (
+    path.startsWith("/api/ai/")
+    || path.startsWith("/api/storage/operations/")
+    || (/^\/api\/storage\/[^/]+\/details/.test(path))
+  ) ? 120_000 : 30_000
   const nodeLocalAuthRequest = [
     "/api/auth/register/request",
     "/api/auth/password-reset/request",
@@ -801,14 +965,86 @@ export async function fetchMinioServersApi(
 export async function fetchBucketsApi(
   minioServerId: string,
   accessToken?: string,
+  refresh = false,
 ): Promise<BucketsResponse> {
-  return apiGet<BucketsResponse>(`/api/storage/${minioServerId}/details`, accessToken)
+  const suffix = refresh ? "?refresh=true" : ""
+  return apiGet<BucketsResponse>(`/api/storage/${minioServerId}/details${suffix}`, accessToken)
 }
 
 export async function fetchStorageBucketsApi(
   accessToken?: string,
 ): Promise<StorageBucketsResponse> {
   return apiGet<StorageBucketsResponse>("/api/storage/buckets", accessToken)
+}
+
+export async function fetchReplicationOperationsApi(
+  bucket?: string,
+  accessToken?: string,
+): Promise<ReplicationOperationsResponse> {
+  const query = bucket ? `?bucket=${encodeURIComponent(bucket)}` : ""
+  return apiGet<ReplicationOperationsResponse>(
+    `/api/storage/operations/replication${query}`,
+    accessToken,
+  )
+}
+
+export async function reconcileReplicationApi(
+  bucket: string,
+  accessToken?: string,
+): Promise<{ message: string }> {
+  return apiPost<Record<string, never>, { message: string }>(
+    `/api/storage/operations/replication/${encodeURIComponent(bucket)}/reconcile`,
+    {},
+    accessToken,
+  )
+}
+
+export async function startReplicationResyncApi(
+  bucket: string,
+  payload: { source_server: string; target_server: string; older_than?: string | null },
+  accessToken?: string,
+): Promise<{ message: string }> {
+  return apiPost<typeof payload, { message: string }>(
+    `/api/storage/operations/replication/${encodeURIComponent(bucket)}/resync`,
+    payload,
+    accessToken,
+  )
+}
+
+export async function fetchClusterHealthOperationsApi(
+  accessToken?: string,
+): Promise<ClusterHealthResponse> {
+  return apiGet<ClusterHealthResponse>("/api/storage/operations/clusters", accessToken)
+}
+
+export async function fetchClusterHealStatusApi(
+  server: string,
+  accessToken?: string,
+): Promise<ClusterHealStatusResponse> {
+  return apiGet<ClusterHealStatusResponse>(
+    `/api/storage/operations/clusters/${encodeURIComponent(server)}/heal`,
+    accessToken,
+  )
+}
+
+export async function startClusterHealApi(
+  server: string,
+  accessToken?: string,
+): Promise<StorageOperationItem> {
+  return apiPost<Record<string, never>, StorageOperationItem>(
+    `/api/storage/operations/clusters/${encodeURIComponent(server)}/heal`,
+    {},
+    accessToken,
+  )
+}
+
+export async function fetchStorageOperationsApi(
+  accessToken?: string,
+): Promise<{ data: StorageOperationItem[] }> {
+  return apiGet<{ data: StorageOperationItem[] }>(
+    "/api/storage/operations/jobs?limit=20",
+    accessToken,
+  )
 }
 
 export async function fetchAIRuntimeConfigApi(

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import * as echarts from "echarts"
 import { useAuth } from "../../auth/AuthContext"
 import {
@@ -9,7 +9,9 @@ import {
   type MinioServer,
 } from "../../api/client"
 import { Card, CardContent } from "../../components/ui/card"
-import { InfoIcon } from "lucide-react"
+import { Database, InfoIcon, RefreshCw } from "lucide-react"
+import { Button } from "../../components/ui/button"
+import { cn } from "../../lib/utils"
 
 function formatBytes(size: number): string {
   if (!Number.isFinite(size) || size <= 0) return "0 B"
@@ -17,6 +19,22 @@ function formatBytes(size: number): string {
   const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1)
   const value = size / 1024 ** index
   return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[index]}`
+}
+
+function formatCacheTime(value?: string): string {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date)
 }
 
 interface TreemapNode {
@@ -175,6 +193,12 @@ export default function BucketPage() {
 
   const [buckets, setBuckets] = useState<BucketInfo[]>([])
   const [bucketsLoading, setBucketsLoading] = useState(false)
+  const [cacheInfo, setCacheInfo] = useState<{
+    hit: boolean
+    cachedAt: string
+    expiresAt: string
+    ttlSeconds: number
+  } | null>(null)
 
   useEffect(() => {
     const loadServers = async () => {
@@ -196,26 +220,36 @@ export default function BucketPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
+  const loadBuckets = useCallback(async (refresh = false) => {
     if (!selectedServerId) {
       setBuckets([])
+      setCacheInfo(null)
       return
     }
-
-    const loadBuckets = async () => {
       setBucketsLoading(true)
       try {
-        const resp = await fetchBucketsApi(selectedServerId, accessToken ?? undefined)
+        const resp = await fetchBucketsApi(
+          selectedServerId,
+          accessToken ?? undefined,
+          refresh,
+        )
         setBuckets(resp.data)
+        setCacheInfo({
+          hit: Boolean(resp.cache_hit),
+          cachedAt: resp.cached_at,
+          expiresAt: resp.expires_at,
+          ttlSeconds: resp.ttl_seconds,
+        })
       } catch {
         // 错误已由 api client toast 展示
       } finally {
         setBucketsLoading(false)
       }
-    }
+  }, [accessToken, selectedServerId])
 
+  useEffect(() => {
     void loadBuckets()
-  }, [selectedServerId, accessToken])
+  }, [loadBuckets])
 
   // const selectedServer = useMemo(
   //   () => servers.find((s) => s.id === selectedServerId) ?? null,
@@ -307,8 +341,27 @@ export default function BucketPage() {
               当前 MinIO 服务暂无存储桶数据。
             </div>
           ) : (
-            <div className="rounded-2xl border border-border bg-muted/40">
-              <div className="relative h-[calc(100vh-300px)]">
+            <div className="overflow-hidden rounded-lg border border-border bg-muted/40">
+              <div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/70 bg-background/70 px-3 py-2 text-[11px]">
+                <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                  <Database className="h-3.5 w-3.5 text-primary" aria-hidden />
+                  {cacheInfo?.hit ? "Mongo 缓存" : "MinIO 实时回源"}
+                </span>
+                <span className="text-muted-foreground">生成 {formatCacheTime(cacheInfo?.cachedAt)}</span>
+                <span className="text-muted-foreground">到期 {formatCacheTime(cacheInfo?.expiresAt)}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-auto h-7 w-7"
+                  disabled={bucketsLoading}
+                  title="忽略缓存并重新读取 MinIO"
+                  aria-label="刷新服务器文件详情"
+                  onClick={() => void loadBuckets(true)}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", bucketsLoading && "animate-spin")} aria-hidden />
+                </Button>
+              </div>
+              <div className="relative h-[calc(100vh-344px)] min-h-[420px]">
                 <div className="absolute right-3 top-3 z-10 group">
                   <div className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border border-muted-foreground/60 bg-background/80 text-[10px] font-medium text-muted-foreground backdrop-blur-sm">
                     <InfoIcon className="h-4 w-4" />
