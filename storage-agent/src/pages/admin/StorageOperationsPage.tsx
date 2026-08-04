@@ -156,6 +156,17 @@ interface LinkRow {
   target: ReplicationTargetMetric
 }
 
+function resyncOperationTitle(target: ReplicationTargetMetric): string {
+  if (target.resync_status === "running") {
+    const progress = target.resync_object_count || target.resync_completed_bytes
+      ? ` · 已处理 ${target.resync_object_count ?? 0} 个对象 / ${formatBytes(target.resync_completed_bytes ?? 0)}`
+      : ""
+    return `补传运行中${progress}`
+  }
+  if (!target.resync_status || target.resync_status === "unknown") return "补传状态暂不可用"
+  return "为此链路启动对象补传"
+}
+
 function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   const [data, setData] = useState<ReplicationOperationsResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -166,19 +177,36 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   const [resyncTarget, setResyncTarget] = useState<LinkRow | null>(null)
   const [olderThan, setOlderThan] = useState("")
 
-  const load = useCallback(async (quiet = false) => {
+  const load = useCallback(async (
+    quiet = false,
+    showRefreshing = quiet,
+    bucketFilter?: string,
+  ) => {
     if (!quiet) setLoading(true)
-    else setRefreshing(true)
+    else if (showRefreshing) setRefreshing(true)
     try {
-      const response = await fetchReplicationOperationsApi(undefined, accessToken)
-      setData(response)
-      setSelectedBucket((current) => {
-        if (current && response.buckets.some((item) => item.bucket === current)) return current
-        return response.buckets[0]?.bucket ?? null
+      const response = await fetchReplicationOperationsApi(bucketFilter, accessToken)
+      setData((current) => {
+        if (!bucketFilter || !current) return response
+        const refreshedBucket = response.buckets[0]
+        if (!refreshedBucket) return current
+        return {
+          ...current,
+          generated_at: response.generated_at,
+          buckets: current.buckets.map((item) => (
+            item.bucket === refreshedBucket.bucket ? refreshedBucket : item
+          )),
+        }
       })
+      if (!bucketFilter) {
+        setSelectedBucket((current) => {
+          if (current && response.buckets.some((item) => item.bucket === current)) return current
+          return response.buckets[0]?.bucket ?? null
+        })
+      }
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (!quiet) setLoading(false)
+      if (showRefreshing) setRefreshing(false)
     }
   }, [accessToken])
 
@@ -193,6 +221,10 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   const links = useMemo<LinkRow[]>(
     () => bucket?.sources.flatMap((source) => source.targets.map((target) => ({ source, target }))) ?? [],
     [bucket],
+  )
+  const hasRunningResync = useMemo(
+    () => links.some(({ target }) => target.resync_status === "running"),
+    [links],
   )
   const bucketSummary = useMemo(() => {
     const sources = bucket?.sources ?? []
@@ -236,6 +268,14 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       setResyncing(false)
     }
   }
+
+  useEffect(() => {
+    if (!hasRunningResync) return undefined
+    const timer = window.setInterval(() => {
+      void load(true, false, selectedBucket ?? undefined)
+    }, 10_000)
+    return () => window.clearInterval(timer)
+  }, [hasRunningResync, load, selectedBucket])
 
   if (loading) return <LoadingState label="正在读取五地复制状态..." />
   if (!data) return <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">复制状态暂不可用</div>
@@ -335,33 +375,50 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {links.map(({ source, target }) => (
-                  <TableRow key={`${source.server}:${target.target}`}>
-                    <TableCell>
-                      <div className="font-medium">{source.server} → {target.target}</div>
-                      <div className="mt-0.5 max-w-48 truncate font-mono text-[10px] text-muted-foreground" title={target.endpoint}>{target.endpoint || "规则缺失"}</div>
-                    </TableCell>
-                    <TableCell><ReplicationStatus status={worseReplicationStatus(source.status, target.status)} /></TableCell>
-                    <TableCell className="text-right font-mono">{target.online ? `${Math.round(target.latency_current_ms)} ms` : "—"}</TableCell>
-                    <TableCell className="text-right">{target.replication_count} · {formatBytes(target.completed_bytes)}</TableCell>
-                    <TableCell className={cn("text-right", target.failed_count > 0 && "text-rose-600")}>{target.failed_count} · {formatBytes(target.failed_bytes)}</TableCell>
-                    <TableCell className="text-right">{formatRate(target.current_rate_bps)}</TableCell>
-                    <TableCell>{formatDateTime(target.last_online)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="为此链路启动对象补传"
-                        aria-label={`补传 ${source.server} 到 ${target.target}`}
-                        disabled={!target.arn || !target.online}
-                        onClick={() => setResyncTarget({ source, target })}
-                      >
-                        <DatabaseZap className="h-3.5 w-3.5" aria-hidden />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {links.map(({ source, target }) => {
+                  const resyncRunning = target.resync_status === "running"
+                  const resyncStatusUnknown = !target.resync_status || target.resync_status === "unknown"
+                  const operationTitle = resyncOperationTitle(target)
+                  return (
+                    <TableRow key={`${source.server}:${target.target}`}>
+                      <TableCell>
+                        <div className="font-medium">{source.server} → {target.target}</div>
+                        <div className="mt-0.5 max-w-48 truncate font-mono text-[10px] text-muted-foreground" title={target.endpoint}>{target.endpoint || "规则缺失"}</div>
+                      </TableCell>
+                      <TableCell><ReplicationStatus status={worseReplicationStatus(source.status, target.status)} /></TableCell>
+                      <TableCell className="text-right font-mono">{target.online ? `${Math.round(target.latency_current_ms)} ms` : "—"}</TableCell>
+                      <TableCell className="text-right">{target.replication_count} · {formatBytes(target.completed_bytes)}</TableCell>
+                      <TableCell className={cn("text-right", target.failed_count > 0 && "text-rose-600")}>{target.failed_count} · {formatBytes(target.failed_bytes)}</TableCell>
+                      <TableCell className="text-right">{formatRate(target.current_rate_bps)}</TableCell>
+                      <TableCell>{formatDateTime(target.last_online)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant={resyncRunning ? "secondary" : "ghost"}
+                          size="icon"
+                          className={cn(
+                            "h-7 w-7",
+                            resyncRunning && "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+                          )}
+                          title={operationTitle}
+                          aria-label={resyncRunning
+                            ? `${source.server} 到 ${target.target} 补传运行中`
+                            : `补传 ${source.server} 到 ${target.target}`}
+                          disabled={
+                            !target.arn
+                            || !target.online
+                            || resyncRunning
+                            || resyncStatusUnknown
+                          }
+                          onClick={() => setResyncTarget({ source, target })}
+                        >
+                          {resyncRunning
+                            ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                            : <DatabaseZap className="h-3.5 w-3.5" aria-hidden />}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
             {links.length === 0 ? (
