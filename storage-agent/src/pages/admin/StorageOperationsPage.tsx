@@ -70,7 +70,10 @@ const replicationStatusMeta: Record<
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0 B"
   const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
-  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1)
+  const index = Math.max(
+    0,
+    Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1),
+  )
   const scaled = value / 1024 ** index
   return `${scaled.toFixed(scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2)} ${units[index]}`
 }
