@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Navigate } from "react-router-dom"
-import { Boxes, Crown, ShieldCheck, UserCog, Users, Wrench } from "lucide-react"
+import { Users } from "lucide-react"
 
 import {
   fetchAdminUsersApi,
@@ -25,52 +25,43 @@ import {
 import { cn } from "../../lib/utils"
 
 const BASE_ROLE = "用户"
+const ROLE_ORDER = [BASE_ROLE, "应用管理员", "运维管理员", "用户管理员", "管理员"] as const
 
 const ROLE_OPTIONS = [
   {
     name: "应用管理员",
     description: "审批应用授权并调整应用存储配额",
-    icon: Boxes,
-    color: "text-sky-700 bg-sky-500/10 dark:text-sky-300",
   },
   {
     name: "运维管理员",
     description: "管理复制运维、集群健康和应急文件操作",
-    icon: Wrench,
-    color: "text-amber-700 bg-amber-500/10 dark:text-amber-300",
   },
   {
     name: "用户管理员",
     description: "查看用户并分配专项角色",
-    icon: UserCog,
-    color: "text-emerald-700 bg-emerald-500/10 dark:text-emerald-300",
   },
   {
     name: "管理员",
     description: "系统超级管理员，拥有全部权限",
-    icon: Crown,
-    color: "text-rose-700 bg-rose-500/10 dark:text-rose-300",
   },
 ] as const
 
 function roleNames(item: AdminUserItem): string[] {
   const names = item.roles?.map((role) => role.name).filter(Boolean) ?? []
-  if (names.length > 0) return [...new Set(names)]
-  return item.role_name ? [item.role_name] : [BASE_ROLE]
+  const unique = [...new Set(names.length > 0 ? names : item.role_name ? [item.role_name] : [BASE_ROLE])]
+  return unique.sort((left, right) => {
+    const leftIndex = ROLE_ORDER.indexOf(left as typeof ROLE_ORDER[number])
+    const rightIndex = ROLE_ORDER.indexOf(right as typeof ROLE_ORDER[number])
+    return (leftIndex < 0 ? ROLE_ORDER.length : leftIndex) - (rightIndex < 0 ? ROLE_ORDER.length : rightIndex) || left.localeCompare(right, "zh-CN")
+  })
 }
 
 function roleBadge(name: string) {
-  const option = ROLE_OPTIONS.find((item) => item.name === name)
-  const Icon = option?.icon ?? ShieldCheck
   return (
     <span
       key={name}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium",
-        option?.color ?? "bg-muted text-muted-foreground",
-      )}
+      className="inline-flex items-center rounded border border-border/70 bg-muted/40 px-2 py-1 text-[10px] font-medium text-muted-foreground"
     >
-      <Icon className="h-3 w-3" aria-hidden />
       {name}
     </span>
   )
@@ -225,7 +216,6 @@ export default function UserRolePage() {
                 </span>
               </label>
               {visibleRoleOptions.map((role) => {
-                const Icon = role.icon
                 const checked = selectedRoles.includes(role.name)
                 const selfElevationBlocked = (
                   !user?.is_admin
@@ -248,7 +238,6 @@ export default function UserRolePage() {
                       disabled={savingId === editing.id || selfElevationBlocked}
                       onChange={() => toggleRole(role.name)}
                     />
-                    <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                     <span>
                       <span className="block text-xs font-medium text-foreground">{role.name}</span>
                       <span className="mt-0.5 block text-[11px] text-muted-foreground">{role.description}</span>
