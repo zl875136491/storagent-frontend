@@ -103,7 +103,10 @@ export function BackendEndpointSwitcher() {
       if (!sessionOk) {
         showErrorToast("已切换后端，原登录态在该节点无效，请重新登录")
       }
-      window.location.reload()
+      // Keep the shell and current document mounted. A full reload briefly
+      // blanked the whole page while the new backend was being probed again.
+      // AuthProvider listens for this event and refreshes the in-memory user.
+      window.dispatchEvent(new CustomEvent("storagent:backend-changed", { detail: { base: next } }))
     } finally {
       setSwitching(false)
     }

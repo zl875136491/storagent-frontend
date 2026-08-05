@@ -175,7 +175,14 @@ function AppShell() {
   const { closeMobileDrawer } = useSidebar()
   const [aiConfig, setAIConfig] = useState<AIRuntimeConfig | null>(null)
   const [aiConfigLoading, setAIConfigLoading] = useState(true)
+  const [backendRevision, setBackendRevision] = useState(0)
   const isDocsRoute = location.pathname === "/docs"
+
+  useEffect(() => {
+    const onBackendChanged = () => setBackendRevision((revision) => revision + 1)
+    window.addEventListener("storagent:backend-changed", onBackendChanged)
+    return () => window.removeEventListener("storagent:backend-changed", onBackendChanged)
+  }, [])
 
   const handleNavClick = useCallback(
     (e: MouseEvent) => {
@@ -403,7 +410,9 @@ function AppShell() {
               : "docs-scroll overflow-y-auto px-4 pb-8 pt-4 md:px-8 md:pt-6",
           )}
         >
-          <Outlet />
+          <div key={backendRevision} className="min-h-full">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

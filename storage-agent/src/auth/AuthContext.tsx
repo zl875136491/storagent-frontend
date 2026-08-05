@@ -106,6 +106,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refreshSession])
 
   useEffect(() => {
+    const onBackendChanged = () => {
+      const token = localStorage.getItem(ACCESS_TOKEN_KEY)
+      if (!token) {
+        clearAuthState()
+        return
+      }
+      void fetchProfileApi(token)
+        .then(setUser)
+        .catch(() => clearAuthState())
+    }
+    window.addEventListener("storagent:backend-changed", onBackendChanged)
+    return () => window.removeEventListener("storagent:backend-changed", onBackendChanged)
+  }, [clearAuthState])
+
+  useEffect(() => {
     const storedAccessToken = localStorage.getItem(ACCESS_TOKEN_KEY)
     const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
 
