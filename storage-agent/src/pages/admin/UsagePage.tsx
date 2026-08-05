@@ -596,7 +596,7 @@ export default function UsagePage() {
             <ChartScatter className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-foreground">请求时序</span>
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">纵轴为请求次数，上传/下载图标随传输量增大；可滚轮缩放时间范围。</span>
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">纵轴为请求次数，上传使用圆形、下载使用三角形，图标随传输量增大；可滚轮缩放时间范围。</span>
             </span>
             <ChevronDown className={cn(
               "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform",
