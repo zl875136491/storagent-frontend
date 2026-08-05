@@ -12,8 +12,6 @@ import {
   HardDrive,
   LoaderCircle,
   Info,
-  Network,
-  Power,
   RefreshCw,
   RotateCcw,
   Server,
@@ -256,24 +254,20 @@ function ServerStatusDiagram({ cluster, compact = false }: { cluster: ClusterHea
   const stateLabel = !cluster.reachable ? "UNREACHABLE" : cluster.status === "degraded" ? "DEGRADED" : "ONLINE"
   return (
     <div className={cn("rounded-md border border-border/80 bg-muted/20", compact ? "p-2" : "p-2.5")} aria-label={`${cluster.shown_name}服务器状态图`}>
-      <div className="relative flex items-center gap-2 rounded border border-border/80 bg-background/80 px-3 py-2">
-        <Server className={cn("shrink-0 text-muted-foreground", compact ? "h-4 w-4" : "h-5 w-5")} aria-hidden />
-        <div className="min-w-0 flex-1">
-          <div className="font-mono text-[9px] tracking-[0.12em] text-muted-foreground">SERVER · {stateLabel}</div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"><Power className="h-3 w-3" aria-hidden /><i className={cn("h-1.5 w-1.5 rounded-full", powerOk ? "bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]" : "bg-rose-500")} />电源</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"><Network className="h-3 w-3" aria-hidden /><i className={cn("h-1.5 w-1.5 rounded-full", !networkOk ? "bg-rose-500" : networkDegraded ? "animate-pulse bg-amber-500 shadow-[0_0_7px_theme(colors.amber.500)]" : "animate-pulse bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]")} />网络</span>
-          </div>
+      <div className="relative rounded border border-border/80 bg-background/80 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2"><Server className={cn("shrink-0 text-muted-foreground", compact ? "h-4 w-4" : "h-5 w-5")} aria-hidden /><span className="font-mono text-[9px] tracking-[0.12em] text-muted-foreground">SERVER · {stateLabel}</span></div>
+          <div className="flex items-center gap-2" aria-label="服务器状态指示灯"><i title="电源状态" className={cn("h-2 w-2 rounded-full", powerOk ? "bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]" : "bg-rose-500 shadow-[0_0_7px_theme(colors.rose.500)]")} /><i title="网络状态" className={cn("h-2 w-2 rounded-full", !networkOk ? "bg-rose-500 shadow-[0_0_7px_theme(colors.rose.500)]" : networkDegraded ? "animate-pulse bg-amber-500 shadow-[0_0_7px_theme(colors.amber.500)]" : "animate-pulse bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]")} /></div>
         </div>
-        <div className="flex items-center gap-1.5" aria-label="磁盘状态">
+        <div className="mt-3 flex items-center gap-2" aria-label="磁盘状态">
           {cluster.drives.length > 0 ? cluster.drives.map((drive) => {
             const online = isDriveOnline(drive.state)
             const healing = isDriveHealing(drive.state)
-            return <span key={`${drive.endpoint}:${drive.path}`} title={`${drive.path} · ${drive.state}`} className={cn("h-5 w-7 rounded-sm border border-border/80 bg-muted/40", !online && !healing && "opacity-60")}><i className={cn("mx-auto mt-1.5 block h-1.5 w-1.5 rounded-full", online ? "bg-emerald-500 shadow-[0_0_6px_theme(colors.emerald.500)]" : healing ? "animate-pulse bg-amber-500 shadow-[0_0_6px_theme(colors.amber.500)]" : "bg-rose-500 shadow-[0_0_6px_theme(colors.rose.500)]")} /></span>
+            return <span key={`${drive.endpoint}:${drive.path}`} title={`${drive.path} · ${drive.state}`} className={cn("h-3 flex-1 rounded-sm border border-border/80 bg-muted/40", !online && !healing && "opacity-60")}><i className={cn("block h-full w-full rounded-[inherit]", online ? "bg-emerald-500 shadow-[0_0_8px_theme(colors.emerald.500)]" : healing ? "animate-pulse bg-amber-500 shadow-[0_0_8px_theme(colors.amber.500)]" : "bg-rose-500 shadow-[0_0_8px_theme(colors.rose.500)]")} /></span>
           }) : <span className="text-[10px] text-muted-foreground">暂无磁盘</span>}
         </div>
       </div>
-      {!compact ? <div className="mt-1.5 flex items-center justify-between text-[10px] text-muted-foreground"><span>{networkDegraded ? "网络质量需关注" : !cluster.reachable ? "网络不可达" : "电源正常 · 网络活动中"}</span><span>{cluster.online_disks} / {cluster.online_disks + cluster.offline_disks} 磁盘在线</span></div> : null}
+      {!compact ? <div className="mt-1.5 flex items-center justify-end text-[10px] text-muted-foreground"><span>{cluster.online_disks} / {cluster.online_disks + cluster.offline_disks} 磁盘在线</span></div> : null}
     </div>
   )
 }
@@ -288,8 +282,7 @@ function ServerStatusLegend() {
         <div className="grid gap-3 sm:grid-cols-[minmax(220px,0.85fr)_1fr] sm:items-center">
           <ServerStatusDiagram compact cluster={{ id: "legend", server: "legend", region: "", shown_name: "示例", endpoint: "", status: "online", reachable: true, error: "", checked_at: "", command_latency_ms: 0, version: "", uptime_seconds: 0, bucket_count: 0, object_count: 0, version_count: 0, delete_marker_count: 0, logical_usage_bytes: 0, raw_capacity_bytes: 0, raw_used_bytes: 0, online_disks: 2, offline_disks: 0, healing_disks: 0, drives: [{ endpoint: "", path: "/data-1", state: "online", total_bytes: 0, used_bytes: 0, available_bytes: 0, waiting_operations: 0 }, { endpoint: "", path: "/data-2", state: "healing", total_bytes: 0, used_bytes: 0, available_bytes: 0, waiting_operations: 0 }, { endpoint: "", path: "/data-3", state: "offline", total_bytes: 0, used_bytes: 0, available_bytes: 0, waiting_operations: 0 }] }} />
           <div className="space-y-2 text-[11px] leading-5 text-muted-foreground">
-            <p><strong className="text-foreground">电源灯</strong>：绿色常亮表示服务器已接通且心跳正常；红色表示不可达。</p>
-            <p><strong className="text-foreground">网络灯</strong>：绿色闪烁表示连接正常且有请求活动；红色表示网络不可达；黄色表示网络质量需关注。</p>
+            <p><strong className="text-foreground">服务器指示灯</strong>：左侧灯绿色常亮表示服务器心跳正常；右侧灯绿色闪烁表示网络连接正常，黄色闪烁表示网络质量需关注，红色表示不可达。</p>
             <p><strong className="text-foreground">磁盘槽位灯</strong>：绿色常亮为在线，黄色闪烁为修复中，红色为离线或错误。</p>
           </div>
         </div>
@@ -956,34 +949,24 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
   const summary = data.summary
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-7 gap-y-3 border-b border-border/70 bg-muted/10 px-4 py-3 text-xs">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden />
-          <span className="text-muted-foreground">集群在线</span>
-          <strong>{summary.online_clusters} / {summary.cluster_count}</strong>
-          {summary.degraded_clusters > 0 ? <span className="text-amber-600">{summary.degraded_clusters} 降级</span> : null}
-          {summary.offline_clusters > 0 ? <span className="text-rose-600">{summary.offline_clusters} 离线</span> : null}
+      <div className="shrink-0 border-b border-border/70 bg-muted/10 px-4 py-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div><h2 className="text-sm font-semibold">集群总览</h2><p className="mt-0.5 text-[11px] text-muted-foreground">五地节点、磁盘与容量的实时状态</p></div>
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground"><span className="inline-flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" aria-hidden />自动跟踪 {data.auto_heal_enabled ? "已启用" : "已停用"}</span><span>权威区域 {data.auto_heal_authority_region}</span><Button variant="ghost" size="icon" className="h-7 w-7" title="刷新集群状态" aria-label="刷新集群状态" disabled={refreshing} onClick={() => void load(true)}><RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden /></Button></div>
         </div>
-        <div className="flex items-center gap-2"><HardDrive className="h-4 w-4 text-sky-600" aria-hidden /><span className="text-muted-foreground">磁盘</span><strong>{summary.online_disks} 在线</strong><span className={cn(summary.offline_disks > 0 ? "text-rose-600" : "text-muted-foreground")}>{summary.offline_disks} 离线</span><span className="text-muted-foreground">{summary.healing_disks} 修复中</span></div>
-        <div className="flex min-w-56 items-center gap-2">
-          <Gauge className="h-4 w-4 text-amber-600" aria-hidden />
-          <span className="text-muted-foreground">物理容量</span>
-          <strong>{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</strong>
-          <Progress className="h-1.5 w-24" value={summary.raw_capacity_bytes ? summary.raw_used_bytes / summary.raw_capacity_bytes * 100 : 0} />
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />集群在线</div><div className="mt-1 text-lg font-semibold">{summary.online_clusters} <span className="text-xs font-normal text-muted-foreground">/ {summary.cluster_count}</span></div><div className="text-[10px] text-muted-foreground">{summary.degraded_clusters} 降级 · {summary.offline_clusters} 离线</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><HardDrive className="h-3.5 w-3.5 text-sky-600" aria-hidden />磁盘在线</div><div className="mt-1 text-lg font-semibold">{summary.online_disks}</div><div className="text-[10px] text-muted-foreground">{summary.offline_disks} 离线 · {summary.healing_disks} 修复中</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Gauge className="h-3.5 w-3.5 text-amber-600" aria-hidden />物理容量</div><div className="mt-1 text-lg font-semibold">{summary.raw_capacity_bytes ? (summary.raw_used_bytes / summary.raw_capacity_bytes * 100).toFixed(1) : "0.0"}%</div><Progress className="mt-1.5 h-1.5" value={summary.raw_capacity_bytes ? summary.raw_used_bytes / summary.raw_capacity_bytes * 100 : 0} /><div className="mt-1 text-[10px] text-muted-foreground">{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Box className="h-3.5 w-3.5 text-violet-600" aria-hidden />对象总量</div><div className="mt-1 text-lg font-semibold">{summary.object_count.toLocaleString("zh-CN")}</div><div className="text-[10px] text-muted-foreground">逻辑 {formatBytes(summary.logical_usage_bytes)}</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Activity className="h-3.5 w-3.5 text-cyan-600" aria-hidden />节点响应</div><div className="mt-1 text-lg font-semibold">{data.clusters.filter((cluster) => cluster.reachable).length} <span className="text-xs font-normal text-muted-foreground">可达</span></div><div className="text-[10px] text-muted-foreground">自动探测与延迟监控</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Wrench className="h-3.5 w-3.5 text-orange-600" aria-hidden />自愈任务</div><div className="mt-1 text-lg font-semibold">{summary.healing_disks > 0 ? "进行中" : "已就绪"}</div><div className="text-[10px] text-muted-foreground">{summary.healing_disks} 个磁盘修复中</div></div>
         </div>
-        <div className="flex items-center gap-2"><Box className="h-4 w-4 text-violet-600" aria-hidden /><span className="text-muted-foreground">对象</span><strong>{summary.object_count.toLocaleString("zh-CN")}</strong><span className="text-muted-foreground">逻辑 {formatBytes(summary.logical_usage_bytes)}</span></div>
-        <div className="ml-auto flex items-center gap-2 text-muted-foreground">
-          <Activity className="h-4 w-4" aria-hidden />
-          自动跟踪 {data.auto_heal_enabled ? "已启用" : "已停用"} · 权威区域 {data.auto_heal_authority_region}
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="刷新集群状态" aria-label="刷新集群状态" disabled={refreshing} onClick={() => void load(true)}>
-            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden />
-          </Button>
-        </div>
-        <ServerStatusLegend />
+        <div className="mt-3 flex justify-end"><ServerStatusLegend /></div>
       </div>
 
-      <div className="docs-scroll min-h-0 flex-1 overflow-y-auto p-3">
-        <div className="grid content-start grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+      <div className="docs-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+        <div className="mt-auto grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           {data.clusters.map((cluster) => {
             const capacityPercent = cluster.raw_capacity_bytes > 0
               ? cluster.raw_used_bytes / cluster.raw_capacity_bytes * 100
