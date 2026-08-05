@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, Circle, Loader2, XCircle } from "lucide-react"
+import { Check, Circle, Gauge, Loader2, Settings2, XCircle } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
+import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   approveApplicationStream,
   approvalStepLabel,
   createApplicationApi,
   fetchApplicationsApi,
+  updateApplicationQuotaApi,
 } from "../../api/client"
 import type {
   Application,
@@ -21,10 +23,36 @@ import { Card, CardContent } from "../../components/ui/card"
 import { DialogFooter } from "../../components/ui/dialog"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
+import { Progress } from "../../components/ui/progress"
 import { formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
 
 type ApprovalPhase = "confirm" | "streaming" | "finished"
+
+const GIB = 1024 ** 3
+
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0 B"
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
+  const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1)
+  const scaled = value / 1024 ** index
+  return `${scaled >= 100 || index === 0 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[index]}`
+}
+
+function quotaPercent(app: Application): number {
+  if (!app.quota_bytes) return 0
+  const ratio = Number.isFinite(app.quota_usage_ratio)
+    ? app.quota_usage_ratio
+    : app.quota_usage_bytes / app.quota_bytes
+  return Math.min(100, Math.max(0, ratio * 100))
+}
+
+function quotaColor(percent: number): string {
+  if (percent > 90) return "bg-rose-500"
+  if (percent > 75) return "bg-amber-400"
+  if (percent > 50) return "bg-sky-500"
+  return "bg-emerald-500"
+}
 
 function statusStyle(status: ApplicationApprovalSseStatus): string {
   if (status === "running") {
@@ -75,7 +103,8 @@ function StatusGlyph({
 
 export default function ApplicationPage() {
   const { accessToken, user } = useAuth()
-  const isAdmin = user?.is_admin === true
+  const canApprove = hasPermission(user, PERMISSIONS.applicationManage)
+  const canManageQuota = hasPermission(user, PERMISSIONS.applicationQuotaManage)
   const { beginBlock, endBlock } = useNavigationLeaveBlock()
 
   const [applications, setApplications] = useState<Application[]>([])
@@ -85,6 +114,9 @@ export default function ApplicationPage() {
   const [approvalEvents, setApprovalEvents] = useState<ApplicationApprovalSseEvent[]>([])
 
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [quotaTarget, setQuotaTarget] = useState<Application | null>(null)
+  const [quotaGiB, setQuotaGiB] = useState("100")
+  const [savingQuota, setSavingQuota] = useState(false)
 
   const [createForm, setCreateForm] = useState<ApplicationCreateRequest>({
     name: "",
@@ -183,6 +215,44 @@ export default function ApplicationPage() {
     }
   }
 
+  const openQuota = (app: Application) => {
+    setQuotaTarget(app)
+    setQuotaGiB(String(Math.max(1, Math.round(app.quota_bytes / GIB))))
+  }
+
+  const handleQuotaSave = async () => {
+    if (!quotaTarget) return
+    const value = Number(quotaGiB)
+    if (!Number.isFinite(value) || value < 1 || !Number.isInteger(value)) {
+      showErrorToast("配额必须是大于等于 1 的整数 GiB")
+      return
+    }
+    const quotaBytes = value * GIB
+    if (!Number.isSafeInteger(quotaBytes)) {
+      showErrorToast("配额数值过大")
+      return
+    }
+    if (quotaBytes < quotaTarget.quota_usage_bytes) {
+      showErrorToast("新配额不能低于当前已用空间")
+      return
+    }
+    setSavingQuota(true)
+    try {
+      const updated = await updateApplicationQuotaApi(
+        quotaTarget.id,
+        { quota_bytes: quotaBytes },
+        accessToken ?? undefined,
+      )
+      setApplications((previous) => previous.map((app) => app.id === updated.id ? updated : app))
+      setQuotaTarget(null)
+      showSuccessToast(`已将 ${quotaTarget.shown_name || quotaTarget.name} 的配额调整为 ${value} GiB`)
+    } catch {
+      // 错误已由 api client toast 展示
+    } finally {
+      setSavingQuota(false)
+    }
+  }
+
   const openApproval = (app: Application) => {
     setApprovalTarget(app)
     setApprovalPhase("confirm")
@@ -274,7 +344,7 @@ export default function ApplicationPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {applications.map((app) => (
             <Card key={app.id} className="flex flex-col">
               <CardContent className="pt-4 text-[11px] text-muted-foreground">
@@ -306,7 +376,7 @@ export default function ApplicationPage() {
                         <span className="inline-flex items-center justify-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600">
                           已授权
                         </span>
-                      ) : isAdmin ? (
+                      ) : canApprove ? (
                         <Button
                           type="button"
                           size="sm"
@@ -351,6 +421,50 @@ export default function ApplicationPage() {
                       {formatDateTime(app.enabled_at)}
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-3 border-t border-dashed border-border/70 pt-3">
+                  {(() => {
+                    const percent = quotaPercent(app)
+                    return (
+                      <>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground/90">
+                            <Gauge className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                            存储配额
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] tabular-nums text-muted-foreground">
+                              {formatBytes(app.quota_usage_bytes)} / {formatBytes(app.quota_bytes)}
+                            </span>
+                            {canManageQuota ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                title="调整存储配额"
+                                aria-label={`调整 ${app.shown_name || app.name} 的存储配额`}
+                                onClick={() => openQuota(app)}
+                              >
+                                <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                        <Progress
+                          value={percent}
+                          indicatorClassName={quotaColor(percent)}
+                          className="mt-2 h-2"
+                          aria-label={`${app.shown_name || app.name} 存储配额使用率`}
+                        />
+                        <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span>{percent.toFixed(1)}%</span>
+                          <span>{app.quota_usage_updated_at ? `更新于 ${formatDateTime(app.quota_usage_updated_at)}` : "等待用量采集"}</span>
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
               </CardContent>
             </Card>
@@ -438,7 +552,43 @@ export default function ApplicationPage() {
           </div>
         </Modal>
       )}
-      {isAdmin && approvalTarget && (
+      {canManageQuota && quotaTarget ? (
+        <Modal title="调整存储配额" onClose={() => !savingQuota && setQuotaTarget(null)}>
+          <div className="space-y-4 p-1 text-sm">
+            <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">{quotaTarget.shown_name || quotaTarget.name}</div>
+              <div className="mt-1">当前用量 {formatBytes(quotaTarget.quota_usage_bytes)}，新配额不能低于已用空间。</div>
+            </div>
+            <div>
+              <Label className="mb-1.5 block text-xs" htmlFor="application-quota-gib">
+                配额（GiB）
+              </Label>
+              <Input
+                id="application-quota-gib"
+                type="number"
+                min={1}
+                step={1}
+                value={quotaGiB}
+                disabled={savingQuota}
+                onChange={(event) => setQuotaGiB(event.target.value)}
+              />
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                保存后会同步设置所有 MinIO 站点的桶硬配额；默认值为 100 GiB。
+              </p>
+            </div>
+            <DialogFooter>
+              <Button type="button" size="sm" variant="outline" disabled={savingQuota} onClick={() => setQuotaTarget(null)}>
+                取消
+              </Button>
+              <Button type="button" size="sm" disabled={savingQuota} onClick={() => void handleQuotaSave()}>
+                {savingQuota ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                保存配额
+              </Button>
+            </DialogFooter>
+          </div>
+        </Modal>
+      ) : null}
+      {canApprove && approvalTarget && (
         <Modal
           title={approvalModalTitle}
           onClose={() => {

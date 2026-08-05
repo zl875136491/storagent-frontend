@@ -85,6 +85,7 @@ export interface UserProfile {
   /** 与后端 `/api/auth/profile` 一致，用于前端权限展示 */
   is_admin: boolean
   roles: Role[]
+  permissions: string[]
   created_at: string
   updated_at: string
   system_time: string
@@ -127,6 +128,10 @@ export interface Application {
   enabled: boolean
   enabled_at: string | null
   author: ApplicationAuthor
+  quota_bytes: number
+  quota_usage_bytes: number
+  quota_usage_ratio: number
+  quota_usage_updated_at: string | null
   /** 旧字段，新后端不再返回 */
   regions?: Region[]
 }
@@ -139,6 +144,10 @@ export interface ApplicationCreateRequest {
   name: string
   shown_name: string
   description: string
+}
+
+export interface ApplicationQuotaUpdateRequest {
+  quota_bytes: number
 }
 
 export interface MinioServer {
@@ -968,7 +977,10 @@ export interface AdminUserItem {
   username: string
   name: string
   is_admin: boolean
-  role_name: string
+  roles: Role[]
+  permissions: string[]
+  /** 兼容旧后端，正式界面以 roles 为准。 */
+  role_name?: string
   created_at: string
   updated_at: string
 }
@@ -983,12 +995,12 @@ export async function fetchAdminUsersApi(accessToken?: string): Promise<AdminUse
 
 export async function updateUserRoleApi(
   userId: string,
-  role: "用户" | "管理员",
+  roles: string[],
   accessToken?: string,
 ): Promise<AdminUserItem> {
-  return apiPut<{ role: string }, AdminUserItem>(
+  return apiPut<{ roles: string[] }, AdminUserItem>(
     `/api/auth/users/${encodeURIComponent(userId)}/role`,
-    { role },
+    { roles },
     accessToken,
   )
 }
@@ -1312,6 +1324,18 @@ export async function createApplicationApi(
 ): Promise<Application> {
   return apiPost<ApplicationCreateRequest, Application>(
     "/api/public/application",
+    payload,
+    accessToken,
+  )
+}
+
+export async function updateApplicationQuotaApi(
+  applicationId: string,
+  payload: ApplicationQuotaUpdateRequest,
+  accessToken?: string,
+): Promise<Application> {
+  return apiPut<ApplicationQuotaUpdateRequest, Application>(
+    `/api/public/application/${encodeURIComponent(applicationId)}/quota`,
     payload,
     accessToken,
   )

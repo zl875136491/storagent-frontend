@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -21,6 +21,25 @@ type Props = {
 type InitResp = { upload_id: string; bucket: string; object_key: string }
 type PartResp = { part_number: number; etag: string }
 type CompleteResp = { bucket: string; object_key: string; etag?: string | null; version_id?: string | null }
+type ApiErrorBody = { msg?: string; code?: number; data?: unknown }
+
+const MIB = 1024 * 1024
+const DEFAULT_CHUNK_SIZE = 5 * MIB
+const MAX_MULTIPART_PARTS = 10_000
+const EMPTY_FILE_ERROR = "空文件暂不支持上传，请选择包含内容的文件"
+
+export class QuotaExceededError extends Error {
+  readonly code = 413049
+  readonly status: number
+  readonly body: ApiErrorBody | null
+
+  constructor(status: number, body: ApiErrorBody | null) {
+    super("APP 存储超出限额，请联系管理员处理")
+    this.name = "QuotaExceededError"
+    this.status = status
+    this.body = body
+  }
+}
 
 function joinUrl(baseURL: string, path: string) {
   return `${baseURL.replace(/\/$/, "")}${path}`
@@ -28,12 +47,29 @@ function joinUrl(baseURL: string, path: string) {
 
 async function jsonOrThrow<T>(resp: Response): Promise<T> {
   const text = await resp.text().catch(() => "")
-  if (!resp.ok) throw new Error(text || `请求失败: ${resp.status}`)
-  return (text ? (JSON.parse(text) as T) : (undefined as unknown as T))
+  let body: ApiErrorBody | null = null
+  try {
+    body = text ? JSON.parse(text) as ApiErrorBody : null
+  } catch {
+    body = null
+  }
+  if (!resp.ok) {
+    if (body?.code === 413049) throw new QuotaExceededError(resp.status, body)
+    throw new Error(body?.msg || text || `请求失败: ${resp.status}`)
+  }
+  return body as unknown as T
 }
 
 function sanitizeEtag(etag: string) {
   return etag.replace(/^"+|"+$/g, "")
+}
+
+function multipartChunkSize(fileSize: number, configuredSize = DEFAULT_CHUNK_SIZE) {
+  const safeConfiguredSize = Number.isFinite(configuredSize) && configuredSize > 0
+    ? configuredSize
+    : DEFAULT_CHUNK_SIZE
+  const requiredSize = Math.ceil(fileSize / MAX_MULTIPART_PARTS)
+  return Math.ceil(Math.max(safeConfiguredSize, requiredSize) / MIB) * MIB
 }
 
 export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeBytes, onUploaded, className }: Props) {
@@ -47,17 +83,21 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
   const [error, setError] = useState<string | null>(null)
   const [resultOpen, setResultOpen] = useState(false)
 
-  const chunkSize = useMemo(() => chunkSizeBytes ?? 5 * 1024 * 1024, [chunkSizeBytes])
-
   const canUpload = Boolean(
-    baseURL && apiKey && file && !uploading &&
+    baseURL && apiKey && file && file.size > 0 && !uploading &&
     (providedBaseURL !== undefined || (!backendListLoading && !backendListError)),
   )
 
   const upload = async () => {
     if (!file) return
+    if (file.size <= 0) {
+      setError(EMPTY_FILE_ERROR)
+      return
+    }
     if (!baseURL) throw new Error("请先选择可达的后端服务")
     if (!apiKey) throw new Error("apiKey 为空")
+
+    const chunkSize = multipartChunkSize(file.size, chunkSizeBytes)
 
     setUploading(true)
     setError(null)
@@ -75,7 +115,10 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
             "Content-Type": "application/json",
             "x-api-key": apiKey,
           },
-          body: JSON.stringify({ content_type: file.type || "application/octet-stream" }),
+          body: JSON.stringify({
+            content_type: file.type || "application/octet-stream",
+            size_bytes: file.size,
+          }),
         }),
       )
       uploadId = init.upload_id
@@ -159,7 +202,11 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
           <Input
             id="upload-file"
             type="file"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              const selected = e.target.files?.[0] ?? null
+              setFile(selected)
+              setError(selected?.size === 0 ? EMPTY_FILE_ERROR : null)
+            }}
           />
         </div>
 

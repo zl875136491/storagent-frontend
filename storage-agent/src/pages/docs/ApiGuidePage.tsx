@@ -154,9 +154,9 @@ export default function ApiGuidePage() {
         <DocSteps
           items={[
             { title: "发现并探测端点", body: "获取候选 Storagent 地址，并在服务启动或网络变化后重新选择低时延节点。" },
-            { title: "初始化上传", body: "保存 upload_id 与 object_key；它们是续传、完成和中止操作的共同上下文。" },
-            { title: "上传或恢复分片", body: "保存每片 ETag；重启后先查询已上传分片，只补传缺失部分。" },
-            { title: "完成或中止", body: "全部分片成功后完成上传；取消或不可恢复失败时立即中止会话。" },
+            { title: "初始化上传", body: "先拒绝空文件，再使用完整文件的 size_bytes 跨区域预留声明容量，并保存 upload_id 与 object_key。" },
+            { title: "上传或恢复分片", body: "动态调整并按 MiB 对齐分片大小，确保不超过 10,000 片；同一 part_number 可顺序重传，以最后一次成功上传的 ETag 和大小为准。" },
+            { title: "完成或中止", body: "全部分片成功后完成上传；取消或不可恢复失败时立即中止。complete 与 abort 都会释放会话预留容量。" },
             { title: "查询与下载", body: "先使用 POST stat 获取元信息，按需流式下载；当前节点缺失时执行跨区域回退。" },
           ]}
         />

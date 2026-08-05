@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useAuth } from "../../auth/AuthContext"
+import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   createRegionApi,
   fetchRegionsApi,
@@ -15,7 +16,7 @@ import { Label } from "../../components/ui/label"
 
 export default function RegionPage() {
   const { accessToken, user } = useAuth()
-  const isAdmin = user?.is_admin === true
+  const isAdmin = hasPermission(user, PERMISSIONS.regionManage)
   const [regions, setRegions] = useState<Region[]>([])
   const [loading, setLoading] = useState(true)
 

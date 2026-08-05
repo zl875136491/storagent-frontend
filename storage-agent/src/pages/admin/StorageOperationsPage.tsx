@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Navigate } from "react-router-dom"
 import {
   Activity,
   Box,
@@ -20,6 +21,7 @@ import {
   X,
 } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
+import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   fetchClusterHealthOperationsApi,
   fetchClusterHealStatusApi,
@@ -1022,8 +1024,12 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
 }
 
 export default function StorageOperationsPage() {
-  const { accessToken } = useAuth()
+  const { accessToken, user } = useAuth()
   const [view, setView] = useState<OperationsView>("replication")
+
+  if (!hasPermission(user, PERMISSIONS.storageOperationsManage)) {
+    return <Navigate to="/data/basic/region" replace />
+  }
 
   return (
     <div className="mx-auto flex h-full min-h-[680px] max-w-8xl flex-col">

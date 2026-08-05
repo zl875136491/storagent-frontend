@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
+import { hasPermission, PERMISSIONS } from "../auth/permissions"
 import { useNavigationLeaveBlock } from "../contexts/NavigationLeaveBlockContext"
 import {
   fetchAIChatCompletionProxy,
@@ -166,6 +167,9 @@ function HeaderUserMenu({
 
 function AppShell() {
   const { user, logout, accessToken } = useAuth()
+  const canManageUsers = hasPermission(user, PERMISSIONS.userManage)
+  const canOperateStorage = hasPermission(user, PERMISSIONS.storageOperationsManage)
+  const showSystemManagement = Boolean(user?.is_admin || canManageUsers || canOperateStorage)
   const location = useLocation()
   const { confirmIfBlocking } = useNavigationLeaveBlock()
   const { closeMobileDrawer } = useSidebar()
@@ -295,38 +299,46 @@ function AppShell() {
               </SidebarMenu>
             </div>
 
-            {user?.is_admin ? (
+            {showSystemManagement ? (
               <div>
                 <SidebarSectionTitle>系统管理</SidebarSectionTitle>
                 <SidebarMenu>
-                  <NavLink to="/admin/users" onClick={handleNavClick}>
-                    {({ isActive }) => (
-                      <SidebarMenuButton active={isActive} icon={<Users aria-hidden />}>
-                        角色管理
-                      </SidebarMenuButton>
-                    )}
-                  </NavLink>
-                  <NavLink to="/admin/usage" onClick={handleNavClick}>
-                    {({ isActive }) => (
-                      <SidebarMenuButton active={isActive} icon={<ChartScatter aria-hidden />}>
-                        用量统计
-                      </SidebarMenuButton>
-                    )}
-                  </NavLink>
-                  <NavLink to="/admin/storage-operations" onClick={handleNavClick}>
-                    {({ isActive }) => (
-                      <SidebarMenuButton active={isActive} icon={<Wrench aria-hidden />}>
-                        存储运维
-                      </SidebarMenuButton>
-                    )}
-                  </NavLink>
-                  <NavLink to="/admin/ai" onClick={handleNavClick}>
-                    {({ isActive }) => (
-                      <SidebarMenuButton active={isActive} icon={<Settings2 aria-hidden />}>
-                        AI 助手配置
-                      </SidebarMenuButton>
-                    )}
-                  </NavLink>
+                  {canManageUsers ? (
+                    <NavLink to="/admin/users" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<Users aria-hidden />}>
+                          角色管理
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
+                  {user?.is_admin ? (
+                    <NavLink to="/admin/usage" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<ChartScatter aria-hidden />}>
+                          用量统计
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
+                  {canOperateStorage ? (
+                    <NavLink to="/admin/storage-operations" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<Wrench aria-hidden />}>
+                          存储运维
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
+                  {user?.is_admin ? (
+                    <NavLink to="/admin/ai" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<Settings2 aria-hidden />}>
+                          AI 助手配置
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
                 </SidebarMenu>
               </div>
             ) : null}

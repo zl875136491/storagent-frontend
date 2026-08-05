@@ -49,6 +49,19 @@ type ApiErrorBody = {
   data?: { available_at?: Location[] }
 }
 
+export class QuotaExceededError extends Error {
+  readonly code = 413049
+  readonly status: number
+  readonly body: ApiErrorBody | null
+
+  constructor(status: number, body: ApiErrorBody | null) {
+    super("APP 存储超出限额，请联系管理员处理")
+    this.name = "QuotaExceededError"
+    this.status = status
+    this.body = body
+  }
+}
+
 export type DownloadProgress = {
   status: "downloading" | "completed" | "cancelled"
   receivedBytes: number
@@ -90,6 +103,19 @@ function formatBytes(size: number) {
   const units = ["B", "KB", "MB", "GB", "TB"]
   const index = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1)
   return \`\${(size / 1024 ** index).toFixed(index === 0 ? 0 : 1)} \${units[index]}\`
+}
+
+const MIB = 1024 * 1024
+const DEFAULT_CHUNK_SIZE = 5 * MIB
+const MAX_MULTIPART_PARTS = 10_000
+const EMPTY_FILE_ERROR = "空文件暂不支持上传，请选择包含内容的文件"
+
+function multipartChunkSize(fileSize: number, configuredSize: number) {
+  const safeConfiguredSize = Number.isFinite(configuredSize) && configuredSize > 0
+    ? configuredSize
+    : DEFAULT_CHUNK_SIZE
+  const requiredSize = Math.ceil(fileSize / MAX_MULTIPART_PARTS)
+  return Math.ceil(Math.max(safeConfiguredSize, requiredSize) / MIB) * MIB
 }
 
 function isAbortError(error: unknown) {
@@ -150,11 +176,15 @@ export function StoragentFiles({
     })
     const body = await readBody(response)
     if (!response.ok) {
+      const errorBody = body.json as ApiErrorBody | null
+      if (errorBody?.code === 413049) {
+        throw new QuotaExceededError(response.status, errorBody)
+      }
       const error = new Error(
-        (body.json as ApiErrorBody | null)?.msg || body.text || \`HTTP \${response.status}\`,
+        errorBody?.msg || body.text || \`HTTP \${response.status}\`,
       ) as Error & { status?: number; body?: ApiErrorBody | null }
       error.status = response.status
-      error.body = body.json as ApiErrorBody | null
+      error.body = errorBody
       throw error
     }
     return body.json as T
@@ -162,6 +192,11 @@ export function StoragentFiles({
 
   const upload = async () => {
     if (!file || !ready) return
+    if (file.size <= 0) {
+      fail(new Error(EMPTY_FILE_ERROR))
+      return
+    }
+    const chunkSize = multipartChunkSize(file.size, chunkSizeBytes)
     setBusy(true)
     setMessage("")
     setProgress(null)
@@ -171,20 +206,23 @@ export function StoragentFiles({
       initialized = await requestJSON<{ upload_id: string; object_key: string }>("/api/files/multipart/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content_type: file.type || "application/octet-stream" }),
+        body: JSON.stringify({
+          content_type: file.type || "application/octet-stream",
+          size_bytes: file.size,
+        }),
       })
 
-      const total = Math.max(1, Math.ceil(file.size / chunkSizeBytes))
+      const total = Math.ceil(file.size / chunkSize)
       const parts: Array<{ part_number: number; etag: string }> = []
       setProgress({ done: 0, total })
 
       for (let partNumber = 1; partNumber <= total; partNumber += 1) {
-        const start = (partNumber - 1) * chunkSizeBytes
+        const start = (partNumber - 1) * chunkSize
         const form = new FormData()
         form.set("upload_id", initialized.upload_id)
         form.set("object_key", initialized.object_key)
         form.set("part_number", String(partNumber))
-        form.set("file", file.slice(start, Math.min(file.size, start + chunkSizeBytes)), file.name)
+        form.set("file", file.slice(start, Math.min(file.size, start + chunkSize)), file.name)
 
         const part = await requestJSON<{ part_number: number; etag: string }>(
           "/api/files/multipart/part",
@@ -376,8 +414,15 @@ export function StoragentFiles({
     <section aria-label="Storagent 文件组件" className="storagent-files">
       <fieldset disabled={!configured}>
         <legend>上传文件</legend>
-        <input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-        <button type="button" disabled={!file || !ready} onClick={() => void upload()}>
+        <input
+          type="file"
+          onChange={(event) => {
+            const selected = event.target.files?.[0] ?? null
+            setFile(selected)
+            setMessage(selected?.size === 0 ? EMPTY_FILE_ERROR : "")
+          }}
+        />
+        <button type="button" disabled={!file || file.size <= 0 || !ready} onClick={() => void upload()}>
           {busy ? "处理中..." : "开始上传"}
         </button>
         {progress ? <progress value={progress.done} max={progress.total} /> : null}
@@ -450,7 +495,15 @@ export function StoragentFiles({
     </section>
   )
 }`,
-    usage: `import { StoragentFiles } from "./StoragentFiles"
+    usage: `import { QuotaExceededError, StoragentFiles } from "./StoragentFiles"
+
+function handleError(error: Error) {
+  if (error instanceof QuotaExceededError) {
+    console.error("APP 存储超出限额，请联系管理员处理")
+    return // 配额错误不应自动重试
+  }
+  console.error(error)
+}
 
 export function FilesPage() {
   return (
@@ -459,7 +512,7 @@ export function FilesPage() {
       apiKey={import.meta.env.VITE_STORAGENT_API_KEY}
       onUploaded={({ objectKey }) => console.log("object_key:", objectKey)}
       onDownloadProgress={(progress) => console.log("download:", progress)}
-      onError={(error) => console.error(error)}
+      onError={handleError}
     />
   )
 }`,
@@ -480,11 +533,30 @@ from typing import Any, Callable, Literal, overload
 import requests
 
 
+MIB = 1024 * 1024
+DEFAULT_CHUNK_SIZE = 5 * MIB
+MAX_MULTIPART_PARTS = 10_000
+EMPTY_FILE_ERROR = "空文件暂不支持上传，请选择包含内容的文件"
+
+
+def multipart_chunk_size(file_size: int, configured_size: int) -> int:
+    required_size = (file_size + MAX_MULTIPART_PARTS - 1) // MAX_MULTIPART_PARTS
+    unaligned_size = max(int(configured_size), required_size, 1)
+    return ((unaligned_size + MIB - 1) // MIB) * MIB
+
+
 class StoragentError(RuntimeError):
     def __init__(self, status: int, body: dict[str, Any] | None):
         self.status = status
         self.body = body
         super().__init__((body or {}).get("msg") or f"Storagent HTTP {status}")
+
+
+class QuotaExceededError(StoragentError):
+    def __init__(self, status: int, body: dict[str, Any] | None):
+        self.status = status
+        self.body = body
+        RuntimeError.__init__(self, "APP 存储超出限额，请联系管理员处理")
 
 
 class DownloadCancelled(RuntimeError):
@@ -533,6 +605,8 @@ class StoragentFilesClient:
             body = response.json()
         except ValueError:
             body = {"msg": response.text} if response.text else None
+        if (body or {}).get("code") == 413049:
+            raise QuotaExceededError(response.status_code, body)
         raise StoragentError(response.status_code, body)
 
     def _json(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
@@ -553,10 +627,14 @@ class StoragentFilesClient:
     ) -> str | dict[str, Any]:
         path = Path(file_path)
         mime = content_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        size_bytes = path.stat().st_size
+        if size_bytes <= 0:
+            raise ValueError(EMPTY_FILE_ERROR)
+        chunk_size = multipart_chunk_size(size_bytes, self.chunk_size)
         initialized = self._json(
             "POST",
             "/api/files/multipart/init",
-            json={"content_type": mime},
+            json={"content_type": mime, "size_bytes": size_bytes},
         )
         parts: list[dict[str, Any]] = []
 
@@ -564,7 +642,7 @@ class StoragentFilesClient:
             with path.open("rb") as source:
                 part_number = 1
                 while True:
-                    chunk = source.read(self.chunk_size)
+                    chunk = source.read(chunk_size)
                     if not chunk and part_number > 1:
                         break
                     response = self._json(
@@ -738,7 +816,7 @@ class StoragentFilesClient:
     usage: `import os
 from threading import Event
 
-from storagent_files import DownloadProgress, StoragentFilesClient
+from storagent_files import DownloadProgress, QuotaExceededError, StoragentFilesClient
 
 
 def show_download_progress(progress: DownloadProgress) -> None:
@@ -751,25 +829,29 @@ cancel_download = Event()
 # GUI 或任务队列的“取消”处理器中调用 cancel_download.set()。
 
 
-with StoragentFilesClient(
-    os.environ["STORAGENT_BASE_URL"],
-    os.environ["STORAGENT_API_KEY"],
-) as files:
-    object_key = files.upload_file("./example.bin")
-    print("object_key:", object_key)
+try:
+    with StoragentFilesClient(
+        os.environ["STORAGENT_BASE_URL"],
+        os.environ["STORAGENT_API_KEY"],
+    ) as files:
+        object_key = files.upload_file("./example.bin")
+        print("object_key:", object_key)
 
-    upload_result = files.upload_file("./report.pdf", return_json=True)
-    print("upload result:", upload_result)
+        upload_result = files.upload_file("./report.pdf", return_json=True)
+        print("upload result:", upload_result)
 
-    metadata = files.stat_object(object_key)
-    download_result = files.download_object(
-        object_key,
-        "./downloads/example.bin",
-        on_progress=show_download_progress,
-        cancel_event=cancel_download,
-    )
-    print("metadata:", metadata)
-    print("download result:", download_result)`,
+        metadata = files.stat_object(object_key)
+        download_result = files.download_object(
+            object_key,
+            "./downloads/example.bin",
+            on_progress=show_download_progress,
+            cancel_event=cancel_download,
+        )
+        print("metadata:", metadata)
+        print("download result:", download_result)
+except QuotaExceededError:
+    print("APP 存储超出限额，请联系管理员处理")
+    # 配额错误不应自动重试。`,
   },
 }
 
@@ -789,19 +871,32 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "## 给开发者与 AI 的实施目标",
     "",
     isTypeScript
-      ? "将完整组件文件加入 React 项目后直接引入。组件覆盖文件选择、分片上传、object_key 回填、元信息查询、服务点定位、当前节点与跨区域回退下载，并显示下载进度、速度和取消动作。"
-      : "将客户端类文件加入 Python 项目后直接实例化。类对外提供上传、元信息、定位和下载方法；上传可返回 object_key 或完整 JSON，下载支持进度回调、取消事件并返回结果字典。",
+      ? "将完整组件文件加入 React 项目后直接引入。组件覆盖空文件校验、动态分片上传、object_key 回填、元信息查询、服务点定位、当前节点与跨区域回退下载，并显示下载进度、速度和取消动作。"
+      : "将客户端类文件加入 Python 项目后直接实例化。类对外提供带空文件校验和动态分片的上传、元信息、定位和下载方法；上传可返回 object_key 或完整 JSON，下载支持进度回调、取消事件并返回结果字典。",
     "",
     "## 安全约束",
     "",
     "- APIKey 只使用 `x-api-key` 请求头，不得放入 URL 或日志。",
     "- `stat` 使用 POST JSON；`locate` 与 `download` 的 object_key 使用标准 URL 编码。",
     "- 上传异常时调用 multipart abort；下载大文件采用流式处理，不得先将完整响应载入内存后才更新进度。",
+    "- 新 APP 默认存储配额为 100 GiB；multipart init 必须提交完整文件大小 `size_bytes`，并会跨区域预留声明容量。",
+    "- 空文件必须在发送 init 前拒绝；非空文件取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB，确保总片数不超过 10,000。",
+    "- 同一 `part_number` 可顺序重传，以最后一次成功上传的 ETag 和分片大小为准。",
+    "- multipart complete 或 abort 会释放该会话的跨区域预留容量。",
+    "- 收到业务码 `413049` 时抛出 `QuotaExceededError`，停止重试并提示联系应用管理员。",
     "- 下载前使用 POST stat 获取准确总大小；下载过程中至少展示已接收字节、总大小、百分比和实时速度。",
     "- 用户取消下载时必须立即中断网络读取，并且不得保存或保留可被误用的残缺文件。",
     isTypeScript
       ? "- 浏览器组件适合可信内网或临时演示。互联网生产系统应由业务服务端代持 APIKey。"
       : "- APIKey 应由服务端环境变量或密钥管理系统注入。",
+    "",
+    "## 上传配额与分片重传契约",
+    "",
+    "1. 在发送 `multipart/init` 前拒绝空文件；使用非空文件的完整 `size_bytes` 跨区域预留声明容量。",
+    "2. 取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB，保证总片数不超过 10,000。",
+    "3. 收到业务码 `413049` 时立即停止，不重试 init，也不继续发送分片，提示联系应用管理员。",
+    "4. 同一 `part_number` 可在失败后顺序重传；不要并发重传同一编号，每次成功后覆盖保存该编号的 ETag。",
+    "5. parts 查询与 complete 提交均以同一编号最后一次成功上传的 ETag 和 size 为准；complete 或 abort 后会话预留容量被释放。",
     "",
     "## 下载进度与取消契约",
     "",
@@ -829,7 +924,11 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "## 接入验收清单",
     "",
     "- [ ] APIKey 只进入 `x-api-key` 请求头。",
-    "- [ ] 上传保存 upload_id、object_key、part_number 与 ETag，失败时执行 abort。",
+    "- [ ] 上传保存 upload_id、object_key、part_number 与 ETag；同一编号重传后覆盖保存最后成功 ETag。",
+    "- [ ] 空文件会在发送 init 前被明确拒绝；分片大小动态增大并按 MiB 对齐，总片数不超过 10,000。",
+    "- [ ] multipart init 使用完整源文件的字节数作为 size_bytes，并了解其会跨区域预留声明容量。",
+    "- [ ] 413049 会转换为 QuotaExceededError，且不会继续重试或发送分片。",
+    "- [ ] 成功 complete 或执行 abort 后会话预留容量被释放；取消或不可恢复失败时会调用 abort。",
     "- [ ] 上传结果可供外部业务模块取得 object_key 或完整响应。",
     "- [ ] stat 使用 POST JSON，能够处理业务码 404032。",
     "- [ ] 当前节点无副本时能从 available_at 选择节点继续下载。",
