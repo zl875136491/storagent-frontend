@@ -25,7 +25,9 @@ type ApiErrorBody = { msg?: string; code?: number; data?: unknown }
 
 const MIB = 1024 * 1024
 const DEFAULT_CHUNK_SIZE = 5 * MIB
+const MAX_MULTIPART_PART_SIZE = 64 * MIB
 const MAX_MULTIPART_PARTS = 10_000
+const MAX_MULTIPART_FILE_SIZE = MAX_MULTIPART_PART_SIZE * MAX_MULTIPART_PARTS
 const EMPTY_FILE_ERROR = "空文件暂不支持上传，请选择包含内容的文件"
 
 export class QuotaExceededError extends Error {
@@ -36,6 +38,19 @@ export class QuotaExceededError extends Error {
   constructor(status: number, body: ApiErrorBody | null) {
     super("APP 存储超出限额，请联系管理员处理")
     this.name = "QuotaExceededError"
+    this.status = status
+    this.body = body
+  }
+}
+
+export class UploadPartTooLargeError extends Error {
+  readonly code = 413050
+  readonly status: number | null
+  readonly body: ApiErrorBody | null
+
+  constructor(status: number | null = null, body: ApiErrorBody | null = null) {
+    super("上传分片超过 64 MiB，请按服务端限制重新切分后上传")
+    this.name = "UploadPartTooLargeError"
     this.status = status
     this.body = body
   }
@@ -55,6 +70,7 @@ async function jsonOrThrow<T>(resp: Response): Promise<T> {
   }
   if (!resp.ok) {
     if (body?.code === 413049) throw new QuotaExceededError(resp.status, body)
+    if (body?.code === 413050) throw new UploadPartTooLargeError(resp.status, body)
     throw new Error(body?.msg || text || `请求失败: ${resp.status}`)
   }
   return body as unknown as T
@@ -65,11 +81,21 @@ function sanitizeEtag(etag: string) {
 }
 
 function multipartChunkSize(fileSize: number, configuredSize = DEFAULT_CHUNK_SIZE) {
-  const safeConfiguredSize = Number.isFinite(configuredSize) && configuredSize > 0
-    ? configuredSize
-    : DEFAULT_CHUNK_SIZE
+  if (!Number.isFinite(fileSize) || fileSize <= 0) throw new Error(EMPTY_FILE_ERROR)
+  if (!Number.isFinite(configuredSize) || configuredSize <= 0) {
+    throw new Error("分片大小必须是大于 0 的有限数值")
+  }
+  if (configuredSize > MAX_MULTIPART_PART_SIZE) throw new UploadPartTooLargeError()
+  if (fileSize > MAX_MULTIPART_FILE_SIZE) {
+    throw new Error("文件超过默认分片契约支持的 625 GiB，请联系管理员调整服务端策略")
+  }
   const requiredSize = Math.ceil(fileSize / MAX_MULTIPART_PARTS)
-  return Math.ceil(Math.max(safeConfiguredSize, requiredSize) / MIB) * MIB
+  const chunkSize = Math.max(
+    DEFAULT_CHUNK_SIZE,
+    Math.ceil(Math.max(configuredSize, requiredSize) / MIB) * MIB,
+  )
+  if (chunkSize > MAX_MULTIPART_PART_SIZE) throw new UploadPartTooLargeError()
+  return chunkSize
 }
 
 export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeBytes, onUploaded, className }: Props) {
@@ -97,7 +123,13 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
     if (!baseURL) throw new Error("请先选择可达的后端服务")
     if (!apiKey) throw new Error("apiKey 为空")
 
-    const chunkSize = multipartChunkSize(file.size, chunkSizeBytes)
+    let chunkSize: number
+    try {
+      chunkSize = multipartChunkSize(file.size, chunkSizeBytes)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+      return
+    }
 
     setUploading(true)
     setError(null)

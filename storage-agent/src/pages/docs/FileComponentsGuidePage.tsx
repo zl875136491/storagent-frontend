@@ -138,7 +138,7 @@ function ComponentsGuideContent() {
         <div className="min-w-0">
           <DocTitle>功能组件引导</DocTitle>
           <DocLead>
-            用一套 APIKey 和服务端点在线验证上传、元信息查询、跨区域定位与可取消下载；上传会按文件实际大小预检 APP 配额，并动态调整分片以满足 10,000 片上限，下方提供 TypeScript 与 Python 两种客户端实现。
+            用一套 APIKey 和服务端点在线验证上传、元信息查询、跨区域定位与可取消下载；上传会按文件实际大小预检 APP 配额，并在 5-64 MiB 范围内动态调整分片以满足 10,000 片上限，下方提供 TypeScript 与 Python 两种客户端实现。
           </DocLead>
         </div>
         <a
@@ -221,7 +221,7 @@ function ComponentsGuideContent() {
           在线上传
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          选择文件后，演示会先拒绝空文件，再用完整文件字节数初始化 multipart，并在跨区域预留声明容量。分片大小取配置值与文件大小除以 10,000 后向上取整的较大值，再向上对齐到 MiB，确保分片编号不超过 10,000；complete 或 abort 会释放该会话的预留。同一 part_number 可顺序重传，以最后一次成功上传的 ETag 和大小为准。新 APP 默认配额为 100 GiB；若返回 413049，上传会停止且不会重试，请联系应用管理员处理。成功后 object_key 会自动带入下载演示。
+          选择文件后，演示会先拒绝空文件，再用完整文件字节数初始化 multipart，并在跨区域预留声明容量。默认分片为 5 MiB，按文件大小动态增大并向上对齐到 MiB；非末片至少 5 MiB、单片最多 64 MiB、总片数最多 10,000，因此默认策略最多支持 625 GiB，超出时会在 init 前拒绝。complete 或 abort 会释放会话预留。同一 part_number 可顺序重传，以最后一次成功上传的 ETag 和大小为准。新 APP 默认配额为 100 GiB；413049 表示配额超限，413050 表示分片过大，两者都不会原样重试。成功后 object_key 会自动带入下载演示。
         </p>
         <div className="mt-4">
           <FileUploadDemo

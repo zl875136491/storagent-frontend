@@ -62,6 +62,19 @@ export class QuotaExceededError extends Error {
   }
 }
 
+export class UploadPartTooLargeError extends Error {
+  readonly code = 413050
+  readonly status: number | null
+  readonly body: ApiErrorBody | null
+
+  constructor(status: number | null = null, body: ApiErrorBody | null = null) {
+    super("上传分片超过 64 MiB，请按服务端限制重新切分后上传")
+    this.name = "UploadPartTooLargeError"
+    this.status = status
+    this.body = body
+  }
+}
+
 export type DownloadProgress = {
   status: "downloading" | "completed" | "cancelled"
   receivedBytes: number
@@ -107,15 +120,27 @@ function formatBytes(size: number) {
 
 const MIB = 1024 * 1024
 const DEFAULT_CHUNK_SIZE = 5 * MIB
+const MAX_MULTIPART_PART_SIZE = 64 * MIB
 const MAX_MULTIPART_PARTS = 10_000
+const MAX_MULTIPART_FILE_SIZE = MAX_MULTIPART_PART_SIZE * MAX_MULTIPART_PARTS
 const EMPTY_FILE_ERROR = "空文件暂不支持上传，请选择包含内容的文件"
 
 function multipartChunkSize(fileSize: number, configuredSize: number) {
-  const safeConfiguredSize = Number.isFinite(configuredSize) && configuredSize > 0
-    ? configuredSize
-    : DEFAULT_CHUNK_SIZE
+  if (!Number.isFinite(fileSize) || fileSize <= 0) throw new Error(EMPTY_FILE_ERROR)
+  if (!Number.isFinite(configuredSize) || configuredSize <= 0) {
+    throw new Error("分片大小必须是大于 0 的有限数值")
+  }
+  if (configuredSize > MAX_MULTIPART_PART_SIZE) throw new UploadPartTooLargeError()
+  if (fileSize > MAX_MULTIPART_FILE_SIZE) {
+    throw new Error("文件超过默认分片契约支持的 625 GiB，请联系管理员调整服务端策略")
+  }
   const requiredSize = Math.ceil(fileSize / MAX_MULTIPART_PARTS)
-  return Math.ceil(Math.max(safeConfiguredSize, requiredSize) / MIB) * MIB
+  const chunkSize = Math.max(
+    DEFAULT_CHUNK_SIZE,
+    Math.ceil(Math.max(configuredSize, requiredSize) / MIB) * MIB,
+  )
+  if (chunkSize > MAX_MULTIPART_PART_SIZE) throw new UploadPartTooLargeError()
+  return chunkSize
 }
 
 function isAbortError(error: unknown) {
@@ -180,6 +205,9 @@ export function StoragentFiles({
       if (errorBody?.code === 413049) {
         throw new QuotaExceededError(response.status, errorBody)
       }
+      if (errorBody?.code === 413050) {
+        throw new UploadPartTooLargeError(response.status, errorBody)
+      }
       const error = new Error(
         errorBody?.msg || body.text || \`HTTP \${response.status}\`,
       ) as Error & { status?: number; body?: ApiErrorBody | null }
@@ -196,7 +224,13 @@ export function StoragentFiles({
       fail(new Error(EMPTY_FILE_ERROR))
       return
     }
-    const chunkSize = multipartChunkSize(file.size, chunkSizeBytes)
+    let chunkSize: number
+    try {
+      chunkSize = multipartChunkSize(file.size, chunkSizeBytes)
+    } catch (error) {
+      fail(error)
+      return
+    }
     setBusy(true)
     setMessage("")
     setProgress(null)
@@ -495,12 +529,20 @@ export function StoragentFiles({
     </section>
   )
 }`,
-    usage: `import { QuotaExceededError, StoragentFiles } from "./StoragentFiles"
+    usage: `import {
+  QuotaExceededError,
+  StoragentFiles,
+  UploadPartTooLargeError,
+} from "./StoragentFiles"
 
 function handleError(error: Error) {
   if (error instanceof QuotaExceededError) {
     console.error("APP 存储超出限额，请联系管理员处理")
     return // 配额错误不应自动重试
+  }
+  if (error instanceof UploadPartTooLargeError) {
+    console.error("分片超过 64 MiB，请重新切分；不要重试相同请求")
+    return
   }
   console.error(error)
 }
@@ -535,14 +577,27 @@ import requests
 
 MIB = 1024 * 1024
 DEFAULT_CHUNK_SIZE = 5 * MIB
+MAX_MULTIPART_PART_SIZE = 64 * MIB
 MAX_MULTIPART_PARTS = 10_000
+MAX_MULTIPART_FILE_SIZE = MAX_MULTIPART_PART_SIZE * MAX_MULTIPART_PARTS
 EMPTY_FILE_ERROR = "空文件暂不支持上传，请选择包含内容的文件"
 
 
 def multipart_chunk_size(file_size: int, configured_size: int) -> int:
+    if file_size <= 0:
+        raise ValueError(EMPTY_FILE_ERROR)
+    if configured_size <= 0:
+        raise ValueError("分片大小必须大于 0")
+    if configured_size > MAX_MULTIPART_PART_SIZE:
+        raise UploadPartTooLargeError()
+    if file_size > MAX_MULTIPART_FILE_SIZE:
+        raise ValueError("文件超过默认分片契约支持的 625 GiB，请联系管理员调整服务端策略")
     required_size = (file_size + MAX_MULTIPART_PARTS - 1) // MAX_MULTIPART_PARTS
-    unaligned_size = max(int(configured_size), required_size, 1)
-    return ((unaligned_size + MIB - 1) // MIB) * MIB
+    unaligned_size = max(configured_size, required_size, DEFAULT_CHUNK_SIZE)
+    chunk_size = ((unaligned_size + MIB - 1) // MIB) * MIB
+    if chunk_size > MAX_MULTIPART_PART_SIZE:
+        raise UploadPartTooLargeError()
+    return chunk_size
 
 
 class StoragentError(RuntimeError):
@@ -557,6 +612,17 @@ class QuotaExceededError(StoragentError):
         self.status = status
         self.body = body
         RuntimeError.__init__(self, "APP 存储超出限额，请联系管理员处理")
+
+
+class UploadPartTooLargeError(StoragentError):
+    def __init__(
+        self,
+        status: int = 413,
+        body: dict[str, Any] | None = None,
+    ):
+        self.status = status
+        self.body = body
+        RuntimeError.__init__(self, "上传分片超过 64 MiB，请按服务端限制重新切分后上传")
 
 
 class DownloadCancelled(RuntimeError):
@@ -607,6 +673,8 @@ class StoragentFilesClient:
             body = {"msg": response.text} if response.text else None
         if (body or {}).get("code") == 413049:
             raise QuotaExceededError(response.status_code, body)
+        if (body or {}).get("code") == 413050:
+            raise UploadPartTooLargeError(response.status_code, body)
         raise StoragentError(response.status_code, body)
 
     def _json(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
@@ -816,7 +884,12 @@ class StoragentFilesClient:
     usage: `import os
 from threading import Event
 
-from storagent_files import DownloadProgress, QuotaExceededError, StoragentFilesClient
+from storagent_files import (
+    DownloadProgress,
+    QuotaExceededError,
+    StoragentFilesClient,
+    UploadPartTooLargeError,
+)
 
 
 def show_download_progress(progress: DownloadProgress) -> None:
@@ -851,7 +924,9 @@ try:
         print("download result:", download_result)
 except QuotaExceededError:
     print("APP 存储超出限额，请联系管理员处理")
-    # 配额错误不应自动重试。`,
+    # 配额错误不应自动重试。
+except UploadPartTooLargeError:
+    print("分片超过 64 MiB，请重新切分；不要重试相同请求")`,
   },
 }
 
@@ -880,10 +955,12 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "- `stat` 使用 POST JSON；`locate` 与 `download` 的 object_key 使用标准 URL 编码。",
     "- 上传异常时调用 multipart abort；下载大文件采用流式处理，不得先将完整响应载入内存后才更新进度。",
     "- 新 APP 默认存储配额为 100 GiB；multipart init 必须提交完整文件大小 `size_bytes`，并会跨区域预留声明容量。",
-    "- 空文件必须在发送 init 前拒绝；非空文件取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB，确保总片数不超过 10,000。",
+    "- 空文件必须在发送 init 前拒绝；默认分片为 5 MiB，非末片不得小于 5 MiB，单片不得超过服务端默认上限 64 MiB，总片数不得超过 10,000。",
+    "- 分片大小取配置值与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB；在默认策略下，超过 625 GiB 的文件无法同时满足单片和片数限制，必须在 init 前拒绝或由管理员调整服务端策略。",
     "- 同一 `part_number` 可顺序重传，以最后一次成功上传的 ETag 和分片大小为准。",
     "- multipart complete 或 abort 会释放该会话的跨区域预留容量。",
     "- 收到业务码 `413049` 时抛出 `QuotaExceededError`，停止重试并提示联系应用管理员。",
+    "- 收到业务码 `413050` 时抛出 `UploadPartTooLargeError`；不得原样重试超限分片，应按不超过 64 MiB 重新切分。",
     "- 下载前使用 POST stat 获取准确总大小；下载过程中至少展示已接收字节、总大小、百分比和实时速度。",
     "- 用户取消下载时必须立即中断网络读取，并且不得保存或保留可被误用的残缺文件。",
     isTypeScript
@@ -893,10 +970,12 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "## 上传配额与分片重传契约",
     "",
     "1. 在发送 `multipart/init` 前拒绝空文件；使用非空文件的完整 `size_bytes` 跨区域预留声明容量。",
-    "2. 取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB，保证总片数不超过 10,000。",
-    "3. 收到业务码 `413049` 时立即停止，不重试 init，也不继续发送分片，提示联系应用管理员。",
-    "4. 同一 `part_number` 可在失败后顺序重传；不要并发重传同一编号，每次成功后覆盖保存该编号的 ETag。",
-    "5. parts 查询与 complete 提交均以同一编号最后一次成功上传的 ETag 和 size 为准；complete 或 abort 后会话预留容量被释放。",
+    "2. 使用默认 5 MiB 分片，并取配置值与 `ceil(file_size / 10000)` 的较大值向上对齐到 MiB；非末片至少 5 MiB、单片最多 64 MiB、总片数最多 10,000。",
+    "3. 默认策略最多支持 625 GiB；更大的文件应在 init 前拒绝，或先由管理员同步调整服务端策略与客户端配置。",
+    "4. 收到业务码 `413049` 时立即停止，不重试 init，也不继续发送分片，提示联系应用管理员。",
+    "5. 收到业务码 `413050` 时不要重试相同分片；按不超过 64 MiB 重新切分，并重新核对总片数。",
+    "6. 同一 `part_number` 可在失败后顺序重传；不要并发重传同一编号，每次成功后覆盖保存该编号的 ETag。",
+    "7. parts 查询与 complete 提交均以同一编号最后一次成功上传的 ETag 和 size 为准；complete 或 abort 后会话预留容量被释放。",
     "",
     "## 下载进度与取消契约",
     "",
@@ -925,9 +1004,11 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "",
     "- [ ] APIKey 只进入 `x-api-key` 请求头。",
     "- [ ] 上传保存 upload_id、object_key、part_number 与 ETag；同一编号重传后覆盖保存最后成功 ETag。",
-    "- [ ] 空文件会在发送 init 前被明确拒绝；分片大小动态增大并按 MiB 对齐，总片数不超过 10,000。",
+    "- [ ] 空文件会在 init 前被拒绝；分片按 MiB 对齐，非末片至少 5 MiB、单片不超过 64 MiB、总片数不超过 10,000。",
+    "- [ ] 默认策略下会在 init 前拒绝超过 625 GiB 的文件，并提示联系管理员调整策略。",
     "- [ ] multipart init 使用完整源文件的字节数作为 size_bytes，并了解其会跨区域预留声明容量。",
     "- [ ] 413049 会转换为 QuotaExceededError，且不会继续重试或发送分片。",
+    "- [ ] 413050 会转换为 UploadPartTooLargeError，不会原样重试超限分片。",
     "- [ ] 成功 complete 或执行 abort 后会话预留容量被释放；取消或不可恢复失败时会调用 abort。",
     "- [ ] 上传结果可供外部业务模块取得 object_key 或完整响应。",
     "- [ ] stat 使用 POST JSON，能够处理业务码 404032。",
