@@ -3,6 +3,7 @@ import { GridColumns, GridRows } from "@visx/grid"
 import { Group } from "@visx/group"
 import { ParentSize } from "@visx/responsive"
 import { scaleBand, scaleLinear, scaleSqrt, scaleTime } from "@visx/scale"
+import { Download, Upload, type LucideIcon } from "lucide-react"
 import { useEffect, useId, useMemo, useState } from "react"
 import type { WheelEvent } from "react"
 
@@ -70,10 +71,14 @@ const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat("zh-CN", {
   notation: "compact",
   maximumFractionDigits: 1,
 })
-const GLYPH_STROKE_WIDTH = 2
-const OPERATION_OFFSET_RATIO = 0.66
-const TRIANGLE_SIDE_RATIO = Math.sqrt(Math.PI / Math.sqrt(3))
+const GLYPH_OUTLINE_WIDTH = 4.4
+const GLYPH_STROKE_WIDTH = 2.1
+const OPERATION_OFFSET_RATIO = 0.58
 const GLYPH_EDGE_BUFFER = 5
+const OPERATION_ICONS: Record<UsageOperation, LucideIcon> = {
+  upload: Upload,
+  download: Download,
+}
 
 function useDarkTheme(): boolean {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"))
@@ -124,24 +129,9 @@ function OperationGlyph({
   onEnter: () => void
   onLeave: () => void
 }) {
-  const radius = side / 2
-  const triangleSide = side * TRIANGLE_SIDE_RATIO
-  const triangleHalfWidth = triangleSide / 2
-  const triangleHeight = triangleSide * Math.sqrt(3) / 2
-  const triangleTop = cy - triangleHeight / 3
-  const triangleBottom = cy + triangleHeight * 2 / 3
-  const shapeHalfWidth = operation === "upload" ? radius : triangleHalfWidth
-  const shapeTop = operation === "upload" ? radius : triangleHeight / 3
-  const shapeBottom = operation === "upload" ? radius : triangleHeight * 2 / 3
-  const hitLeft = Math.max(9, shapeHalfWidth + GLYPH_STROKE_WIDTH / 2)
-  const hitRight = hitLeft
-  const hitTop = Math.max(9, shapeTop + GLYPH_STROKE_WIDTH / 2)
-  const hitBottom = Math.max(9, shapeBottom + GLYPH_STROKE_WIDTH / 2)
-  const trianglePoints = [
-    `${cx - triangleHalfWidth},${triangleTop}`,
-    `${cx + triangleHalfWidth},${triangleTop}`,
-    `${cx},${triangleBottom}`,
-  ].join(" ")
+  const Icon = OPERATION_ICONS[operation]
+  const halfSide = side / 2
+  const hitHalf = Math.max(9, halfSide + GLYPH_OUTLINE_WIDTH / 2)
 
   return (
     <g
@@ -151,55 +141,39 @@ function OperationGlyph({
       onPointerLeave={onLeave}
     >
       <rect
-        x={cx - hitLeft}
-        y={cy - hitTop}
-        width={hitLeft + hitRight}
-        height={hitTop + hitBottom}
+        x={cx - hitHalf}
+        y={cy - hitHalf}
+        width={hitHalf * 2}
+        height={hitHalf * 2}
         fill="transparent"
       />
-      {operation === "upload" ? (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={radius}
-          fill={color}
-          stroke={outline}
-          strokeWidth={GLYPH_STROKE_WIDTH}
-          pointerEvents="none"
-        />
-      ) : (
-        <polygon
-          points={trianglePoints}
-          fill={color}
-          stroke={outline}
-          strokeWidth={GLYPH_STROKE_WIDTH}
-          strokeLinejoin="round"
-          pointerEvents="none"
-        />
-      )}
+      <Icon
+        x={cx - halfSide}
+        y={cy - halfSide}
+        size={side}
+        color={outline}
+        strokeWidth={GLYPH_OUTLINE_WIDTH}
+        absoluteStrokeWidth
+        pointerEvents="none"
+        aria-hidden
+      />
+      <Icon
+        x={cx - halfSide}
+        y={cy - halfSide}
+        size={side}
+        color={color}
+        strokeWidth={GLYPH_STROKE_WIDTH}
+        absoluteStrokeWidth
+        pointerEvents="none"
+        aria-hidden
+      />
     </g>
   )
 }
 
 function OperationIcon({ operation, color }: { operation: UsageOperation; color: string }) {
-  const triangleSide = 8 * TRIANGLE_SIDE_RATIO
-  const triangleHalfWidth = triangleSide / 2
-  const triangleHeight = triangleSide * Math.sqrt(3) / 2
-  const triangleTop = 7 - triangleHeight / 3
-  const triangleBottom = 7 + triangleHeight * 2 / 3
-
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-      {operation === "upload" ? (
-        <circle cx="7" cy="7" r="4" fill={color} />
-      ) : (
-        <polygon
-          points={`${7 - triangleHalfWidth},${triangleTop} ${7 + triangleHalfWidth},${triangleTop} 7,${triangleBottom}`}
-          fill={color}
-        />
-      )}
-    </svg>
-  )
+  const Icon = OPERATION_ICONS[operation]
+  return <Icon width={15} height={15} color={color} strokeWidth={2.1} aria-hidden />
 }
 
 function TimelineTooltip({ hover, dimension }: { hover: TimelineHover; dimension: Dimension }) {
@@ -275,23 +249,17 @@ function TimelineSvg({
   const defaultMaxGlyphSide = compact ? 28 : 34
   const maxGlyphSideForWidth = (
     Math.max(0, (innerWidth - 1) / 2 - GLYPH_EDGE_BUFFER - 1)
-    / (OPERATION_OFFSET_RATIO + TRIANGLE_SIDE_RATIO / 2)
+    / (OPERATION_OFFSET_RATIO + 0.5)
   )
   const maxGlyphSide = Math.max(12, Math.min(defaultMaxGlyphSide, maxGlyphSideForWidth))
   const maxOperationOffset = maxGlyphSide * OPERATION_OFFSET_RATIO + 1
-  const maxTriangleHalfWidth = maxGlyphSide * TRIANGLE_SIDE_RATIO / 2
   const horizontalGlyphPadding = Math.min(
-    Math.ceil(maxOperationOffset + maxTriangleHalfWidth + GLYPH_EDGE_BUFFER),
+    Math.ceil(maxOperationOffset + maxGlyphSide / 2 + GLYPH_EDGE_BUFFER),
     Math.max(0, (innerWidth - 1) / 2),
   )
   const drawableWidth = Math.max(1, innerWidth - horizontalGlyphPadding * 2)
-  const maxTriangleHeight = maxGlyphSide * TRIANGLE_SIDE_RATIO * Math.sqrt(3) / 2
-  const requestedTopPadding = Math.ceil(
-    Math.max(maxGlyphSide / 2, maxTriangleHeight / 3) + GLYPH_EDGE_BUFFER,
-  )
-  const requestedBottomPadding = Math.ceil(
-    Math.max(maxGlyphSide / 2, maxTriangleHeight * 2 / 3) + GLYPH_EDGE_BUFFER,
-  )
+  const requestedTopPadding = Math.ceil(maxGlyphSide / 2 + GLYPH_EDGE_BUFFER)
+  const requestedBottomPadding = requestedTopPadding
   const verticalPaddingScale = Math.min(
     1,
     Math.max(0, (innerHeight - 1) / (requestedTopPadding + requestedBottomPadding)),
@@ -372,7 +340,7 @@ function TimelineSvg({
       width={width}
       height={height}
       role="img"
-      aria-label="上传与下载请求时序图，上传为圆形，下载为三角形，图标大小代表传输量"
+      aria-label="上传与下载请求时序图，使用上传和下载图标区分操作，图标大小代表传输量"
       onWheel={handleWheel}
     >
       <defs>
@@ -391,7 +359,7 @@ function TimelineSvg({
               : maxByteLog - minByteLog <= Number.EPSILON
                 ? Math.min(maxGlyphSide, compact ? 20 : 22)
                 : glyphSide(Math.log1p(point.bytes))
-            // Separate operation lanes far enough that equal-area circle and triangle markers never overlap.
+            // Keep simultaneous upload and download glyphs in separate lanes so both remain readable.
             const operationOffset = side * OPERATION_OFFSET_RATIO + 1
             const cx = x(new Date(point.timestamp)) + entityOffset.x
               + (point.operation === "upload" ? -operationOffset : operationOffset)
@@ -536,8 +504,8 @@ export function UsageScatterChart({ points, dimension }: { points: UsagePoint[];
           ))}
         </div>
         <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-          <span className="inline-flex items-center gap-1"><OperationIcon operation="upload" color="currentColor" />圆形 · 上传</span>
-          <span className="inline-flex items-center gap-1"><OperationIcon operation="download" color="currentColor" />三角形 · 下载</span>
+          <span className="inline-flex items-center gap-1"><OperationIcon operation="upload" color="currentColor" />上传</span>
+          <span className="inline-flex items-center gap-1"><OperationIcon operation="download" color="currentColor" />下载</span>
           <span className="text-muted-foreground/75">图标大小 = 传输量</span>
         </div>
       </div>
