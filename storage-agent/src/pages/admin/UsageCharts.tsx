@@ -70,9 +70,10 @@ const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat("zh-CN", {
   notation: "compact",
   maximumFractionDigits: 1,
 })
-const TRAY_PATH = "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-const UPLOAD_PATH = "M17 8l-5-5-5 5M12 3v12"
-const DOWNLOAD_PATH = "M7 10l5 5 5-5M12 15V3"
+const GLYPH_STROKE_WIDTH = 2
+const OPERATION_OFFSET_RATIO = 0.66
+const TRIANGLE_SIDE_RATIO = Math.sqrt(Math.PI / Math.sqrt(3))
+const GLYPH_EDGE_BUFFER = 5
 
 function useDarkTheme(): boolean {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"))
@@ -123,9 +124,24 @@ function OperationGlyph({
   onEnter: () => void
   onLeave: () => void
 }) {
-  const scale = side / 24
-  const operationPath = operation === "upload" ? UPLOAD_PATH : DOWNLOAD_PATH
-  const transform = `translate(${cx - side / 2} ${cy - side / 2}) scale(${scale})`
+  const radius = side / 2
+  const triangleSide = side * TRIANGLE_SIDE_RATIO
+  const triangleHalfWidth = triangleSide / 2
+  const triangleHeight = triangleSide * Math.sqrt(3) / 2
+  const triangleTop = cy - triangleHeight / 3
+  const triangleBottom = cy + triangleHeight * 2 / 3
+  const shapeHalfWidth = operation === "upload" ? radius : triangleHalfWidth
+  const shapeTop = operation === "upload" ? radius : triangleHeight / 3
+  const shapeBottom = operation === "upload" ? radius : triangleHeight * 2 / 3
+  const hitLeft = Math.max(9, shapeHalfWidth + GLYPH_STROKE_WIDTH / 2)
+  const hitRight = hitLeft
+  const hitTop = Math.max(9, shapeTop + GLYPH_STROKE_WIDTH / 2)
+  const hitBottom = Math.max(9, shapeBottom + GLYPH_STROKE_WIDTH / 2)
+  const trianglePoints = [
+    `${cx - triangleHalfWidth},${triangleTop}`,
+    `${cx + triangleHalfWidth},${triangleTop}`,
+    `${cx},${triangleBottom}`,
+  ].join(" ")
 
   return (
     <g
@@ -135,47 +151,53 @@ function OperationGlyph({
       onPointerLeave={onLeave}
     >
       <rect
-        x={cx - Math.max(side, 18) / 2}
-        y={cy - Math.max(side, 18) / 2}
-        width={Math.max(side, 18)}
-        height={Math.max(side, 18)}
+        x={cx - hitLeft}
+        y={cy - hitTop}
+        width={hitLeft + hitRight}
+        height={hitTop + hitBottom}
         fill="transparent"
       />
-      <g
-        transform={transform}
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        pointerEvents="none"
-      >
-        <path
-          d={`${TRAY_PATH} ${operationPath}`}
+      {operation === "upload" ? (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill={color}
           stroke={outline}
-          strokeWidth={4.2}
-          vectorEffect="non-scaling-stroke"
+          strokeWidth={GLYPH_STROKE_WIDTH}
+          pointerEvents="none"
         />
-        <path
-          d={`${TRAY_PATH} ${operationPath}`}
-          stroke={color}
-          strokeWidth={1.9}
-          vectorEffect="non-scaling-stroke"
+      ) : (
+        <polygon
+          points={trianglePoints}
+          fill={color}
+          stroke={outline}
+          strokeWidth={GLYPH_STROKE_WIDTH}
+          strokeLinejoin="round"
+          pointerEvents="none"
         />
-      </g>
+      )}
     </g>
   )
 }
 
 function OperationIcon({ operation, color }: { operation: UsageOperation; color: string }) {
-  const operationPath = operation === "upload" ? UPLOAD_PATH : DOWNLOAD_PATH
+  const triangleSide = 8 * TRIANGLE_SIDE_RATIO
+  const triangleHalfWidth = triangleSide / 2
+  const triangleHeight = triangleSide * Math.sqrt(3) / 2
+  const triangleTop = 7 - triangleHeight / 3
+  const triangleBottom = 7 + triangleHeight * 2 / 3
+
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d={`${TRAY_PATH} ${operationPath}`}
-        stroke={color}
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+      {operation === "upload" ? (
+        <circle cx="7" cy="7" r="4" fill={color} />
+      ) : (
+        <polygon
+          points={`${7 - triangleHalfWidth},${triangleTop} ${7 + triangleHalfWidth},${triangleTop} 7,${triangleBottom}`}
+          fill={color}
+        />
+      )}
     </svg>
   )
 }
@@ -250,6 +272,32 @@ function TimelineSvg({
   const margin = { top: 18, right: compact ? 12 : 24, bottom: 40, left: compact ? 46 : 56 }
   const innerWidth = Math.max(0, width - margin.left - margin.right)
   const innerHeight = Math.max(0, height - margin.top - margin.bottom)
+  const defaultMaxGlyphSide = compact ? 28 : 34
+  const maxGlyphSideForWidth = (
+    Math.max(0, (innerWidth - 1) / 2 - GLYPH_EDGE_BUFFER - 1)
+    / (OPERATION_OFFSET_RATIO + TRIANGLE_SIDE_RATIO / 2)
+  )
+  const maxGlyphSide = Math.max(12, Math.min(defaultMaxGlyphSide, maxGlyphSideForWidth))
+  const maxOperationOffset = maxGlyphSide * OPERATION_OFFSET_RATIO + 1
+  const maxTriangleHalfWidth = maxGlyphSide * TRIANGLE_SIDE_RATIO / 2
+  const horizontalGlyphPadding = Math.min(
+    Math.ceil(maxOperationOffset + maxTriangleHalfWidth + GLYPH_EDGE_BUFFER),
+    Math.max(0, (innerWidth - 1) / 2),
+  )
+  const drawableWidth = Math.max(1, innerWidth - horizontalGlyphPadding * 2)
+  const maxTriangleHeight = maxGlyphSide * TRIANGLE_SIDE_RATIO * Math.sqrt(3) / 2
+  const requestedTopPadding = Math.ceil(
+    Math.max(maxGlyphSide / 2, maxTriangleHeight / 3) + GLYPH_EDGE_BUFFER,
+  )
+  const requestedBottomPadding = Math.ceil(
+    Math.max(maxGlyphSide / 2, maxTriangleHeight * 2 / 3) + GLYPH_EDGE_BUFFER,
+  )
+  const verticalPaddingScale = Math.min(
+    1,
+    Math.max(0, (innerHeight - 1) / (requestedTopPadding + requestedBottomPadding)),
+  )
+  const topGlyphPadding = requestedTopPadding * verticalPaddingScale
+  const bottomGlyphPadding = requestedBottomPadding * verticalPaddingScale
   const visibleDomain = zoomDomain ?? fullDomain
   const visibleData = data.filter((point) => point.timestamp >= visibleDomain[0] && point.timestamp <= visibleDomain[1])
   const maxRequests = visibleData.reduce((maximum, point) => Math.max(maximum, point.requests), 1)
@@ -265,12 +313,16 @@ function TimelineSvg({
   const maxByteLog = Number.isFinite(byteLogBounds.maximum) ? byteLogBounds.maximum : 0
   const x = scaleTime<number>({
     domain: [new Date(visibleDomain[0]), new Date(visibleDomain[1])],
-    range: [0, innerWidth],
+    range: [horizontalGlyphPadding, innerWidth - horizontalGlyphPadding],
   })
-  const y = scaleLinear<number>({ domain: [0, maxRequests * 1.08], range: [innerHeight, 0], nice: true })
+  const y = scaleLinear<number>({
+    domain: [0, maxRequests * 1.08],
+    range: [innerHeight - bottomGlyphPadding, topGlyphPadding],
+    nice: true,
+  })
   const glyphSide = scaleSqrt<number>({
     domain: [minByteLog, Math.max(minByteLog + 1, maxByteLog)],
-    range: [12, compact ? 28 : 34],
+    range: [12, maxGlyphSide],
     clamp: true,
   })
   const entityOffsetByKey = new Map([...colorByEntity.keys()].map((key, index) => {
@@ -296,7 +348,7 @@ function TimelineSvg({
     const currentSpan = Math.max(1, currentEnd - currentStart)
     const factor = event.deltaY > 0 ? 1.18 : 0.82
     const nextSpan = Math.min(fullSpan, Math.max(fullSpan / 240, currentSpan * factor))
-    const anchor = Math.max(0, Math.min(1, pointerX / innerWidth))
+    const anchor = Math.max(0, Math.min(1, (pointerX - horizontalGlyphPadding) / drawableWidth))
     const anchorTime = currentStart + currentSpan * anchor
     let nextStart = anchorTime - nextSpan * anchor
     let nextEnd = nextStart + nextSpan
@@ -320,7 +372,7 @@ function TimelineSvg({
       width={width}
       height={height}
       role="img"
-      aria-label="上传与下载请求时序图，图标大小代表传输量"
+      aria-label="上传与下载请求时序图，上传为圆形，下载为三角形，图标大小代表传输量"
       onWheel={handleWheel}
     >
       <defs>
@@ -334,14 +386,16 @@ function TimelineSvg({
         <g clipPath={`url(#${clipId})`}>
           {visibleData.map((point, index) => {
             const entityOffset = entityOffsetByKey.get(point.entityKey) ?? { x: 0, y: 0 }
-            const operationOffset = point.operation === "upload" ? -2 : 2
-            const cx = x(new Date(point.timestamp)) + entityOffset.x + operationOffset
-            const cy = y(point.requests) + entityOffset.y
             const side = point.bytes <= 0
               ? 12
               : maxByteLog - minByteLog <= Number.EPSILON
-                ? compact ? 20 : 22
+                ? Math.min(maxGlyphSide, compact ? 20 : 22)
                 : glyphSide(Math.log1p(point.bytes))
+            // Separate operation lanes far enough that equal-area circle and triangle markers never overlap.
+            const operationOffset = side * OPERATION_OFFSET_RATIO + 1
+            const cx = x(new Date(point.timestamp)) + entityOffset.x
+              + (point.operation === "upload" ? -operationOffset : operationOffset)
+            const cy = y(point.requests) + entityOffset.y
             const hover = () => onHover({
               point,
               left: margin.left + cx,
@@ -482,8 +536,8 @@ export function UsageScatterChart({ points, dimension }: { points: UsagePoint[];
           ))}
         </div>
         <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-          <span className="inline-flex items-center gap-1"><OperationIcon operation="upload" color="currentColor" />上传</span>
-          <span className="inline-flex items-center gap-1"><OperationIcon operation="download" color="currentColor" />下载</span>
+          <span className="inline-flex items-center gap-1"><OperationIcon operation="upload" color="currentColor" />圆形 · 上传</span>
+          <span className="inline-flex items-center gap-1"><OperationIcon operation="download" color="currentColor" />三角形 · 下载</span>
           <span className="text-muted-foreground/75">图标大小 = 传输量</span>
         </div>
       </div>
