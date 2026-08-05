@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Activity,
   Box,
@@ -33,6 +33,7 @@ import {
   type ClusterHealStatusResponse,
   type ReplicationOperationsResponse,
   type ReplicationSourceMetric,
+  type ReplicationStatusReason,
   type ReplicationTargetMetric,
   type StorageOperationHealth,
   type StorageOperationItem,
@@ -61,11 +62,18 @@ import { cn } from "../../lib/utils"
 
 type OperationsView = "replication" | "clusters"
 
+const sourceAggregateReasonCodes = new Set([
+  "critical_target_links",
+  "degraded_target_links",
+  "syncing_target_links",
+  "replication_transfer_active",
+])
+
 const replicationStatusMeta: Record<
   StorageOperationHealth,
   { label: string; className: string; icon: typeof CheckCircle2 }
 > = {
-  healthy: { label: "已收敛", className: "text-emerald-700 bg-emerald-500/10 dark:text-emerald-300", icon: CheckCircle2 },
+  healthy: { label: "当前正常", className: "text-emerald-700 bg-emerald-500/10 dark:text-emerald-300", icon: CheckCircle2 },
   syncing: { label: "同步中", className: "text-sky-700 bg-sky-500/10 dark:text-sky-300", icon: LoaderCircle },
   degraded: { label: "需关注", className: "text-amber-700 bg-amber-500/10 dark:text-amber-300", icon: CircleAlert },
   critical: { label: "异常", className: "text-rose-700 bg-rose-500/10 dark:text-rose-300", icon: CircleAlert },
@@ -114,14 +122,102 @@ function formatDuration(seconds: number): string {
   return `${Math.floor(seconds)} 秒`
 }
 
-function ReplicationStatus({ status }: { status: StorageOperationHealth }) {
+function ReplicationStatus({
+  status,
+  scope = "aggregate",
+}: {
+  status: StorageOperationHealth
+  scope?: "aggregate" | "link"
+}) {
   const meta = replicationStatusMeta[status]
   const Icon = meta.icon
+  const label = status === "healthy" && scope === "link" ? "链路正常" : meta.label
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium", meta.className)}>
       <Icon className={cn("h-3.5 w-3.5", status === "syncing" && "animate-spin")} aria-hidden />
-      {meta.label}
+      {label}
     </span>
+  )
+}
+
+function uniqueStatusReasons(reasons: ReplicationStatusReason[]): ReplicationStatusReason[] {
+  const seen = new Set<string>()
+  return reasons.filter((reason) => {
+    const message = reason.message.trim()
+    if (!message) return false
+    const key = `${reason.code}:${statusReasonText(reason)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function statusReasonText(reason: ReplicationStatusReason): string {
+  const { value } = reason
+  if (value === null || value === undefined || value === "") return reason.message
+  if (typeof value === "number") return `${reason.message}（${value.toLocaleString("zh-CN")}）`
+  if (typeof value === "string") {
+    const detail = value.length > 120 ? `${value.slice(0, 120)}…` : value
+    return `${reason.message}（${detail}）`
+  }
+  if (typeof value === "object") {
+    const counts = value as { actual?: unknown; expected?: unknown }
+    if (counts.actual !== undefined && counts.expected !== undefined) {
+      return `${reason.message}（实际 ${String(counts.actual)} / 预期 ${String(counts.expected)}）`
+    }
+  }
+  return reason.message
+}
+
+function StatusReasonSummary({
+  status,
+  reasons = [],
+  mrfCount = 0,
+  label,
+}: {
+  status: StorageOperationHealth
+  reasons?: ReplicationStatusReason[]
+  mrfCount?: number
+  label: string
+}) {
+  const normalized = uniqueStatusReasons(reasons)
+  const statusReasons = normalized.filter((reason) => reason.severity !== "info")
+  const diagnostics = normalized.filter((reason) => reason.severity === "info")
+  const hasMrfDiagnostic = diagnostics.some((reason) => reason.code === "mrf_recent_backlog_observed")
+  const diagnosticMessages = diagnostics.map(statusReasonText)
+  if (mrfCount > 0 && !hasMrfDiagnostic) {
+    diagnosticMessages.push(
+      `MinIO MRF 近 5 分钟诊断计数为 ${mrfCount}；该指标可能在故障恢复后继续粘滞，不代表当前仍在漏复制。`,
+    )
+  }
+  const reasonMessages = statusReasons.map(statusReasonText)
+  const reasonText = reasonMessages.length > 0
+    ? reasonMessages.join("；")
+    : status === "healthy"
+      ? "当前没有影响状态的异常条件。"
+      : "后端暂未返回具体判定原因，请刷新后查看源站与链路指标。"
+
+  return (
+    <div className="shrink-0 border-b border-border/60 bg-muted/15 px-3 py-2 text-[11px] leading-5">
+      <div className="flex items-start gap-2">
+        {status === "healthy"
+          ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+          : <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />}
+        <div className="min-w-0">
+          <span className="font-medium text-foreground">{label}判定依据：</span>
+          <span className="text-muted-foreground">{reasonText}</span>
+        </div>
+      </div>
+      {diagnosticMessages.length > 0 ? (
+        <div className="mt-0.5 flex items-start gap-2 text-muted-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <span className="font-medium text-foreground">诊断提示：</span>
+            {diagnosticMessages.join("；")}
+          </div>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -249,38 +345,46 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   const [resyncTarget, setResyncTarget] = useState<LinkRow | null>(null)
   const [olderThan, setOlderThan] = useState("")
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null)
+  const loadInFlightRef = useRef<Promise<void> | null>(null)
 
-  const load = useCallback(async (
+  const load = useCallback((
     quiet = false,
     showRefreshing = quiet,
     bucketFilter?: string,
-  ) => {
-    if (!quiet) setLoading(true)
-    else if (showRefreshing) setRefreshing(true)
-    try {
-      const response = await fetchReplicationOperationsApi(bucketFilter, accessToken)
-      setData((current) => {
-        if (!bucketFilter || !current) return response
-        const refreshedBucket = response.buckets[0]
-        if (!refreshedBucket) return current
-        return {
-          ...current,
-          generated_at: response.generated_at,
-          buckets: current.buckets.map((item) => (
-            item.bucket === refreshedBucket.bucket ? refreshedBucket : item
-          )),
-        }
-      })
-      if (!bucketFilter) {
-        setSelectedBucket((current) => {
-          if (current && response.buckets.some((item) => item.bucket === current)) return current
-          return response.buckets[0]?.bucket ?? null
+  ): Promise<void> => {
+    if (loadInFlightRef.current) return loadInFlightRef.current
+
+    const request = (async () => {
+      if (!quiet) setLoading(true)
+      else if (showRefreshing) setRefreshing(true)
+      try {
+        const response = await fetchReplicationOperationsApi(bucketFilter, accessToken)
+        setData((current) => {
+          if (!bucketFilter || !current) return response
+          const refreshedBucket = response.buckets[0]
+          if (!refreshedBucket) return current
+          return {
+            ...current,
+            generated_at: response.generated_at,
+            buckets: current.buckets.map((item) => (
+              item.bucket === refreshedBucket.bucket ? refreshedBucket : item
+            )),
+          }
         })
+        if (!bucketFilter) {
+          setSelectedBucket((current) => {
+            if (current && response.buckets.some((item) => item.bucket === current)) return current
+            return response.buckets[0]?.bucket ?? null
+          })
+        }
+      } finally {
+        if (!quiet) setLoading(false)
+        if (showRefreshing) setRefreshing(false)
+        loadInFlightRef.current = null
       }
-    } finally {
-      if (!quiet) setLoading(false)
-      if (showRefreshing) setRefreshing(false)
-    }
+    })()
+    loadInFlightRef.current = request
+    return request
   }, [accessToken])
 
   useEffect(() => {
@@ -318,6 +422,25 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       mrf: sources.reduce((sum, item) => sum + item.mrf_failed_last_5m, 0),
       recentFailed: sources.reduce((sum, item) => sum + (item.recent_failed_count ?? 0), 0),
     }
+  }, [bucket])
+  const bucketStatusReasons = useMemo<ReplicationStatusReason[]>(() => {
+    if (!bucket) return []
+    const details: ReplicationStatusReason[] = []
+    for (const source of bucket.sources) {
+      for (const reason of source.status_reasons ?? []) {
+        if (sourceAggregateReasonCodes.has(reason.code)) continue
+        details.push({ ...reason, message: `${source.server}：${reason.message}` })
+      }
+      for (const target of source.targets) {
+        for (const reason of target.status_reasons ?? []) {
+          details.push({
+            ...reason,
+            message: `${source.server} → ${target.target}：${reason.message}`,
+          })
+        }
+      }
+    }
+    return details.length > 0 ? details : (bucket.status_reasons ?? [])
   }, [bucket])
 
   const reconcile = async () => {
@@ -383,11 +506,26 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   }
 
   useEffect(() => {
-    if (!hasRunningResync) return undefined
-    const timer = window.setInterval(() => {
-      void load(true, false)
-    }, 10_000)
-    return () => window.clearInterval(timer)
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible") return
+      void load(true, false).catch(() => undefined)
+    }
+    let lastResumeRefreshAt = 0
+    const refreshOnResume = () => {
+      if (document.visibilityState !== "visible") return
+      const now = Date.now()
+      if (now - lastResumeRefreshAt < 1_000) return
+      lastResumeRefreshAt = now
+      refreshWhenVisible()
+    }
+    const timer = window.setInterval(refreshWhenVisible, hasRunningResync ? 10_000 : 60_000)
+    window.addEventListener("focus", refreshOnResume)
+    document.addEventListener("visibilitychange", refreshOnResume)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refreshOnResume)
+      document.removeEventListener("visibilitychange", refreshOnResume)
+    }
   }, [hasRunningResync, load])
 
   if (loading) return <LoadingState label="正在读取五地复制状态..." />
@@ -431,6 +569,12 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
           <div className="mt-1 text-sm font-semibold">{formatRate(summary.current_rate_bps)}</div>
         </div>
       </div>
+      <StatusReasonSummary
+        status={summary.status}
+        reasons={summary.status_reasons}
+        mrfCount={summary.mrf_failed_last_5m}
+        label="总体状态"
+      />
 
       {actionNotice ? (
         <div className={cn(
@@ -494,9 +638,12 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">{bucket?.bucket ?? "未选择存储桶"}</div>
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="truncate text-sm font-semibold">{bucket?.bucket ?? "未选择存储桶"}</div>
+                {bucket ? <ReplicationStatus status={bucket.status} /> : null}
+              </div>
               <div className="text-[10px] text-muted-foreground">
-                链路 {bucketSummary.actual}/{bucketSummary.expected} · 等待 {bucketSummary.queued}（{formatBytes(bucketSummary.queuedBytes)}）· 近 1 小时失败 {bucketSummary.recentFailed} · 近期漏复制 {bucketSummary.mrf} · {formatDateTime(data.generated_at)}
+                链路 {bucketSummary.actual}/{bucketSummary.expected} · 等待 {bucketSummary.queued}（{formatBytes(bucketSummary.queuedBytes)}）· 近 1 小时失败 {bucketSummary.recentFailed} · <span title="MinIO MRF 指标可能在故障恢复后继续粘滞，仅用于诊断，不代表当前仍在漏复制">MRF 诊断 {bucketSummary.mrf}（可能粘滞）</span> · {formatDateTime(data.generated_at)}
               </div>
             </div>
             <Button variant="outline" size="sm" disabled={!bucket || reconciling} onClick={() => void reconcile()}>
@@ -504,6 +651,14 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
               校准规则
             </Button>
           </div>
+          {bucket ? (
+            <StatusReasonSummary
+              status={bucket.status}
+              reasons={bucketStatusReasons}
+              mrfCount={bucketSummary.mrf}
+              label="当前桶"
+            />
+          ) : null}
           <div className="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-background">
@@ -529,7 +684,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
                         <div className="font-medium">{source.server} → {target.target}</div>
                         <div className="mt-0.5 max-w-48 truncate font-mono text-[10px] text-muted-foreground" title={target.endpoint}>{target.endpoint || "规则缺失"}</div>
                       </TableCell>
-                      <TableCell><ReplicationStatus status={target.status} /></TableCell>
+                      <TableCell><ReplicationStatus status={target.status} scope="link" /></TableCell>
                       <TableCell className="text-right font-mono">{target.online ? `${Math.round(target.latency_current_ms)} ms` : "—"}</TableCell>
                       <TableCell className="text-right">{target.replication_count} · {formatBytes(target.completed_bytes)}</TableCell>
                       <TableCell className="text-right">
