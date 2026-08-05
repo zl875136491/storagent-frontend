@@ -3,7 +3,6 @@ import { GridColumns, GridRows } from "@visx/grid"
 import { Group } from "@visx/group"
 import { ParentSize } from "@visx/responsive"
 import { scaleBand, scaleLinear, scaleSqrt, scaleTime } from "@visx/scale"
-import { Download, Upload, type LucideIcon } from "lucide-react"
 import { useEffect, useId, useMemo, useState } from "react"
 import type { WheelEvent } from "react"
 
@@ -71,14 +70,10 @@ const COMPACT_NUMBER_FORMATTER = new Intl.NumberFormat("zh-CN", {
   notation: "compact",
   maximumFractionDigits: 1,
 })
-const GLYPH_OUTLINE_WIDTH = 4.4
-const GLYPH_STROKE_WIDTH = 2.1
-const OPERATION_OFFSET_RATIO = 0.58
+const GLYPH_STROKE_WIDTH = 2
+const OPERATION_OFFSET_RATIO = 0.66
+const TRIANGLE_SIDE_RATIO = Math.sqrt(Math.PI / Math.sqrt(3))
 const GLYPH_EDGE_BUFFER = 5
-const OPERATION_ICONS: Record<UsageOperation, LucideIcon> = {
-  upload: Upload,
-  download: Download,
-}
 
 function useDarkTheme(): boolean {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"))
@@ -129,9 +124,25 @@ function OperationGlyph({
   onEnter: () => void
   onLeave: () => void
 }) {
-  const Icon = OPERATION_ICONS[operation]
-  const halfSide = side / 2
-  const hitHalf = Math.max(9, halfSide + GLYPH_OUTLINE_WIDTH / 2)
+  const triangleSide = side * TRIANGLE_SIDE_RATIO
+  const triangleHalfWidth = triangleSide / 2
+  const triangleHeight = triangleSide * Math.sqrt(3) / 2
+  const triangleTop = cy - triangleHeight * 2 / 3
+  const triangleBottom = cy + triangleHeight * 1 / 3
+  const hitLeft = Math.max(9, triangleHalfWidth + GLYPH_STROKE_WIDTH / 2)
+  const hitTop = Math.max(9, triangleTop - cy + GLYPH_STROKE_WIDTH / 2)
+  const hitBottom = Math.max(9, triangleBottom - cy + GLYPH_STROKE_WIDTH / 2)
+  const trianglePoints = operation === "upload"
+    ? [
+      `${cx},${triangleTop}`,
+      `${cx + triangleHalfWidth},${triangleBottom}`,
+      `${cx - triangleHalfWidth},${triangleBottom}`,
+    ].join(" ")
+    : [
+      `${cx - triangleHalfWidth},${triangleTop}`,
+      `${cx + triangleHalfWidth},${triangleTop}`,
+      `${cx},${triangleBottom}`,
+    ].join(" ")
 
   return (
     <g
@@ -141,39 +152,42 @@ function OperationGlyph({
       onPointerLeave={onLeave}
     >
       <rect
-        x={cx - hitHalf}
-        y={cy - hitHalf}
-        width={hitHalf * 2}
-        height={hitHalf * 2}
+        x={cx - hitLeft}
+        y={cy - hitTop}
+        width={hitLeft * 2}
+        height={hitTop + hitBottom}
         fill="transparent"
       />
-      <Icon
-        x={cx - halfSide}
-        y={cy - halfSide}
-        size={side}
-        color={outline}
-        strokeWidth={GLYPH_OUTLINE_WIDTH}
-        absoluteStrokeWidth
-        pointerEvents="none"
-        aria-hidden
-      />
-      <Icon
-        x={cx - halfSide}
-        y={cy - halfSide}
-        size={side}
-        color={color}
+      <polygon
+        points={trianglePoints}
+        fill={color}
+        stroke={outline}
         strokeWidth={GLYPH_STROKE_WIDTH}
-        absoluteStrokeWidth
+        strokeLinejoin="round"
         pointerEvents="none"
-        aria-hidden
       />
     </g>
   )
 }
 
 function OperationIcon({ operation, color }: { operation: UsageOperation; color: string }) {
-  const Icon = OPERATION_ICONS[operation]
-  return <Icon width={15} height={15} color={color} strokeWidth={2.1} aria-hidden />
+  const triangleSide = 8 * TRIANGLE_SIDE_RATIO
+  const triangleHalfWidth = triangleSide / 2
+  const triangleHeight = triangleSide * Math.sqrt(3) / 2
+  const triangleTop = 7 - triangleHeight * 2 / 3
+  const triangleBottom = 7 + triangleHeight / 3
+  const points = operation === "upload"
+    ? `${7},${triangleTop} ${7 + triangleHalfWidth},${triangleBottom} ${7 - triangleHalfWidth},${triangleBottom}`
+    : `${7 - triangleHalfWidth},${triangleTop} ${7 + triangleHalfWidth},${triangleTop} ${7},${triangleBottom}`
+
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+      <polygon
+        points={points}
+        fill={color}
+      />
+    </svg>
+  )
 }
 
 function TimelineTooltip({ hover, dimension }: { hover: TimelineHover; dimension: Dimension }) {
@@ -340,7 +354,7 @@ function TimelineSvg({
       width={width}
       height={height}
       role="img"
-      aria-label="上传与下载请求时序图，使用上传和下载图标区分操作，图标大小代表传输量"
+      aria-label="上传与下载请求时序图，上传使用上三角、下载使用下三角，图形大小代表传输量"
       onWheel={handleWheel}
     >
       <defs>
@@ -504,8 +518,8 @@ export function UsageScatterChart({ points, dimension }: { points: UsagePoint[];
           ))}
         </div>
         <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-          <span className="inline-flex items-center gap-1"><OperationIcon operation="upload" color="currentColor" />上传</span>
-          <span className="inline-flex items-center gap-1"><OperationIcon operation="download" color="currentColor" />下载</span>
+          <span className="inline-flex items-center gap-1"><OperationIcon operation="upload" color="currentColor" />上三角 · 上传</span>
+          <span className="inline-flex items-center gap-1"><OperationIcon operation="download" color="currentColor" />下三角 · 下载</span>
           <span className="text-muted-foreground/75">图标大小 = 传输量</span>
         </div>
       </div>
@@ -727,8 +741,8 @@ export function RegionUsageChart({ rows }: { rows: RegionUsageRow[] }) {
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col">
       <div className="flex shrink-0 items-center justify-center gap-5 pb-2 text-[10px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5"><OperationIcon operation="upload" color={UPLOAD_COLOR} />上传</span>
-        <span className="inline-flex items-center gap-1.5"><OperationIcon operation="download" color={DOWNLOAD_COLOR} />下载</span>
+        <span className="inline-flex items-center gap-1.5"><OperationIcon operation="upload" color={UPLOAD_COLOR} />上三角 · 上传</span>
+        <span className="inline-flex items-center gap-1.5"><OperationIcon operation="download" color={DOWNLOAD_COLOR} />下三角 · 下载</span>
         <span className="text-muted-foreground/75">条形长度 = 使用量</span>
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 divide-y divide-border/60 md:grid-cols-2 md:grid-rows-1 md:divide-x md:divide-y-0">
