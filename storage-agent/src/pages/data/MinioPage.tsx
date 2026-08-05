@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { Check, Pencil, Plus, X } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
+import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   createMinioServerApi,
   fetchMinioServersApi,
@@ -31,7 +32,7 @@ const emptyCreateForm = (): MinioServerCreateRequest => ({
 
 export default function MinioPage() {
   const { accessToken, user } = useAuth()
-  const isAdmin = user?.is_admin === true
+  const isAdmin = hasPermission(user, PERMISSIONS.regionManage)
   const [servers, setServers] = useState<MinioServer[]>([])
   const [loading, setLoading] = useState(true)
 

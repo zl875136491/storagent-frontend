@@ -3,9 +3,10 @@ import { cn } from "@/lib/utils"
 
 export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   value?: number
+  indicatorClassName?: string
 }
 
-export function Progress({ value = 0, className, ...props }: ProgressProps) {
+export function Progress({ value = 0, className, indicatorClassName, ...props }: ProgressProps) {
   const v = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0
   return (
     <div
@@ -17,10 +18,9 @@ export function Progress({ value = 0, className, ...props }: ProgressProps) {
       {...props}
     >
       <div
-        className="h-full bg-primary transition-all"
+        className={cn("h-full bg-primary transition-all", indicatorClassName)}
         style={{ width: `${v}%` }}
       />
     </div>
   )
 }
-

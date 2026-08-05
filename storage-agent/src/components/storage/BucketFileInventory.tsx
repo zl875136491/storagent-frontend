@@ -24,6 +24,7 @@ import {
 } from "../../api/client"
 import { showErrorToast, showSuccessToast } from "../../api/toast"
 import { useAuth } from "../../auth/AuthContext"
+import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
 import { formatBytes, formatDateTime, parseBackendDate } from "../../lib/format"
 import { Modal } from "../Modal"
@@ -232,7 +233,7 @@ export function BucketFileInventory({
   serverId: string
 }) {
   const { accessToken, user } = useAuth()
-  const isAdmin = user?.is_admin === true
+  const isAdmin = hasPermission(user, PERMISSIONS.storageOperationsManage)
   const [selectedBucket, setSelectedBucket] = useState("all")
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState<SortState | null>(null)

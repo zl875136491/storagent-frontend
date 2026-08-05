@@ -89,12 +89,27 @@ type ApiErrorBody = {
 }
 
 class StoragentError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly body: ApiErrorBody | null,
-  ) {
+  readonly status: number
+  readonly body: ApiErrorBody | null
+
+  constructor(message: string, status: number, body: ApiErrorBody | null) {
     super(message)
+    this.status = status
+    this.body = body
+  }
+}
+
+export class QuotaExceededError extends StoragentError {
+  constructor(status: number, body: ApiErrorBody | null) {
+    super("APP 存储超出限额，请联系管理员处理", status, body)
+    this.name = "QuotaExceededError"
+  }
+}
+
+export class UploadPartTooLargeError extends StoragentError {
+  constructor(status: number, body: ApiErrorBody | null) {
+    super("上传分片超过 64 MiB，请按服务端限制重新切分后上传", status, body)
+    this.name = "UploadPartTooLargeError"
   }
 }
 
@@ -116,6 +131,8 @@ async function storagentFetch(
   })
   if (!response.ok) {
     const body = (await response.clone().json().catch(() => null)) as ApiErrorBody | null
+    if (body?.code === 413049) throw new QuotaExceededError(response.status, body)
+    if (body?.code === 413050) throw new UploadPartTooLargeError(response.status, body)
     throw new StoragentError(body?.msg ?? \`Storagent HTTP \${response.status}\`, response.status, body)
   }
   return response
@@ -134,6 +151,20 @@ class StoragentAPIError(RuntimeError):
         self.status = status
         self.body = body
         super().__init__((body or {}).get("msg") or f"Storagent HTTP {status}")
+
+
+class QuotaExceededError(StoragentAPIError):
+    def __init__(self, status: int, body: dict[str, Any] | None):
+        self.status = status
+        self.body = body
+        RuntimeError.__init__(self, "APP 存储超出限额，请联系管理员处理")
+
+
+class UploadPartTooLargeError(StoragentAPIError):
+    def __init__(self, status: int, body: dict[str, Any] | None):
+        self.status = status
+        self.body = body
+        RuntimeError.__init__(self, "上传分片超过 64 MiB，请按服务端限制重新切分后上传")
 
 
 def storagent_request(
@@ -164,6 +195,10 @@ def storagent_request(
             body = response.json()
         except ValueError:
             body = None
+        if (body or {}).get("code") == 413049:
+            raise QuotaExceededError(response.status_code, body)
+        if (body or {}).get("code") == 413050:
+            raise UploadPartTooLargeError(response.status_code, body)
         raise StoragentAPIError(response.status_code, body)
     return response`,
 }
@@ -177,7 +212,11 @@ export const API_GUIDE_ERROR_EXAMPLES: Record<ApiGuideLanguage, string> = {
   })
   console.log(await response.json())
 } catch (error) {
-  if (error instanceof StoragentError && error.body?.code === 404032) {
+  if (error instanceof QuotaExceededError) {
+    console.error("APP 存储超出限额，请联系管理员处理；该请求不应自动重试。")
+  } else if (error instanceof UploadPartTooLargeError) {
+    console.error("分片超过 64 MiB；请重新切分，不要重试相同请求。")
+  } else if (error instanceof StoragentError && error.body?.code === 404032) {
     const data = error.body.data as { available_at?: Array<{ download_url: string }> }
     console.log("对象不在当前节点，可从以下节点下载：", data.available_at ?? [])
   } else {
@@ -192,7 +231,11 @@ export const API_GUIDE_ERROR_EXAMPLES: Record<ApiGuideLanguage, string> = {
     )
     print(response.json())
 except StoragentAPIError as exc:
-    if (exc.body or {}).get("code") == 404032:
+    if isinstance(exc, QuotaExceededError):
+        print("APP 存储超出限额，请联系管理员处理；该请求不应自动重试。")
+    elif isinstance(exc, UploadPartTooLargeError):
+        print("分片超过 64 MiB；请重新切分，不要重试相同请求。")
+    elif (exc.body or {}).get("code") == 404032:
         data = (exc.body or {}).get("data") or {}
         print("对象不在当前节点，可从以下节点下载：", data.get("available_at", []))
     else:
@@ -280,7 +323,7 @@ print({"bytes": len(response.content), "elapsed_ms": (perf_counter() - started_a
     method: "POST",
     path: "/api/files/multipart/init",
     summary: "初始化分片上传",
-    description: "创建 multipart 会话并由服务端生成 object_key。后续上传、查询、完成或中止操作必须复用返回的 upload_id 与 object_key。",
+    description: "创建 multipart 会话并由服务端生成 object_key。请求必须声明完整文件字节数，服务端会在创建会话前跨区域检查 APP 存储配额，并按 size_bytes 预留声明容量；新 APP 默认配额为 100 GiB。",
     authentication: "api-key",
     params: [
       apiKeyHeaders("application/json"),
@@ -288,6 +331,7 @@ print({"bytes": len(response.content), "elapsed_ms": (perf_counter() - started_a
         title: "Body",
         rows: [
           { name: "content_type", type: "string", description: "对象 MIME；默认 application/octet-stream" },
+          { name: "size_bytes", type: "integer", required: true, description: "待上传完整非空文件的字节数，必须大于 0，用于创建会话前执行配额校验" },
         ],
       },
       {
@@ -299,21 +343,36 @@ print({"bytes": len(response.content), "elapsed_ms": (perf_counter() - started_a
         ],
       },
     ],
-    notes: ["业务数据库应暂存 upload_id 与 object_key，以支持刷新页面后的断点续传和失败清理。"],
+    notes: [
+      "业务数据库应暂存 upload_id 与 object_key，以支持刷新页面后的断点续传和失败清理。",
+      "客户端应在发送 init 前拒绝空文件，避免创建无效上传会话。",
+      "multipart complete 成功或 multipart abort 完成时会释放该会话的跨区域预留容量；取消或不可恢复失败时必须调用 abort。",
+      "业务码 413049 表示 APP 存储超出限额；不要继续重试或上传分片，应联系应用管理员调整配额或清理空间。",
+    ],
     examples: {
-      typescript: `type MultipartInit = { upload_id: string; bucket: string; object_key: string }
+      typescript: `import { stat } from "node:fs/promises"
+
+type MultipartInit = { upload_id: string; bucket: string; object_key: string }
+
+const source = await stat("./document.pdf")
+if (source.size <= 0) throw new Error("空文件暂不支持上传，请选择包含内容的文件")
 
 const response = await storagentFetch("/api/files/multipart/init", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ content_type: "application/pdf" }),
+  body: JSON.stringify({ content_type: "application/pdf", size_bytes: source.size }),
 })
 const upload = (await response.json()) as MultipartInit
 console.log(upload)`,
-      python: `response = storagent_request(
+      python: `from pathlib import Path
+
+source = Path("./document.pdf")
+if source.stat().st_size <= 0:
+    raise ValueError("空文件暂不支持上传，请选择包含内容的文件")
+response = storagent_request(
     "POST",
     "/api/files/multipart/init",
-    json={"content_type": "application/pdf"},
+    json={"content_type": "application/pdf", "size_bytes": source.stat().st_size},
 )
 upload = response.json()
 print(upload)`,
@@ -329,7 +388,7 @@ print(upload)`,
     method: "POST",
     path: "/api/files/multipart/part",
     summary: "上传单个分片",
-    description: "以 multipart/form-data 上传一个分片。part_number 从 1 开始，除最后一片外建议每片至少 5 MiB。",
+    description: "以 multipart/form-data 上传一个分片。part_number 从 1 开始且最多为 10,000；默认分片为 5 MiB，客户端应取配置值与 ceil(文件大小 / 10000) 的较大值并向上对齐到 MiB。除最后一片外至少 5 MiB，单片不得超过服务端默认上限 64 MiB；因此默认策略最多支持 625 GiB。同一 part_number 可在网络或校验失败后重传，最后一次成功上传的 ETag 和分片大小生效。",
     authentication: "api-key",
     params: [
       apiKeyHeaders("multipart/form-data；由客户端自动附加 boundary，不要手动设置该请求头"),
@@ -338,23 +397,31 @@ print(upload)`,
         rows: [
           { name: "upload_id", type: "string", required: true, description: "init 返回的会话 ID" },
           { name: "object_key", type: "string", required: true, description: "init 返回的对象键" },
-          { name: "part_number", type: "integer", required: true, description: "1-10000，不能重复" },
-          { name: "file", type: "binary", required: true, description: "本分片的二进制内容" },
+          { name: "part_number", type: "integer", required: true, description: "1-10000；同一编号可顺序重传" },
+          { name: "file", type: "binary", required: true, description: "本分片的二进制内容；服务端默认最大 64 MiB" },
         ],
       },
       {
         title: "Returns",
         rows: [
           { name: "part_number", type: "integer", required: true, description: "已上传的分片序号" },
-          { name: "etag", type: "string", required: true, description: "完成上传时必须原样回传" },
+          { name: "etag", type: "string", required: true, description: "完成上传时必须回传该编号最后一次成功上传的 ETag" },
         ],
       },
     ],
-    notes: ["可以并发上传不同 part_number；应保存每片 ETag，并在失败时对单片执行有限次数重试。"],
+    notes: [
+      "可以并发上传不同 part_number；不要并发重传同一编号，应在前一次失败后顺序执行有限次数重试。",
+      "每次重传成功后覆盖业务侧保存的 ETag；parts 查询中该 part_number 的 ETag 和 size 也以最后一次成功上传为准。",
+      "业务码 413050 表示当前分片超过 64 MiB；不要重试相同负载，应使用合规大小重新切分。超过 625 GiB 的文件在默认策略下应于 init 前拒绝。",
+    ],
     examples: {
       typescript: `import { readFile } from "node:fs/promises"
 
 const bytes = new Uint8Array(await readFile("./part-1.bin"))
+const MAX_UPLOAD_PART_BYTES = 64 * 1024 * 1024
+if (bytes.byteLength > MAX_UPLOAD_PART_BYTES) {
+  throw new Error("分片超过服务端默认上限 64 MiB，请重新切分")
+}
 const form = new FormData()
 form.set("upload_id", upload.upload_id)
 form.set("object_key", upload.object_key)
@@ -367,7 +434,14 @@ const response = await storagentFetch("/api/files/multipart/part", {
 })
 const part = (await response.json()) as { part_number: number; etag: string }
 console.log(part)`,
-      python: `with open("part-1.bin", "rb") as part_file:
+      python: `from pathlib import Path
+
+part_path = Path("part-1.bin")
+MAX_UPLOAD_PART_BYTES = 64 * 1024 * 1024
+if part_path.stat().st_size > MAX_UPLOAD_PART_BYTES:
+    raise ValueError("分片超过服务端默认上限 64 MiB，请重新切分")
+
+with part_path.open("rb") as part_file:
     response = storagent_request(
         "POST",
         "/api/files/multipart/part",
@@ -391,7 +465,7 @@ print(part)`,
     method: "GET",
     path: "/api/files/multipart/parts",
     summary: "查询已上传分片",
-    description: "恢复中断上传前查询服务端已接收的分片，避免重复传输。每次最多返回 1000 条，可用 part_number_marker 继续翻页。",
+    description: "恢复中断上传前查询服务端已接收的分片，避免不必要的重传。同一 part_number 如曾重传，返回最后一次成功上传的 ETag 和 size。每次最多返回 1000 条，可用 part_number_marker 继续翻页。",
     authentication: "api-key",
     params: [
       apiKeyHeaders(),
@@ -444,7 +518,7 @@ print(response.json()["parts"])`,
     method: "POST",
     path: "/api/files/multipart/complete",
     summary: "完成分片上传",
-    description: "提交全部分片编号和 ETag，服务端按 part_number 排序并合并对象。只有此接口成功后，对象才算完成上传。",
+    description: "提交全部分片编号和各编号最后一次成功上传的 ETag，服务端按 part_number 排序并合并对象。只有此接口成功后，对象才算完成上传，同时释放 init 为该会话创建的跨区域预留容量。",
     authentication: "api-key",
     params: [
       apiKeyHeaders("application/json"),
@@ -457,7 +531,7 @@ print(response.json()["parts"])`,
         ],
       },
     ],
-    notes: ["完成前应确认所有分片均已成功；ETag 可带或不带首尾双引号。"],
+    notes: ["完成前应确认所有分片均已成功；同一编号发生过重传时必须使用最新 ETag。ETag 可带或不带首尾双引号。"],
     examples: {
       typescript: `const uploadedParts = [{ part_number: part.part_number, etag: part.etag }]
 const response = await storagentFetch("/api/files/multipart/complete", {
@@ -494,7 +568,7 @@ print(response.json())`,
     method: "POST",
     path: "/api/files/multipart/abort",
     summary: "中止分片上传",
-    description: "用户取消或上传无法恢复时释放未完成的 multipart 会话，避免残留分片持续占用存储。",
+    description: "用户取消或上传无法恢复时释放未完成的 multipart 会话、残留分片和 init 为该会话创建的跨区域预留容量。",
     authentication: "api-key",
     params: [
       apiKeyHeaders("application/json"),
@@ -707,6 +781,8 @@ export const API_GUIDE_ERROR_CODES = [
   ["400029", "APIKey 无效", "检查服务端环境变量和密钥是否已吊销"],
   ["400030", "APIKey 已过期", "重新签发并更新密钥"],
   ["400031", "应用未启用", "等待管理员完成应用授权"],
+  ["413049", "APP 存储超出限额", "停止重试并联系应用管理员调整配额或清理空间"],
+  ["413050", "上传分片超过服务端限制", "不要原样重试；按不超过 64 MiB 重新切分"],
   ["404032", "对象不在当前节点", "读取 data.available_at，改用可用节点"],
   ["404033", "所有节点均不存在对象", "停止重试并核对 object_key"],
   ["429041", "定位请求过于频繁", "指数退避并缓存定位结果"],
@@ -744,14 +820,21 @@ export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
     "- Base URL 与 APIKey 通过环境变量注入，不写死真实凭据。",
     "- `object_key` 应视作不透明字符串，必须使用标准 URL 编码或 JSON 序列化。",
     "- 上传失败或用户取消时调用 multipart abort；下载大文件时使用流式处理。",
+    "- 新 APP 默认存储配额为 100 GiB；multipart init 必须提交完整文件的 `size_bytes`，并会跨区域预留该声明容量。",
+    "- 空文件必须在客户端拒绝，不得发送 `size_bytes: 0`；默认分片为 5 MiB，非末片至少 5 MiB，单片不超过 64 MiB，总分片数不超过 10,000。",
+    "- 分片大小应动态增大并按 MiB 对齐；默认策略最多支持 625 GiB，超出时必须在 init 前拒绝，或由管理员调整服务端策略。",
+    "- 同一 `part_number` 可顺序重传；以最后一次成功上传的 ETag 和分片大小为准，不要并发重传同一编号。",
+    "- multipart complete 或 abort 会释放会话的跨区域预留容量。",
+    "- 收到业务码 `413049` 后停止上传且不要自动重试，提示用户联系应用管理员处理配额。",
+    "- 收到业务码 `413050` 后不要原样重试；使用不超过 64 MiB 的分片重新切分。",
     "",
     "## 接入流程",
     "",
     "1. 从 `/api/public/endpoints` 获取候选 Storagent 地址。",
     "2. 调用 `/api/public/endpoints/test` 并选择可达、低时延节点。",
-    "3. 初始化 multipart，保存 `upload_id` 和 `object_key`。",
-    "4. 上传分片并保存每片 `part_number` 与 `etag`；中断后先查询已上传分片。",
-    "5. 提交全部分片完成上传；失败且不可恢复时中止会话。",
+    "3. 拒绝空文件；使用非空文件的实际字节数作为 `size_bytes` 初始化 multipart，跨区域预留声明容量后保存 `upload_id` 和 `object_key`。",
+    "4. 以 5 MiB 为默认值，取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB；确保单片不超过 64 MiB、总片数不超过 10,000，上传时保存每片 `part_number` 与最新 `etag`。",
+    "5. 提交全部分片完成上传；失败且不可恢复时中止会话。complete 或 abort 都会释放会话预留容量。",
     "6. 使用 POST stat 查询元信息；当前节点没有对象时按 `404032` 的 `available_at` 回退。",
     "7. 使用 download 流式读取；需要主动选点时再调用 locate。",
     "",
@@ -817,9 +900,14 @@ export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
     "",
     "- [ ] APIKey 只存在服务端环境变量和 `x-api-key` 请求头中。",
     "- [ ] Base URL 会从候选节点中探测选择，并设置连接与读取超时。",
-    "- [ ] 分片大小符合要求，分片编号从 1 开始，ETag 完整保存。",
+    "- [ ] 空文件在 init 前被拒绝；分片按 MiB 对齐，非末片至少 5 MiB、单片不超过 64 MiB、总片数不超过 10,000。",
+    "- [ ] 默认策略下会在 init 前拒绝超过 625 GiB 的文件，并提示联系管理员调整策略。",
+    "- [ ] 分片编号从 1 开始；同一编号重传后覆盖保存最新成功 ETag。",
+    "- [ ] multipart init 的 `size_bytes` 等于完整源文件大小，而不是单个分片大小；已了解 init 会跨区域预留该容量。",
+    "- [ ] 能识别 `413049`，停止重试并提示联系应用管理员调整配额或清理空间。",
+    "- [ ] 能识别 `413050`，不原样重试超限分片，并按不超过 64 MiB 重新切分。",
     "- [ ] 刷新或进程重启后可以用 parts 接口恢复上传。",
-    "- [ ] 取消和不可恢复失败会调用 abort。",
+    "- [ ] 取消和不可恢复失败会调用 abort；complete 或 abort 后会话预留容量被释放。",
     "- [ ] stat 使用 POST JSON，不把 APIKey 或 object_key 放入 stat URL。",
     "- [ ] 能处理 `404032` 并从 `available_at` 选择可用节点。",
     "- [ ] 大文件下载采用流式转发或落盘，不整文件驻留内存。",
