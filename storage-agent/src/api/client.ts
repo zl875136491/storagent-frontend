@@ -235,6 +235,20 @@ export type StorageOperationHealth =
   | "critical"
   | "unreachable"
 
+export type ReplicationStatusReasonSeverity =
+  | "info"
+  | "syncing"
+  | "degraded"
+  | "critical"
+  | "unreachable"
+
+export interface ReplicationStatusReason {
+  code: string
+  message: string
+  value?: unknown
+  severity: ReplicationStatusReasonSeverity
+}
+
 export type ReplicationResyncStatus =
   | "idle"
   | "running"
@@ -249,6 +263,7 @@ export interface ReplicationTargetMetric {
   arn: string
   endpoint: string
   status: StorageOperationHealth
+  status_reasons?: ReplicationStatusReason[]
   online: boolean
   latency_current_ms: number
   latency_average_ms: number
@@ -277,6 +292,7 @@ export interface ReplicationTargetMetric {
 export interface ReplicationSourceMetric {
   server: string
   status: StorageOperationHealth
+  status_reasons?: ReplicationStatusReason[]
   reachable: boolean
   command_latency_ms: number
   error: string
@@ -298,6 +314,7 @@ export interface ReplicationBucketMetric {
   bucket: string
   shown_name: string
   status: StorageOperationHealth
+  status_reasons?: ReplicationStatusReason[]
   sources: ReplicationSourceMetric[]
 }
 
@@ -306,6 +323,7 @@ export interface ReplicationOperationsResponse {
   servers: string[]
   summary: {
     status: StorageOperationHealth
+    status_reasons?: ReplicationStatusReason[]
     bucket_count: number
     source_count: number
     reachable_source_count: number
