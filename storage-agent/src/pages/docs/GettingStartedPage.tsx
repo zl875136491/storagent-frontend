@@ -125,9 +125,58 @@ export default function GettingStartedPage() {
         第一次 API 调用
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        用 stat 验证 Key 与 Base URL 是否可用；这是一个控制面接口，请在 App 后端环境里执行，不要放进浏览器页面代码：
+        分两步冒烟：先用公共接口确认节点可达，再用控制面{" "}
+        <code className="font-mono text-[11px]">multipart/init</code> +{" "}
+        <code className="font-mono text-[11px]">abort</code> 验证 APIKey（不必事先已有对象）。
+        这些请求都在 App 后端执行，不要放进浏览器页面。
       </p>
-      <div className="mt-3">
+
+      <h3 className="mt-5 text-sm font-semibold text-foreground">1. 探测节点（无需鉴权）</h3>
+      <div className="mt-2">
+        <DocCodeTabs
+          tabs={[
+            {
+              id: "probe-curl",
+              label: "cURL",
+              language: "bash",
+              code: `export STORAGENT_BASE_URL="https://storagent.example.com"
+
+# 返回 512 字节探测载荷；可用时延挑选就近节点
+curl -sS -o /dev/null -w "HTTP %{http_code}  bytes=%{size_download}  time=%{time_total}\\n" \\
+  "$STORAGENT_BASE_URL/api/v1/public/endpoints/test"`,
+            },
+            {
+              id: "probe-js",
+              label: "Node.js",
+              language: "javascript",
+              code: `const baseURL = process.env.STORAGENT_BASE_URL
+const started = Date.now()
+const res = await fetch(\`\${baseURL}/api/v1/public/endpoints/test\`)
+const buf = await res.arrayBuffer()
+console.log({ status: res.status, bytes: buf.byteLength, ms: Date.now() - started })`,
+            },
+            {
+              id: "probe-py",
+              label: "Python",
+              language: "python",
+              code: `import os, time, requests
+
+base = os.environ["STORAGENT_BASE_URL"].rstrip("/")
+started = time.perf_counter()
+r = requests.get(f"{base}/api/v1/public/endpoints/test", timeout=8)
+print({"status": r.status_code, "bytes": len(r.content), "ms": round((time.perf_counter()-started)*1000, 1)})`,
+            },
+          ]}
+        />
+      </div>
+
+      <h3 className="mt-6 text-sm font-semibold text-foreground">2. 控制面 init + abort（需要 x-api-key）</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        <code className="font-mono">object_key</code> 由服务端生成并在响应里返回；
+        <code className="font-mono">size_bytes</code> 必须{" "}
+        <code className="font-mono">&gt; 0</code>（空文件会被直接拒绝）。测完立刻 abort，避免占用配额预留。
+      </p>
+      <div className="mt-2">
         <DocCodeTabs
           tabs={[
             {
@@ -137,10 +186,21 @@ export default function GettingStartedPage() {
               code: `export STORAGENT_BASE_URL="https://storagent.example.com"
 export STORAGENT_API_KEY="sk_..."
 
-curl -sS -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \\
+# init：声明即将上传的完整字节数（这里用 1024 做冒烟）
+INIT=$(curl -sS -X POST "$STORAGENT_BASE_URL/api/v1/files/multipart/init" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: $STORAGENT_API_KEY" \\
-  -d '{"object_key":"path/to/file.bin"}'`,
+  -d '{"size_bytes":1024,"content_type":"application/octet-stream"}')
+echo "$INIT"
+
+UPLOAD_ID=$(printf '%s' "$INIT" | python3 -c "import sys,json; print(json.load(sys.stdin)['upload_id'])")
+OBJECT_KEY=$(printf '%s' "$INIT" | python3 -c "import sys,json; print(json.load(sys.stdin)['object_key'])")
+
+# abort：释放会话预留，冒烟到此结束
+curl -sS -X POST "$STORAGENT_BASE_URL/api/v1/files/multipart/abort" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: $STORAGENT_API_KEY" \\
+  -d "{\\"upload_id\\":\\"$UPLOAD_ID\\",\\"object_key\\":\\"$OBJECT_KEY\\"}"`,
             },
             {
               id: "js",
@@ -148,54 +208,81 @@ curl -sS -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \\
               language: "javascript",
               code: `const baseURL = process.env.STORAGENT_BASE_URL
 const apiKey = process.env.STORAGENT_API_KEY
+const headers = { "Content-Type": "application/json", "x-api-key": apiKey }
 
-const res = await fetch(\`\${baseURL}/api/v1/files/object/stat\`, {
+const initRes = await fetch(\`\${baseURL}/api/v1/files/multipart/init\`, {
   method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-api-key": apiKey,
-  },
-  body: JSON.stringify({ object_key: "path/to/file.bin" }),
+  headers,
+  body: JSON.stringify({ size_bytes: 1024, content_type: "application/octet-stream" }),
 })
-console.log(await res.json())`,
+const init = await initRes.json()
+if (!initRes.ok) throw new Error(JSON.stringify(init))
+console.log("init", init)
+
+const abortRes = await fetch(\`\${baseURL}/api/v1/files/multipart/abort\`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ upload_id: init.upload_id, object_key: init.object_key }),
+})
+console.log("abort", await abortRes.json())`,
             },
             {
               id: "py",
-              label: "Python",
+              label: "Python（App 后端）",
               language: "python",
               code: `import os, requests
 
-r = requests.post(
-    f"{os.environ['STORAGENT_BASE_URL'].rstrip('/')}/api/v1/files/object/stat",
-    headers={"x-api-key": os.environ["STORAGENT_API_KEY"], "Content-Type": "application/json"},
-    json={"object_key": "path/to/file.bin"},
+base = os.environ["STORAGENT_BASE_URL"].rstrip("/")
+headers = {"x-api-key": os.environ["STORAGENT_API_KEY"], "Content-Type": "application/json"}
+
+init = requests.post(
+    f"{base}/api/v1/files/multipart/init",
+    headers=headers,
+    json={"size_bytes": 1024, "content_type": "application/octet-stream"},
     timeout=30,
 )
-r.raise_for_status()
-print(r.json())`,
+init.raise_for_status()
+upload = init.json()
+print("init", upload)
+
+abort = requests.post(
+    f"{base}/api/v1/files/multipart/abort",
+    headers=headers,
+    json={"upload_id": upload["upload_id"], "object_key": upload["object_key"]},
+    timeout=30,
+)
+abort.raise_for_status()
+print("abort", abort.json())`,
             },
           ]}
         />
       </div>
-      <div className="mt-3">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <DocCodeBlock
           language="json"
-          title="Response"
+          title="init Response 200"
+          code={`{
+  "upload_id": "upload-...",
+  "bucket": "your-app",
+  "object_key": "8f66367a-a29f-4507-8cb7-aff361174060"
+}`}
+        />
+        <DocCodeBlock
+          language="json"
+          title="abort Response 200"
           code={`{
   "bucket": "your-app",
-  "object_key": "path/to/file.bin",
-  "size": 1048576,
-  "etag": "...",
-  "content_type": "application/octet-stream",
-  "last_modified": "2026-07-31T08:00:00Z",
-  "region": "beijing",
-  "local": true
+  "object_key": "8f66367a-a29f-4507-8cb7-aff361174060",
+  "upload_id": "upload-...",
+  "aborted": true
 }`}
         />
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        看到 <code className="font-mono">local: false</code> 说明对象在其它区域，完整字段说明和跨区域回退流程见「功能接口引导」。
-      </p>
+      <DocNote>
+        真正上传分片 / 下载对象时，浏览器前端应直连数据面并携带 App 后端签发的能力令牌，
+        而不是把 <code className="font-mono text-[11px]">x-api-key</code> 放进页面。完整流程见「功能接口引导」；
+        仓库旁的 <code className="font-mono text-[11px]">system-test/</code> 目录提供了一套可在 NUC 上跑的联调夹具。
+      </DocNote>
 
       <h2 id="next" className="mt-10 scroll-m-24 text-xl font-semibold tracking-tight">
         下一步
