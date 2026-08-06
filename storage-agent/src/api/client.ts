@@ -82,7 +82,7 @@ export interface UserProfile {
   id: string
   username: string
   name: string
-  /** 与后端 `/api/auth/profile` 一致，用于前端权限展示 */
+  /** 与后端 `/api/v1/auth/profile` 一致，用于前端权限展示 */
   is_admin: boolean
   roles: Role[]
   permissions: string[]
@@ -626,7 +626,7 @@ export interface BucketReplicateRule {
 }
 
 /**
- * 与 GET `/api/storage/buckets/{name}/replicates` 一并返回的可选布局快照（version 便于演进）。
+ * 与 GET `/api/v1/storage/buckets/{name}/replicates` 一并返回的可选布局快照（version 便于演进）。
  * 保存后可还原节点坐标与每条边使用的连接侧。
  */
 export interface ReplicateGraphLayoutV1 {
@@ -711,14 +711,14 @@ async function authorizedFetch(
   }
 
   const timeoutMs = (
-    path.startsWith("/api/ai/")
-    || path.startsWith("/api/storage/operations/")
-    || (/^\/api\/storage\/[^/]+\/details/.test(path))
+    path.startsWith("/api/v1/ai/")
+    || path.startsWith("/api/v1/storage/operations/")
+    || (/^\/api\/v1\/storage\/[^/]+\/details/.test(path))
   ) ? 120_000 : 30_000
   const nodeLocalAuthRequest = [
-    "/api/auth/register/request",
-    "/api/auth/password-reset/request",
-    "/api/auth/login-link/request",
+    "/api/v1/auth/register/request",
+    "/api/v1/auth/password-reset/request",
+    "/api/v1/auth/login-link/request",
   ].includes(path)
   const controller = new AbortController()
   const externalSignal = init.signal
@@ -743,8 +743,8 @@ async function authorizedFetch(
       (resp.status === 401 || resp.status === 402) &&
       !retried &&
       authTokenRefresher &&
-      !path.startsWith("/api/auth/login") &&
-      !path.startsWith("/api/auth/refresh")
+      !path.startsWith("/api/v1/auth/login") &&
+      !path.startsWith("/api/v1/auth/refresh")
     ) {
       const next = await authTokenRefresher()
       if (next) {
@@ -869,14 +869,14 @@ export async function apiDelete<TResponse = { message: string }>(
 }
 
 export async function loginApi(payload: LoginRequest): Promise<TokenResponse> {
-  return apiPost<LoginRequest, TokenResponse>("/api/auth/login", payload)
+  return apiPost<LoginRequest, TokenResponse>("/api/v1/auth/login", payload)
 }
 
 export async function requestRegistrationApi(
   payload: PasswordPairRequest,
 ): Promise<AuthRequestResponse> {
   return apiPost<PasswordPairRequest, AuthRequestResponse>(
-    "/api/auth/register/request",
+    "/api/v1/auth/register/request",
     payload,
   )
 }
@@ -885,7 +885,7 @@ export async function requestPasswordResetApi(
   payload: PasswordPairRequest,
 ): Promise<AuthRequestResponse> {
   return apiPost<PasswordPairRequest, AuthRequestResponse>(
-    "/api/auth/password-reset/request",
+    "/api/v1/auth/password-reset/request",
     payload,
   )
 }
@@ -894,7 +894,7 @@ export async function requestLoginLinkApi(
   payload: AuthLinkRequest,
 ): Promise<AuthRequestResponse> {
   return apiPost<AuthLinkRequest, AuthRequestResponse>(
-    "/api/auth/login-link/request",
+    "/api/v1/auth/login-link/request",
     payload,
   )
 }
@@ -912,7 +912,7 @@ async function loginByCodeAtBackend(
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), 12_000)
   try {
-    const response = await fetch(`${base}/api/auth/login-by-code`, {
+    const response = await fetch(`${base}/api/v1/auth/login-by-code`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -963,13 +963,13 @@ export async function loginByCodeAcrossBackends(
 }
 
 export async function refreshTokenApi(refreshToken: string): Promise<TokenResponse> {
-  return apiPost<{ refresh_token: string }, TokenResponse>("/api/auth/refresh", {
+  return apiPost<{ refresh_token: string }, TokenResponse>("/api/v1/auth/refresh", {
     refresh_token: refreshToken,
   })
 }
 
 export async function fetchProfileApi(accessToken: string): Promise<UserProfile> {
-  return apiGet<UserProfile>("/api/auth/profile", accessToken)
+  return apiGet<UserProfile>("/api/v1/auth/profile", accessToken)
 }
 
 export interface AdminUserItem {
@@ -990,7 +990,7 @@ export interface AdminUserListResponse {
 }
 
 export async function fetchAdminUsersApi(accessToken?: string): Promise<AdminUserListResponse> {
-  return apiGet<AdminUserListResponse>("/api/auth/users", accessToken)
+  return apiGet<AdminUserListResponse>("/api/v1/auth/users", accessToken)
 }
 
 export async function updateUserRoleApi(
@@ -999,7 +999,7 @@ export async function updateUserRoleApi(
   accessToken?: string,
 ): Promise<AdminUserItem> {
   return apiPut<{ roles: string[] }, AdminUserItem>(
-    `/api/auth/users/${encodeURIComponent(userId)}/role`,
+    `/api/v1/auth/users/${encodeURIComponent(userId)}/role`,
     { roles },
     accessToken,
   )
@@ -1007,7 +1007,7 @@ export async function updateUserRoleApi(
 
 export async function logoutApi(accessToken?: string): Promise<void> {
   try {
-    await apiGet("/api/auth/logout", accessToken)
+    await apiGet("/api/v1/auth/logout", accessToken)
   } catch {
     // ignore logout failure
   }
@@ -1025,20 +1025,20 @@ export async function fetchHealthApi(baseUrl?: string): Promise<{
 }
 
 export async function fetchRegionsApi(accessToken?: string): Promise<RegionListResponse> {
-  return apiGet<RegionListResponse>("/api/public/region", accessToken)
+  return apiGet<RegionListResponse>("/api/v1/public/region", accessToken)
 }
 
 export async function createRegionApi(
   payload: RegionCreateRequest,
   accessToken?: string,
 ): Promise<Region> {
-  return apiPost<RegionCreateRequest, Region>("/api/public/region", payload, accessToken)
+  return apiPost<RegionCreateRequest, Region>("/api/v1/public/region", payload, accessToken)
 }
 
 export async function fetchMinioServersApi(
   accessToken?: string,
 ): Promise<MinioServerListResponse> {
-  return apiGet<MinioServerListResponse>("/api/storage/minio-server", accessToken)
+  return apiGet<MinioServerListResponse>("/api/v1/storage/minio-server", accessToken)
 }
 
 export async function fetchBucketsApi(
@@ -1047,7 +1047,7 @@ export async function fetchBucketsApi(
   refresh = false,
 ): Promise<BucketsResponse> {
   const suffix = refresh ? "?refresh=true" : ""
-  return apiGet<BucketsResponse>(`/api/storage/${minioServerId}/details${suffix}`, accessToken)
+  return apiGet<BucketsResponse>(`/api/v1/storage/${minioServerId}/details${suffix}`, accessToken)
 }
 
 export async function createAdminObjectDownloadLinkApi(
@@ -1056,7 +1056,7 @@ export async function createAdminObjectDownloadLinkApi(
   accessToken?: string,
 ): Promise<AdminObjectDownloadLinkResponse> {
   return apiPost<AdminObjectDownloadLinkRequest, AdminObjectDownloadLinkResponse>(
-    `/api/storage/${encodeURIComponent(minioServerId)}/objects/presigned-download`,
+    `/api/v1/storage/${encodeURIComponent(minioServerId)}/objects/presigned-download`,
     payload,
     accessToken,
   )
@@ -1065,7 +1065,7 @@ export async function createAdminObjectDownloadLinkApi(
 export async function fetchStorageBucketsApi(
   accessToken?: string,
 ): Promise<StorageBucketsResponse> {
-  return apiGet<StorageBucketsResponse>("/api/storage/buckets", accessToken)
+  return apiGet<StorageBucketsResponse>("/api/v1/storage/buckets", accessToken)
 }
 
 export async function fetchReplicationOperationsApi(
@@ -1074,7 +1074,7 @@ export async function fetchReplicationOperationsApi(
 ): Promise<ReplicationOperationsResponse> {
   const query = bucket ? `?bucket=${encodeURIComponent(bucket)}` : ""
   return apiGet<ReplicationOperationsResponse>(
-    `/api/storage/operations/replication${query}`,
+    `/api/v1/storage/operations/replication${query}`,
     accessToken,
   )
 }
@@ -1084,7 +1084,7 @@ export async function reconcileReplicationApi(
   accessToken?: string,
 ): Promise<{ message: string }> {
   return apiPost<Record<string, never>, { message: string }>(
-    `/api/storage/operations/replication/${encodeURIComponent(bucket)}/reconcile`,
+    `/api/v1/storage/operations/replication/${encodeURIComponent(bucket)}/reconcile`,
     {},
     accessToken,
   )
@@ -1096,7 +1096,7 @@ export async function startReplicationResyncApi(
   accessToken?: string,
 ): Promise<ReplicationOperationResponse> {
   return apiPost<typeof payload, ReplicationOperationResponse>(
-    `/api/storage/operations/replication/${encodeURIComponent(bucket)}/resync`,
+    `/api/v1/storage/operations/replication/${encodeURIComponent(bucket)}/resync`,
     payload,
     accessToken,
   )
@@ -1105,7 +1105,7 @@ export async function startReplicationResyncApi(
 export async function fetchClusterHealthOperationsApi(
   accessToken?: string,
 ): Promise<ClusterHealthResponse> {
-  return apiGet<ClusterHealthResponse>("/api/storage/operations/clusters", accessToken)
+  return apiGet<ClusterHealthResponse>("/api/v1/storage/operations/clusters", accessToken)
 }
 
 export async function fetchClusterHealStatusApi(
@@ -1113,7 +1113,7 @@ export async function fetchClusterHealStatusApi(
   accessToken?: string,
 ): Promise<ClusterHealStatusResponse> {
   return apiGet<ClusterHealStatusResponse>(
-    `/api/storage/operations/clusters/${encodeURIComponent(server)}/heal`,
+    `/api/v1/storage/operations/clusters/${encodeURIComponent(server)}/heal`,
     accessToken,
   )
 }
@@ -1123,7 +1123,7 @@ export async function startClusterHealApi(
   accessToken?: string,
 ): Promise<StorageOperationItem> {
   return apiPost<Record<string, never>, StorageOperationItem>(
-    `/api/storage/operations/clusters/${encodeURIComponent(server)}/heal`,
+    `/api/v1/storage/operations/clusters/${encodeURIComponent(server)}/heal`,
     {},
     accessToken,
   )
@@ -1133,7 +1133,7 @@ export async function fetchStorageOperationsApi(
   accessToken?: string,
 ): Promise<{ data: StorageOperationItem[] }> {
   return apiGet<{ data: StorageOperationItem[] }>(
-    "/api/storage/operations/jobs?limit=20",
+    "/api/v1/storage/operations/jobs?limit=20",
     accessToken,
   )
 }
@@ -1141,13 +1141,13 @@ export async function fetchStorageOperationsApi(
 export async function fetchAIRuntimeConfigApi(
   accessToken?: string,
 ): Promise<AIRuntimeConfig> {
-  return apiGet<AIRuntimeConfig>("/api/ai/config", accessToken)
+  return apiGet<AIRuntimeConfig>("/api/v1/ai/config", accessToken)
 }
 
 export async function fetchAIProviderAdminConfigApi(
   accessToken?: string,
 ): Promise<AIProviderAdminConfig> {
-  return apiGet<AIProviderAdminConfig>("/api/ai/admin/config", accessToken)
+  return apiGet<AIProviderAdminConfig>("/api/v1/ai/admin/config", accessToken)
 }
 
 export async function updateAIProviderAdminConfigApi(
@@ -1155,7 +1155,7 @@ export async function updateAIProviderAdminConfigApi(
   accessToken?: string,
 ): Promise<AIProviderAdminConfig> {
   return apiPut<AIProviderUpdateRequest, AIProviderAdminConfig>(
-    "/api/ai/admin/config",
+    "/api/v1/ai/admin/config",
     payload,
     accessToken,
   )
@@ -1165,7 +1165,7 @@ export async function testAIProviderAdminConfigApi(
   accessToken?: string,
 ): Promise<AIProviderTestResponse> {
   return apiPost<Record<string, never>, AIProviderTestResponse>(
-    "/api/ai/admin/test",
+    "/api/v1/ai/admin/test",
     {},
     accessToken,
   )
@@ -1177,7 +1177,7 @@ export async function fetchAIChatCompletionProxy(
   init?: RequestInit,
 ): Promise<Response> {
   return authorizedFetch(
-    "/api/ai/openai/v1/chat/completions",
+    "/api/v1/ai/openai/v1/chat/completions",
     init ?? { method: "POST" },
   )
 }
@@ -1187,7 +1187,7 @@ export async function fetchBucketReplicatesApi(
   accessToken?: string,
 ): Promise<BucketReplicatesResponse> {
   const q = encodeURIComponent(bucketName)
-  return apiGet<BucketReplicatesResponse>(`/api/storage/buckets/${q}/replicates`, accessToken)
+  return apiGet<BucketReplicatesResponse>(`/api/v1/storage/buckets/${q}/replicates`, accessToken)
 }
 
 export async function postBucketGraphNodePosition(
@@ -1195,7 +1195,7 @@ export async function postBucketGraphNodePosition(
   accessToken?: string,
 ): Promise<BucketGraphNodePositionPayload> {
   return apiPost<BucketGraphNodePositionPayload, BucketGraphNodePositionPayload>(
-    "/api/graph/bucket-node-position",
+    "/api/v1/graph/bucket-node-position",
     payload,
     accessToken,
   )
@@ -1206,7 +1206,7 @@ export async function postBucketGraphEdgePosition(
   accessToken?: string,
 ): Promise<BucketGraphEdgePositionPayload> {
   return apiPost<BucketGraphEdgePositionPayload, BucketGraphEdgePositionPayload>(
-    "/api/graph/bucket-edge-position",
+    "/api/v1/graph/bucket-edge-position",
     payload,
     accessToken,
   )
@@ -1226,7 +1226,7 @@ export async function fetchBucketGraphNodePositions(
 ): Promise<BucketNodePositionListResponse> {
   const q = encodeURIComponent(bucket)
   return apiGet<BucketNodePositionListResponse>(
-    `/api/graph/bucket-node-position?bucket=${q}`,
+    `/api/v1/graph/bucket-node-position?bucket=${q}`,
     accessToken,
   )
 }
@@ -1237,7 +1237,7 @@ export async function fetchBucketGraphEdgePositions(
 ): Promise<BucketEdgePositionListResponse> {
   const q = encodeURIComponent(bucket)
   return apiGet<BucketEdgePositionListResponse>(
-    `/api/graph/bucket-edge-position?bucket=${q}`,
+    `/api/v1/graph/bucket-edge-position?bucket=${q}`,
     accessToken,
   )
 }
@@ -1258,7 +1258,7 @@ export async function createBucketReplicateApi(
 ): Promise<BucketReplicateRule> {
   const q = encodeURIComponent(bucketName)
   return apiPost<BucketReplicateCreatePayload, BucketReplicateRule>(
-    `/api/storage/buckets/${q}/replicates`,
+    `/api/v1/storage/buckets/${q}/replicates`,
     payload,
     accessToken,
   )
@@ -1284,7 +1284,7 @@ export async function deleteBucketReplicateApi(
     search.set("rule_id", params.rule_id)
   }
   return apiDelete<{ message: string; from: string; to: string; rule_id: string }>(
-    `/api/storage/buckets/${q}/replicates?${search.toString()}`,
+    `/api/v1/storage/buckets/${q}/replicates?${search.toString()}`,
     accessToken,
   )
 }
@@ -1294,7 +1294,7 @@ export async function createMinioServerApi(
   accessToken?: string,
 ): Promise<MinioServer> {
   return apiPost<MinioServerCreateRequest, MinioServer>(
-    "/api/storage/minio-server",
+    "/api/v1/storage/minio-server",
     payload,
     accessToken,
   )
@@ -1306,7 +1306,7 @@ export async function updateMinioServerApi(
   accessToken?: string,
 ): Promise<MinioServer> {
   return apiPut<MinioServerReplicateWeightPayload, MinioServer>(
-    `/api/storage/minio-server/${minioServerId}`,
+    `/api/v1/storage/minio-server/${minioServerId}`,
     payload,
     accessToken,
   )
@@ -1315,7 +1315,7 @@ export async function updateMinioServerApi(
 export async function fetchApplicationsApi(
   accessToken?: string,
 ): Promise<ApplicationListResponse> {
-  return apiGet<ApplicationListResponse>("/api/public/application", accessToken)
+  return apiGet<ApplicationListResponse>("/api/v1/public/application", accessToken)
 }
 
 export async function createApplicationApi(
@@ -1323,7 +1323,7 @@ export async function createApplicationApi(
   accessToken?: string,
 ): Promise<Application> {
   return apiPost<ApplicationCreateRequest, Application>(
-    "/api/public/application",
+    "/api/v1/public/application",
     payload,
     accessToken,
   )
@@ -1335,7 +1335,7 @@ export async function updateApplicationQuotaApi(
   accessToken?: string,
 ): Promise<Application> {
   return apiPut<ApplicationQuotaUpdateRequest, Application>(
-    `/api/public/application/${encodeURIComponent(applicationId)}/quota`,
+    `/api/v1/public/application/${encodeURIComponent(applicationId)}/quota`,
     payload,
     accessToken,
   )
@@ -1429,7 +1429,7 @@ export async function approveApplicationStream(
   let response: Response
   try {
     response = await fetch(
-      `${requireApiBaseUrl()}/api/public/application/${applicationId}/approval`,
+      `${requireApiBaseUrl()}/api/v1/public/application/${applicationId}/approval`,
       {
         method: "POST",
         headers,
@@ -1521,37 +1521,37 @@ export interface APIKeyCreateRequest {
 export async function fetchEnabledApplicationsApi(
   accessToken?: string,
 ): Promise<SimpleApplicationListResponse> {
-  return apiGet<SimpleApplicationListResponse>("/api/public/application/enabled", accessToken)
+  return apiGet<SimpleApplicationListResponse>("/api/v1/public/application/enabled", accessToken)
 }
 
 export async function fetchApiKeysApi(accessToken?: string): Promise<APIKeyListResponse> {
-  return apiGet<APIKeyListResponse>("/api/public/api-key", accessToken)
+  return apiGet<APIKeyListResponse>("/api/v1/public/api-key", accessToken)
 }
 
 export async function createApiKeyApi(
   payload: APIKeyCreateRequest,
   accessToken?: string,
 ): Promise<APIKey> {
-  return apiPost<APIKeyCreateRequest, APIKey>("/api/public/api-key", payload, accessToken)
+  return apiPost<APIKeyCreateRequest, APIKey>("/api/v1/public/api-key", payload, accessToken)
 }
 
 export async function revokeApiKeyApi(
   apiKeyId: string,
   accessToken?: string,
 ): Promise<{ message: string }> {
-  return apiDelete<{ message: string }>(`/api/public/api-key/${apiKeyId}`, accessToken)
+  return apiDelete<{ message: string }>(`/api/v1/public/api-key/${apiKeyId}`, accessToken)
 }
 
 export async function fetchPublicEndpointsApi(
   accessToken?: string,
 ): Promise<PublicEndpointsResponse> {
-  return apiGet<PublicEndpointsResponse>("/api/public/endpoints", accessToken)
+  return apiGet<PublicEndpointsResponse>("/api/v1/public/endpoints", accessToken)
 }
 
 export async function fetchUsageOptionsApi(
   accessToken?: string,
 ): Promise<UsageOptionsResponse> {
-  return apiGet<UsageOptionsResponse>("/api/usage/options", accessToken)
+  return apiGet<UsageOptionsResponse>("/api/v1/usage/options", accessToken)
 }
 
 function buildUsageQuery(params: UsageQueryParams): string {
@@ -1579,7 +1579,7 @@ async function fetchUsageAtEndpoint(
     const token = authTokenGetter?.() ?? accessToken
     if (token) headers.set("Authorization", `Bearer ${token}`)
     const response = await fetch(
-      `${endpoint.replace(/\/$/, "")}/api/usage?${buildUsageQuery(params)}`,
+      `${endpoint.replace(/\/$/, "")}/api/v1/usage?${buildUsageQuery(params)}`,
       { method: "GET", headers, signal: controller.signal },
     )
     const text = await response.text().catch(() => "")
@@ -1706,7 +1706,7 @@ export async function locateObjectApi(
     length: String(length),
   })
   const resp = await fetch(
-    `${baseURL.replace(/\/$/, "")}/api/files/object/locate?${qs.toString()}`,
+    `${baseURL.replace(/\/$/, "")}/api/v1/files/object/locate?${qs.toString()}`,
     { method: "GET", headers: { "x-api-key": apiKey } },
   )
   return handleResponse<ObjectLocateResponse>(resp)

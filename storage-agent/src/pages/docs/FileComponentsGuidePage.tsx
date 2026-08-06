@@ -19,15 +19,17 @@ import {
   DocTitle,
   useRegisterToc,
 } from "@/components/docs/primitives"
+import { DocComingSoon } from "@/components/docs/coming-soon"
+import { useDocVersion } from "@/components/docs/version-switcher"
 import { useGoDoc } from "@/components/docs/nav-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import {
-  COMPONENT_GUIDE_CODE,
   COMPONENT_GUIDE_LANGUAGES,
   generateComponentGuideMarkdown,
+  getComponentGuideContent,
   type ComponentGuideLanguage,
 } from "./file-components-content"
 import { getApiGuideLanguage, isApiGuideLanguage } from "./api-guide-content"
@@ -101,24 +103,23 @@ function ComponentsGuideContent() {
   const { apiKey } = useApiKey()
   const { base, setBase } = useGuideDemoBackendSelection()
   const [lastUploadedObjectKey, setLastUploadedObjectKey] = useState<string | null>(null)
+  const [version] = useDocVersion()
+  const versionContent = useMemo(() => getComponentGuideContent(version), [version])
 
   const rawLanguage = searchParams.get("lang")
   const language: ComponentGuideLanguage = isApiGuideLanguage(rawLanguage) ? rawLanguage : "typescript"
   const languageMeta = getApiGuideLanguage(language)
-  const code = COMPONENT_GUIDE_CODE[language]
-  const markdownDownloadHref = useMemo(
-    () => `data:text/markdown;charset=utf-8,${encodeURIComponent(generateComponentGuideMarkdown(language))}`,
-    [language],
-  )
-  const toc = useMemo(
-    () => [
+  const toc = useMemo(() => {
+    if (versionContent.status !== "released") {
+      return [{ id: "coming-soon", title: "版本预告", level: 2 as const }]
+    }
+    return [
       { id: "demo-config", title: "在线演示配置", level: 2 as const },
       { id: "upload-demo", title: "在线上传", level: 2 as const },
       { id: "download-demo", title: "在线下载", level: 2 as const },
       { id: "integration-code", title: "接入代码", level: 2 as const },
-    ],
-    [],
-  )
+    ]
+  }, [versionContent])
   useRegisterToc(toc)
 
   const selectLanguage = (nextLanguage: ComponentGuideLanguage) => {
@@ -132,18 +133,37 @@ function ComponentsGuideContent() {
     )
   }
 
+  if (versionContent.status !== "released") {
+    return (
+      <DocComingSoon
+        title="功能组件引导"
+        version={versionContent.version}
+        summary={versionContent.summary}
+        highlights={versionContent.highlights}
+      />
+    )
+  }
+
+  const code = versionContent.code[language]
+  const markdownDownloadHref = `data:text/markdown;charset=utf-8,${encodeURIComponent(generateComponentGuideMarkdown(language, version))}`
+
   return (
     <div className="pb-10">
       <div className="flex flex-col gap-5 border-b border-border/70 pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <DocTitle>功能组件引导</DocTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <DocTitle>功能组件引导</DocTitle>
+            <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
+              {version}
+            </span>
+          </div>
           <DocLead>
             用一套 APIKey 和服务端点在线验证上传、元信息查询、跨区域定位与可取消下载；上传会按文件实际大小预检 APP 配额，并在 5-64 MiB 范围内动态调整分片以满足 10,000 片上限，下方提供 TypeScript 与 Python 两种客户端实现。
           </DocLead>
         </div>
         <a
           href={markdownDownloadHref}
-          download={`storagent-file-components-guide-${language}.md`}
+          download={`storagent-file-components-guide-${version}-${language}.md`}
           className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`下载 ${languageMeta.label} 组件接入文档`}
         >
@@ -158,7 +178,7 @@ function ComponentsGuideContent() {
           <div>
             <div className="text-xs font-medium text-foreground">示例语言</div>
             <div className="mt-0.5 text-[11px] text-muted-foreground">
-              切换后，上传、下载代码和 Markdown 文档保持一致。
+              切换后，上传、下载代码和 Markdown 文档保持一致；文档版本切换见右上角，两者互不影响、都不发请求。
             </div>
           </div>
           <div className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1 sm:w-auto" role="group" aria-label="组件示例语言">

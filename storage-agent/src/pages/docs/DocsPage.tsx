@@ -4,6 +4,7 @@ import { BookOpen, ChevronRight, Layers, Plug, Rocket } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DocsNavProvider, useGoDoc } from "@/components/docs/nav-context"
 import { DocsOnThisPage, DocsTocProvider } from "@/components/docs/primitives"
+import { DocVersionSwitcher } from "@/components/docs/version-switcher"
 import GettingStartedPage from "@/pages/docs/GettingStartedPage"
 import UsageOverviewPage from "@/pages/docs/UsageOverviewPage"
 import ApiGuidePage from "@/pages/docs/ApiGuidePage"
@@ -30,6 +31,7 @@ function DocsShell() {
   const [searchParams] = useSearchParams()
   const goDoc = useGoDoc()
   const active = useMemo(() => resolveDocId(searchParams.get("doc")), [searchParams])
+  const showVersionSwitcher = active === "api-guide" || active === "components"
   const shellScrollRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLDivElement>(null)
 
@@ -88,14 +90,17 @@ function DocsShell() {
 
       <section className="min-w-0 flex-1 lg:flex lg:min-h-0 lg:flex-col">
         <div className="shrink-0 border-b border-border/60 bg-background px-4 py-2.5 text-xs text-muted-foreground sm:px-8 lg:px-10">
-          <div className="mx-auto flex w-full max-w-5xl items-center gap-1.5">
-            <Link to="/docs" className="hover:text-foreground">
-              文档
-            </Link>
-            <ChevronRight className="h-3 w-3 opacity-50" />
-            <span className="font-medium text-foreground">
-              {NAV.find((n) => n.id === active)?.title}
-            </span>
+          <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Link to="/docs" className="hover:text-foreground">
+                文档
+              </Link>
+              <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
+              <span className="truncate font-medium text-foreground">
+                {NAV.find((n) => n.id === active)?.title}
+              </span>
+            </div>
+            {showVersionSwitcher ? <DocVersionSwitcher className="shrink-0" /> : null}
           </div>
         </div>
 

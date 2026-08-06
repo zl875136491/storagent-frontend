@@ -1,3 +1,18 @@
+// 「功能接口引导」内容源。
+//
+// v1 变更说明（重要）：历史版本允许业务方自由选择「前端直连 / 后端转发」，
+// 并且按 TypeScript / Python 两份完全独立的 Markdown 维护。这带来了两个问题：
+// 1）一旦前端直接持有 `x-api-key` 并发起上传/下载请求，该 Key 就会出现在浏览器网络
+//    面板中，可被复制后冒充 App 任意上传或下载文件；
+// 2）两份语言各自独立的文档容易在演进时产生不一致。
+// v1 起本页固定为一套逻辑（控制面 / 数据面分离 + 能力令牌），不再由业务方自由决定
+// 前后端各自的职责；示例代码合并为同一份文档，按“角色”（App 后端 / 浏览器前端）
+// 区分，而不是按开发语言区分（App 后端仍提供 TypeScript / Python 两种参考实现）。
+//
+// ⚠️ 历史未带版本号的 `/api/*` 接口已完全下线，不再兼容；所有调用请改用 `/api/v1/*`。
+
+import { DEFAULT_DOC_VERSION, type DocVersion } from "./doc-versions"
+
 export type ApiGuideLanguage = "typescript" | "python"
 
 export type ApiGuideParam = {
@@ -12,18 +27,39 @@ export type ApiGuideParamSection = {
   rows: ApiGuideParam[]
 }
 
+/** 接口所属的面：公共接口 / 控制面（仅 App 后端可调用）/ 数据面（前端可直连）。 */
+export type ApiGuidePlane = "public" | "control" | "data"
+
+/** 代码示例的“角色”维度：App 后端可选 TS/Python 任一实现；浏览器前端只能是 TS/JS。 */
+export type ApiGuideCodeVariant = "server-ts" | "server-py" | "browser"
+
 export type ApiGuideEndpoint = {
   id: string
   method: "GET" | "POST"
   path: string
   summary: string
   description: string
-  authentication: "public" | "api-key"
+  plane: ApiGuidePlane
+  authentication: "public" | "api-key" | "api-key-or-token"
   params: ApiGuideParamSection[]
   notes?: string[]
-  examples: Record<ApiGuideLanguage, string>
+  examples: Partial<Record<ApiGuideCodeVariant, string>>
   response?: string
 }
+
+export const API_VERSION = "v1"
+export const API_VERSION_PREFIX = "/api/v1"
+
+export const API_GUIDE_CODE_VARIANTS: Record<
+  ApiGuideCodeVariant,
+  { label: string; fence: string }
+> = {
+  "server-ts": { label: "App 后端 · TypeScript", fence: "typescript" },
+  "server-py": { label: "App 后端 · Python", fence: "python" },
+  browser: { label: "浏览器前端 · TypeScript", fence: "typescript" },
+}
+
+// --- 以下类型 / 常量仍由「功能组件引导」（file-components-content.ts）复用，保持不变 ---
 
 export const API_GUIDE_LANGUAGES: Array<{
   id: ApiGuideLanguage
@@ -56,6 +92,8 @@ export function getApiGuideLanguage(language: ApiGuideLanguage) {
   return API_GUIDE_LANGUAGES.find((item) => item.id === language) ?? API_GUIDE_LANGUAGES[0]
 }
 
+// --- v1 起，本页示例统一区分“角色”而不是“语言” ---
+
 const apiKeyHeaders = (contentType?: string): ApiGuideParamSection => ({
   title: "Headers",
   rows: [
@@ -63,7 +101,7 @@ const apiKeyHeaders = (contentType?: string): ApiGuideParamSection => ({
       name: "x-api-key",
       type: "string",
       required: true,
-      description: "控制台签发的业务 APIKey。只放请求头，不得放入 URL、日志或浏览器前端包。",
+      description: "控制台签发的业务 APIKey。只允许出现在 App 后端到 Storagent 的请求中，绝不能出现在浏览器前端、日志或异常信息里。",
     },
     ...(contentType
       ? [
@@ -78,8 +116,35 @@ const apiKeyHeaders = (contentType?: string): ApiGuideParamSection => ({
   ],
 })
 
-export const API_GUIDE_SETUP: Record<ApiGuideLanguage, string> = {
-  typescript: `const BASE_URL = (process.env.STORAGENT_BASE_URL ?? "").replace(/\\/+$/, "")
+const dataPlaneAuthParams = (contentType?: string): ApiGuideParamSection => ({
+  title: "鉴权（二选一）",
+  rows: [
+    {
+      name: "x-api-key",
+      type: "string",
+      description: "仅供 App 后端到 Storagent 的服务端调用；浏览器前端不得使用此方式。",
+    },
+    {
+      name: "token",
+      type: "string",
+      description: "Query 参数。App 后端使用 x-api-key 本地签发的能力令牌，浏览器前端应始终使用这种方式。",
+    },
+    ...(contentType
+      ? [
+          {
+            name: "Content-Type",
+            type: "string",
+            required: true,
+            description: contentType,
+          },
+        ]
+      : []),
+  ],
+})
+
+export const API_GUIDE_SERVER_SETUP: Record<"typescript" | "python", string> = {
+  typescript: `// App 后端（Node.js）：控制面公共请求封装。x-api-key 只在这里出现。
+const BASE_URL = (process.env.STORAGENT_BASE_URL ?? "").replace(/\\/+$/, "")
 const API_KEY = process.env.STORAGENT_API_KEY
 
 type ApiErrorBody = {
@@ -137,7 +202,8 @@ async function storagentFetch(
   }
   return response
 }`,
-  python: `import os
+  python: `# App 后端（Python）：控制面公共请求封装。x-api-key 只在这里出现。
+import os
 from typing import Any
 
 import requests
@@ -203,9 +269,87 @@ def storagent_request(
     return response`,
 }
 
-export const API_GUIDE_ERROR_EXAMPLES: Record<ApiGuideLanguage, string> = {
+/**
+ * 能力令牌（Capability Token）参考实现：与 Storagent 后端
+ * `src/core/capability_token.py` 完全一致的 HMAC-SHA256 算法。
+ * App 后端本地签发，不需要额外请求 Storagent。
+ */
+export const API_GUIDE_CAPABILITY_TOKEN_CODE: Record<"typescript" | "python", string> = {
+  typescript: `// App 后端（Node.js）：本地签发能力令牌，无需请求 Storagent。
+import { createHash, createHmac } from "node:crypto"
+
+type CapabilityAction = "upload_part" | "download"
+
+function apiKeyRef(apiKey: string): string {
+  return createHash("sha256").update(apiKey, "utf8").digest("hex")
+}
+
+export function issueCapabilityToken(
+  apiKey: string,
+  options: {
+    action: CapabilityAction
+    objectKey: string
+    expiresInSeconds: number
+    /** 仅 upload_part 需要，绑定分片上传会话 */
+    uploadId?: string
+  },
+): string {
+  const payload: Record<string, unknown> = {
+    ref: apiKeyRef(apiKey),
+    act: options.action,
+    key: options.objectKey,
+    exp: Math.floor(Date.now() / 1000) + options.expiresInSeconds,
+  }
+  if (options.uploadId) payload.uid = options.uploadId
+
+  // 与后端 json.dumps(payload, separators=(",", ":"), sort_keys=True) 保持字节级一致
+  const payloadJson = JSON.stringify(payload, Object.keys(payload).sort())
+  const payloadBytes = Buffer.from(payloadJson, "utf8")
+  const signature = createHmac("sha256", apiKey).update(payloadBytes).digest()
+
+  return \`\${payloadBytes.toString("base64url")}.\${signature.toString("base64url")}\`
+}`,
+  python: `# App 后端（Python）：本地签发能力令牌，无需请求 Storagent。
+import base64
+import hashlib
+import hmac
+import json
+import time
+from typing import Optional
+
+
+def _b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+
+def api_key_ref(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+def issue_capability_token(
+    api_key: str,
+    *,
+    action: str,
+    object_key: str,
+    expires_in_seconds: int,
+    upload_id: Optional[str] = None,
+) -> str:
+    payload: dict = {
+        "ref": api_key_ref(api_key),
+        "act": action,
+        "key": object_key,
+        "exp": int(time.time()) + expires_in_seconds,
+    }
+    if upload_id:
+        payload["uid"] = upload_id
+    payload_bytes = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    signature = hmac.new(api_key.encode("utf-8"), payload_bytes, hashlib.sha256).digest()
+    return f"{_b64url_encode(payload_bytes)}.{_b64url_encode(signature)}"`,
+}
+
+export const API_GUIDE_ERROR_EXAMPLES: Record<"typescript" | "python", string> = {
   typescript: `try {
-  const response = await storagentFetch("/api/files/object/stat", {
+  const response = await storagentFetch("/api/v1/files/object/stat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ object_key: "path/to/file.bin" }),
@@ -226,7 +370,7 @@ export const API_GUIDE_ERROR_EXAMPLES: Record<ApiGuideLanguage, string> = {
   python: `try:
     response = storagent_request(
         "POST",
-        "/api/files/object/stat",
+        "/api/v1/files/object/stat",
         json={"object_key": "path/to/file.bin"},
     )
     print(response.json())
@@ -246,9 +390,10 @@ export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
   {
     id: "endpoints-list",
     method: "GET",
-    path: "/api/public/endpoints",
+    path: "/api/v1/public/endpoints",
     summary: "列出服务端点",
-    description: "返回所有区域的 Storagent 与 MinIO 地址。应用可探测各 Storagent endpoint，并选择低时延节点作为 Base URL。",
+    description: "返回所有区域的 Storagent 与 MinIO 地址。浏览器前端可直接调用（公共信息，不含任何凭据），用于探测各 Storagent endpoint 并选择低时延节点。",
+    plane: "public",
     authentication: "public",
     params: [
       {
@@ -264,9 +409,9 @@ export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
         ],
       },
     ],
-    notes: ["该接口无需 APIKey。业务接入应调用 Storagent endpoint，不要直接使用 MinIO 凭据。"],
+    notes: ["该接口无需任何凭据，浏览器前端可直接调用。不要直接使用 MinIO 凭据。"],
     examples: {
-      typescript: `type Endpoint = {
+      browser: `type Endpoint = {
   region_id: string
   server_id: string
   name: string
@@ -276,12 +421,9 @@ export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
   minio_endpoint: string
 }
 
-const response = await storagentFetch("/api/public/endpoints", {}, false)
+const response = await fetch("https://storagent.example.com/api/v1/public/endpoints")
 const { data } = (await response.json()) as { data: Endpoint[] }
 console.table(data.map(({ name, endpoint, master }) => ({ name, endpoint, master })))`,
-      python: `response = storagent_request("GET", "/api/public/endpoints", authenticated=False)
-for endpoint in response.json()["data"]:
-    print(endpoint["name"], endpoint["endpoint"], endpoint["master"])`,
     },
     response: `{
   "data": [
@@ -300,30 +442,27 @@ for endpoint in response.json()["data"]:
   {
     id: "endpoints-test",
     method: "GET",
-    path: "/api/public/endpoints/test",
+    path: "/api/v1/public/endpoints/test",
     summary: "探测端点延迟",
-    description: "返回 512 字节随机二进制，避免缓存干扰。对候选 endpoint 并发探测，优先选择可达且耗时最低的节点。",
+    description: "返回 512 字节随机二进制，避免缓存干扰。浏览器前端对候选 endpoint 并发探测，优先选择可达且耗时最低的节点，作为后续数据面直传/直连下载的目标地址。",
+    plane: "public",
     authentication: "public",
     params: [],
     notes: ["响应类型为 application/octet-stream，不是 JSON。生产实现应设置超时，并定期重新探测。"],
     examples: {
-      typescript: `const startedAt = performance.now()
-const response = await storagentFetch("/api/public/endpoints/test", {}, false)
+      browser: `const startedAt = performance.now()
+const response = await fetch("https://storagent.example.com/api/v1/public/endpoints/test")
 const payload = new Uint8Array(await response.arrayBuffer())
 console.log({ bytes: payload.byteLength, elapsedMs: performance.now() - startedAt })`,
-      python: `from time import perf_counter
-
-started_at = perf_counter()
-response = storagent_request("GET", "/api/public/endpoints/test", authenticated=False)
-print({"bytes": len(response.content), "elapsed_ms": (perf_counter() - started_at) * 1000})`,
     },
   },
   {
     id: "multipart-init",
     method: "POST",
-    path: "/api/files/multipart/init",
-    summary: "初始化分片上传",
-    description: "创建 multipart 会话并由服务端生成 object_key。请求必须声明完整文件字节数，服务端会在创建会话前跨区域检查 APP 存储配额，并按 size_bytes 预留声明容量；新 APP 默认配额为 100 GiB。",
+    path: "/api/v1/files/multipart/init",
+    summary: "初始化分片上传（控制面）",
+    description: "只能由 App 后端调用。创建 multipart 会话并由服务端生成 object_key。请求必须声明完整文件字节数，服务端会在创建会话前跨区域检查 APP 存储配额，并按 size_bytes 预留声明容量；新 APP 默认配额为 100 GiB。成功后 App 后端应为即将到来的分片上传签发能力令牌（见下一节）。",
+    plane: "control",
     authentication: "api-key",
     params: [
       apiKeyHeaders("application/json"),
@@ -350,28 +489,28 @@ print({"bytes": len(response.content), "elapsed_ms": (perf_counter() - started_a
       "业务码 413049 表示 APP 存储超出限额；不要继续重试或上传分片，应联系应用管理员调整配额或清理空间。",
     ],
     examples: {
-      typescript: `import { stat } from "node:fs/promises"
+      "server-ts": `import { stat } from "node:fs/promises"
 
 type MultipartInit = { upload_id: string; bucket: string; object_key: string }
 
 const source = await stat("./document.pdf")
 if (source.size <= 0) throw new Error("空文件暂不支持上传，请选择包含内容的文件")
 
-const response = await storagentFetch("/api/files/multipart/init", {
+const response = await storagentFetch("/api/v1/files/multipart/init", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ content_type: "application/pdf", size_bytes: source.size }),
 })
 const upload = (await response.json()) as MultipartInit
 console.log(upload)`,
-      python: `from pathlib import Path
+      "server-py": `from pathlib import Path
 
 source = Path("./document.pdf")
 if source.stat().st_size <= 0:
     raise ValueError("空文件暂不支持上传，请选择包含内容的文件")
 response = storagent_request(
     "POST",
-    "/api/files/multipart/init",
+    "/api/v1/files/multipart/init",
     json={"content_type": "application/pdf", "size_bytes": source.stat().st_size},
 )
 upload = response.json()
@@ -386,12 +525,13 @@ print(upload)`,
   {
     id: "multipart-part",
     method: "POST",
-    path: "/api/files/multipart/part",
-    summary: "上传单个分片",
-    description: "以 multipart/form-data 上传一个分片。part_number 从 1 开始且最多为 10,000；默认分片为 5 MiB，客户端应取配置值与 ceil(文件大小 / 10000) 的较大值并向上对齐到 MiB。除最后一片外至少 5 MiB，单片不得超过服务端默认上限 64 MiB；因此默认策略最多支持 625 GiB。同一 part_number 可在网络或校验失败后重传，最后一次成功上传的 ETag 和分片大小生效。",
-    authentication: "api-key",
+    path: "/api/v1/files/multipart/part",
+    summary: "上传单个分片（数据面）",
+    description: "以 multipart/form-data 上传一个分片。**这是浏览器前端应当直连的接口**：App 后端在 init 之后使用 x-api-key 本地签发一枚绑定当前 upload_id + object_key、action=upload_part、建议 2 小时量级有效期的能力令牌，交给前端；前端始终携带 `?token=...`，永远不持有 x-api-key。part_number 从 1 开始且最多为 10,000；默认分片为 5 MiB，客户端应取配置值与 ceil(文件大小 / 10000) 的较大值并向上对齐到 MiB；除最后一片外至少 5 MiB，单片不得超过服务端默认上限 64 MiB；因此默认策略最多支持 625 GiB。同一 part_number 可在网络或校验失败后重传，最后一次成功上传的 ETag 和分片大小生效。",
+    plane: "data",
+    authentication: "api-key-or-token",
     params: [
-      apiKeyHeaders("multipart/form-data；由客户端自动附加 boundary，不要手动设置该请求头"),
+      dataPlaneAuthParams("multipart/form-data；由客户端自动附加 boundary，不要手动设置该请求头"),
       {
         title: "Form fields",
         rows: [
@@ -410,50 +550,50 @@ print(upload)`,
       },
     ],
     notes: [
+      "能力令牌中的 act/key（及 uid）必须与本次请求的 upload_id/object_key 完全一致，否则返回 403053（能力令牌与请求的动作或对象不匹配）。",
       "可以并发上传不同 part_number；不要并发重传同一编号，应在前一次失败后顺序执行有限次数重试。",
       "每次重传成功后覆盖业务侧保存的 ETag；parts 查询中该 part_number 的 ETag 和 size 也以最后一次成功上传为准。",
-      "业务码 413050 表示当前分片超过 64 MiB；不要重试相同负载，应使用合规大小重新切分。超过 625 GiB 的文件在默认策略下应于 init 前拒绝。",
+      "业务码 413050 表示当前分片超过 64 MiB；不要重试相同负载，应使用合规大小重新切分。",
+      "业务码 401051/401052/403053 分别表示令牌无效 / 已过期 / 作用域不匹配；这些情况都应回到 App 后端重新申请令牌，而不是原样重试。",
     ],
     examples: {
-      typescript: `import { readFile } from "node:fs/promises"
-
-const bytes = new Uint8Array(await readFile("./part-1.bin"))
-const MAX_UPLOAD_PART_BYTES = 64 * 1024 * 1024
-if (bytes.byteLength > MAX_UPLOAD_PART_BYTES) {
-  throw new Error("分片超过服务端默认上限 64 MiB，请重新切分")
-}
-const form = new FormData()
-form.set("upload_id", upload.upload_id)
-form.set("object_key", upload.object_key)
-form.set("part_number", "1")
-form.set("file", new Blob([bytes]), "part-1.bin")
-
-const response = await storagentFetch("/api/files/multipart/part", {
-  method: "POST",
-  body: form,
+      "server-ts": `// App 后端：init 成功后立即为整个上传会话签发一枚分片上传令牌
+const partToken = issueCapabilityToken(API_KEY!, {
+  action: "upload_part",
+  objectKey: upload.object_key,
+  uploadId: upload.upload_id,
+  expiresInSeconds: 2 * 60 * 60, // 2 小时量级
 })
-const part = (await response.json()) as { part_number: number; etag: string }
-console.log(part)`,
-      python: `from pathlib import Path
+// 将 upload_id / object_key / partToken 一并返回给前端
+return { ...upload, part_token: partToken }`,
+      "server-py": `# App 后端：init 成功后立即为整个上传会话签发一枚分片上传令牌
+part_token = issue_capability_token(
+    API_KEY,
+    action="upload_part",
+    object_key=upload["object_key"],
+    upload_id=upload["upload_id"],
+    expires_in_seconds=2 * 60 * 60,  # 2 小时量级
+)
+# 将 upload_id / object_key / part_token 一并返回给前端`,
+      browser: `// 浏览器前端：拿到 App 后端下发的 { upload_id, object_key, part_token } 后直连 Storagent
+const MAX_UPLOAD_PART_BYTES = 64 * 1024 * 1024
 
-part_path = Path("part-1.bin")
-MAX_UPLOAD_PART_BYTES = 64 * 1024 * 1024
-if part_path.stat().st_size > MAX_UPLOAD_PART_BYTES:
-    raise ValueError("分片超过服务端默认上限 64 MiB，请重新切分")
+async function uploadPart(baseURL: string, blob: Blob, partNumber: number) {
+  if (blob.size > MAX_UPLOAD_PART_BYTES) {
+    throw new Error("分片超过服务端默认上限 64 MiB，请重新切分")
+  }
+  const form = new FormData()
+  form.set("upload_id", uploadId)
+  form.set("object_key", objectKey)
+  form.set("part_number", String(partNumber))
+  form.set("file", blob, \`part-\${partNumber}.bin\`)
 
-with part_path.open("rb") as part_file:
-    response = storagent_request(
-        "POST",
-        "/api/files/multipart/part",
-        data={
-            "upload_id": upload["upload_id"],
-            "object_key": upload["object_key"],
-            "part_number": 1,
-        },
-        files={"file": ("part-1.bin", part_file, "application/octet-stream")},
-    )
-part = response.json()
-print(part)`,
+  const url = new URL("/api/v1/files/multipart/part", baseURL)
+  url.searchParams.set("token", partToken) // 注意：这里从不出现 x-api-key
+  const response = await fetch(url, { method: "POST", body: form })
+  if (!response.ok) throw new Error(\`上传分片失败: \${response.status}\`)
+  return (await response.json()) as { part_number: number; etag: string }
+}`,
     },
     response: `{
   "part_number": 1,
@@ -463,9 +603,10 @@ print(part)`,
   {
     id: "multipart-parts",
     method: "GET",
-    path: "/api/files/multipart/parts",
-    summary: "查询已上传分片",
-    description: "恢复中断上传前查询服务端已接收的分片，避免不必要的重传。同一 part_number 如曾重传，返回最后一次成功上传的 ETag 和 size。每次最多返回 1000 条，可用 part_number_marker 继续翻页。",
+    path: "/api/v1/files/multipart/parts",
+    summary: "查询已上传分片（控制面）",
+    description: "只能由 App 后端调用，用于断点续传前查询服务端已接收的分片，避免不必要的重传。同一 part_number 如曾重传，返回最后一次成功上传的 ETag 和 size。每次最多返回 1000 条，可用 part_number_marker 继续翻页。",
+    plane: "control",
     authentication: "api-key",
     params: [
       apiKeyHeaders(),
@@ -479,19 +620,19 @@ print(part)`,
       },
     ],
     examples: {
-      typescript: `const query = new URLSearchParams({
+      "server-ts": `const query = new URLSearchParams({
   upload_id: upload.upload_id,
   object_key: upload.object_key,
 })
-const response = await storagentFetch(\`/api/files/multipart/parts?\${query}\`)
+const response = await storagentFetch(\`/api/v1/files/multipart/parts?\${query}\`)
 const result = (await response.json()) as {
   upload_id: string
   parts: Array<{ part_number: number; etag: string; size?: number }>
 }
 console.table(result.parts)`,
-      python: `response = storagent_request(
+      "server-py": `response = storagent_request(
     "GET",
-    "/api/files/multipart/parts",
+    "/api/v1/files/multipart/parts",
     params={
         "upload_id": upload["upload_id"],
         "object_key": upload["object_key"],
@@ -516,9 +657,10 @@ print(response.json()["parts"])`,
   {
     id: "multipart-complete",
     method: "POST",
-    path: "/api/files/multipart/complete",
-    summary: "完成分片上传",
-    description: "提交全部分片编号和各编号最后一次成功上传的 ETag，服务端按 part_number 排序并合并对象。只有此接口成功后，对象才算完成上传，同时释放 init 为该会话创建的跨区域预留容量。",
+    path: "/api/v1/files/multipart/complete",
+    summary: "完成分片上传（控制面）",
+    description: "只能由 App 后端调用。前端把已上传分片的 part_number + etag 列表提交给 App 后端的业务接口后，由 App 后端汇总并调用本接口；服务端按 part_number 排序并合并对象。只有此接口成功后，对象才算完成上传，同时释放 init 为该会话创建的跨区域预留容量。",
+    plane: "control",
     authentication: "api-key",
     params: [
       apiKeyHeaders("application/json"),
@@ -533,8 +675,8 @@ print(response.json()["parts"])`,
     ],
     notes: ["完成前应确认所有分片均已成功；同一编号发生过重传时必须使用最新 ETag。ETag 可带或不带首尾双引号。"],
     examples: {
-      typescript: `const uploadedParts = [{ part_number: part.part_number, etag: part.etag }]
-const response = await storagentFetch("/api/files/multipart/complete", {
+      "server-ts": `const uploadedParts = [{ part_number: part.part_number, etag: part.etag }]
+const response = await storagentFetch("/api/v1/files/multipart/complete", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -544,10 +686,10 @@ const response = await storagentFetch("/api/files/multipart/complete", {
   }),
 })
 console.log(await response.json())`,
-      python: `uploaded_parts = [{"part_number": part["part_number"], "etag": part["etag"]}]
+      "server-py": `uploaded_parts = [{"part_number": part["part_number"], "etag": part["etag"]}]
 response = storagent_request(
     "POST",
-    "/api/files/multipart/complete",
+    "/api/v1/files/multipart/complete",
     json={
         "upload_id": upload["upload_id"],
         "object_key": upload["object_key"],
@@ -566,9 +708,10 @@ print(response.json())`,
   {
     id: "multipart-abort",
     method: "POST",
-    path: "/api/files/multipart/abort",
-    summary: "中止分片上传",
-    description: "用户取消或上传无法恢复时释放未完成的 multipart 会话、残留分片和 init 为该会话创建的跨区域预留容量。",
+    path: "/api/v1/files/multipart/abort",
+    summary: "中止分片上传（控制面）",
+    description: "只能由 App 后端调用。用户取消或上传无法恢复时释放未完成的 multipart 会话、残留分片和 init 为该会话创建的跨区域预留容量。",
+    plane: "control",
     authentication: "api-key",
     params: [
       apiKeyHeaders("application/json"),
@@ -582,7 +725,7 @@ print(response.json())`,
       },
     ],
     examples: {
-      typescript: `const response = await storagentFetch("/api/files/multipart/abort", {
+      "server-ts": `const response = await storagentFetch("/api/v1/files/multipart/abort", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -591,9 +734,9 @@ print(response.json())`,
   }),
 })
 console.log(await response.json())`,
-      python: `response = storagent_request(
+      "server-py": `response = storagent_request(
     "POST",
-    "/api/files/multipart/abort",
+    "/api/v1/files/multipart/abort",
     json={
         "upload_id": upload["upload_id"],
         "object_key": upload["object_key"],
@@ -611,9 +754,10 @@ print(response.json())`,
   {
     id: "object-stat",
     method: "POST",
-    path: "/api/files/object/stat",
-    summary: "获取对象元信息",
-    description: "读取对象大小、ETag、类型和所在区域，用于下载规划或完整性检查。object_key 与 APIKey 均不进入 URL。",
+    path: "/api/v1/files/object/stat",
+    summary: "获取对象元信息（控制面）",
+    description: "只能由 App 后端调用；前端不直接访问对象元信息，如需展示大小等信息，应由 App 后端查询后随业务响应一并返回。object_key 与 APIKey 均不进入 URL。",
+    plane: "control",
     authentication: "api-key",
     params: [
       apiKeyHeaders("application/json"),
@@ -637,15 +781,15 @@ print(response.json())`,
     ],
     notes: ["若当前节点没有对象但其他节点存在，返回业务码 404032，data.available_at 给出可用下载地址。"],
     examples: {
-      typescript: `const response = await storagentFetch("/api/files/object/stat", {
+      "server-ts": `const response = await storagentFetch("/api/v1/files/object/stat", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ object_key: "path/to/file.bin" }),
 })
 console.log(await response.json())`,
-      python: `response = storagent_request(
+      "server-py": `response = storagent_request(
     "POST",
-    "/api/files/object/stat",
+    "/api/v1/files/object/stat",
     json={"object_key": "path/to/file.bin"},
 )
 print(response.json())`,
@@ -664,12 +808,13 @@ print(response.json())`,
   {
     id: "object-download",
     method: "GET",
-    path: "/api/files/object/download",
-    summary: "下载对象或字节区间",
-    description: "流式读取整个对象，或通过 offset/length 获取固定字节区间。length 为 0 时从 offset 读取到文件末尾。",
-    authentication: "api-key",
+    path: "/api/v1/files/object/download",
+    summary: "下载对象或字节区间（数据面）",
+    description: "流式读取整个对象，或通过 offset/length 获取固定字节区间。**这是浏览器前端应当直连的接口**：前端先向 App 后端的业务接口申请下载，App 后端校验权限后用 x-api-key 本地签发一枚 action=download、绑定 object_key、建议 5-15 分钟极短有效期的能力令牌，拼成最终下载 URL 返回给前端；前端直接对该 URL 发起 GET，永远不持有 x-api-key。",
+    plane: "data",
+    authentication: "api-key-or-token",
     params: [
-      apiKeyHeaders(),
+      dataPlaneAuthParams(),
       {
         title: "Query",
         rows: [
@@ -679,16 +824,37 @@ print(response.json())`,
         ],
       },
     ],
-    notes: ["响应为二进制；length > 0 时可能返回 206。大文件不要一次性读入内存，应将响应流直接传给文件或下游响应。"],
+    notes: [
+      "响应为二进制；length > 0 时可能返回 206。大文件不要一次性读入内存，应将响应流直接传给文件或下游响应。",
+      "能力令牌中的 act/key 必须与本次请求的 object_key 完全一致，否则返回 403053。",
+      "下载令牌建议只给 5-15 分钟有效期：即使前端把最终 URL 分享出去，链接也会很快失效。",
+    ],
     examples: {
-      typescript: `import { open } from "node:fs/promises"
-
-const query = new URLSearchParams({
-  object_key: "path/to/file.bin",
-  offset: "0",
-  length: "0",
+      "server-ts": `// App 后端：业务鉴权通过后，签发一枚极短期下载令牌并拼出最终 URL
+const downloadToken = issueCapabilityToken(API_KEY!, {
+  action: "download",
+  objectKey: objectKey,
+  expiresInSeconds: 10 * 60, // 5-15 分钟量级
 })
-const response = await storagentFetch(\`/api/files/object/download?\${query}\`)
+const downloadUrl = \`\${STORAGE_BASE_URL}/api/v1/files/object/download?\` +
+  new URLSearchParams({ object_key: objectKey, token: downloadToken })
+return { download_url: downloadUrl }`,
+      "server-py": `# App 后端：业务鉴权通过后，签发一枚极短期下载令牌并拼出最终 URL
+download_token = issue_capability_token(
+    API_KEY,
+    action="download",
+    object_key=object_key,
+    expires_in_seconds=10 * 60,  # 5-15 分钟量级
+)
+download_url = (
+    f"{STORAGE_BASE_URL}/api/v1/files/object/download?"
+    f"object_key={object_key}&token={download_token}"
+)
+# 将 download_url 返回给前端`,
+      browser: `// 浏览器前端：拿到 App 后端下发的 download_url 后直接流式下载
+import { open } from "node:fs/promises" // 浏览器环境可换成 <a download> 或 Blob 保存
+
+const response = await fetch(downloadUrl) // download_url 已内含 object_key 与 token
 if (!response.body) throw new Error("下载响应没有数据流")
 
 const output = await open("./download.bin", "w")
@@ -699,24 +865,15 @@ try {
 } finally {
   await output.close()
 }`,
-      python: `with storagent_request(
-    "GET",
-    "/api/files/object/download",
-    params={"object_key": "path/to/file.bin", "offset": 0, "length": 0},
-    stream=True,
-) as response:
-    with open("download.bin", "wb") as output:
-        for chunk in response.iter_content(chunk_size=1024 * 1024):
-            if chunk:
-                output.write(chunk)`,
     },
   },
   {
     id: "object-locate",
     method: "GET",
-    path: "/api/files/object/locate",
-    summary: "定位对象所在节点",
-    description: "扫描各服务点并返回对象实际存在的位置。用于主动选择就近下载节点，不应在每次普通下载前无条件调用。",
+    path: "/api/v1/files/object/locate",
+    summary: "定位对象所在节点（控制面）",
+    description: "只能由 App 后端调用，扫描各服务点并返回对象实际存在的位置。用于主动选择就近下载节点、为下载令牌选定目标 Storagent 基址，不应在每次普通下载前无条件调用。",
+    plane: "control",
     authentication: "api-key",
     params: [
       apiKeyHeaders(),
@@ -737,19 +894,21 @@ try {
         ],
       },
     ],
-    notes: ["该接口需要跨节点探测并带有频控。返回的 stat_url 使用 POST，仍需携带相同 x-api-key 与 stat_body。"],
+    notes: [
+      "该接口需要跨节点探测并带有频控。返回的 stat_url 与 download_url 仍是控制面/数据面接口，App 后端应各自按 x-api-key 或能力令牌规则调用。",
+    ],
     examples: {
-      typescript: `const query = new URLSearchParams({ object_key: "path/to/file.bin" })
-const response = await storagentFetch(\`/api/files/object/locate?\${query}\`)
+      "server-ts": `const query = new URLSearchParams({ object_key: "path/to/file.bin" })
+const response = await storagentFetch(\`/api/v1/files/object/locate?\${query}\`)
 const location = (await response.json()) as {
   current_region: string
   local_exists: boolean
   available_at: Array<{ region: string; endpoint: string; download_url: string }>
 }
 console.table(location.available_at)`,
-      python: `response = storagent_request(
+      "server-py": `response = storagent_request(
     "GET",
-    "/api/files/object/locate",
+    "/api/v1/files/object/locate",
     params={"object_key": "path/to/file.bin"},
 )
 location = response.json()
@@ -767,10 +926,10 @@ for item in location["available_at"]:
       "shown_name": "北京",
       "master": true,
       "endpoint": "https://bj.example.com",
-      "stat_url": "https://bj.example.com/api/files/object/stat",
+      "stat_url": "https://bj.example.com/api/v1/files/object/stat",
       "stat_method": "POST",
       "stat_body": { "object_key": "path/to/file.bin" },
-      "download_url": "https://bj.example.com/api/files/object/download?object_key=path%2Fto%2Ffile.bin&offset=0&length=0"
+      "download_url": "https://bj.example.com/api/v1/files/object/download?object_key=path%2Fto%2Ffile.bin&offset=0&length=0"
     }
   ]
 }`,
@@ -787,6 +946,9 @@ export const API_GUIDE_ERROR_CODES = [
   ["404033", "所有节点均不存在对象", "停止重试并核对 object_key"],
   ["429041", "定位请求过于频繁", "指数退避并缓存定位结果"],
   ["503040", "跨节点同步失败", "保留上下文后重试或告警"],
+  ["401051", "能力令牌无效（签名不匹配或格式错误）", "回到 App 后端重新签发令牌，不要重试原令牌"],
+  ["401052", "能力令牌已过期", "回到 App 后端重新签发一枚更短有效期的令牌"],
+  ["403053", "能力令牌与请求的动作或对象不匹配", "检查 object_key/upload_id 是否与签发时一致；不要跨对象复用令牌"],
 ] as const
 
 function markdownTable(headers: string[], rows: string[][]) {
@@ -802,21 +964,58 @@ function codeFence(language: string, code: string) {
   return `\`\`\`${language}\n${code.trim()}\n\`\`\``
 }
 
-export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
-  const meta = getApiGuideLanguage(language)
+/**
+ * 生成唯一一份「功能接口引导」Markdown（v1）。
+ * 不再按语言拆分成两份独立文档；App 后端相关代码同时给出 TypeScript 与 Python，
+ * 浏览器前端相关代码固定为 TypeScript/JS（浏览器不运行 Python）。
+ */
+export function generateApiGuideMarkdown() {
   const lines: string[] = [
-    "# Storagent 存储 API 接入指南",
+    `# Storagent 存储 API 接入指南（${API_VERSION}）`,
     "",
-    `> 示例语言：${meta.label}；运行环境：${meta.runtime}。本文由 Storagent 控制台的结构化接口定义生成。`,
+    "> 本文由 Storagent 控制台的结构化接口定义生成，是「功能接口引导」唯一维护的一份文档。",
+    "",
+    "## 版本说明",
+    "",
+    `- 当前业务接口版本为 **${API_VERSION}**，统一挂载在 \`${API_VERSION_PREFIX}\` 前缀下。`,
+    "- 历史未带版本号的 `/api/*` 接口已经**完全下线，不再兼容**：其鉴权模型允许前端直接持有 `x-api-key`，一旦经浏览器网络面板泄露即可被冒用发起任意上传/下载，视为不安全设计，已被本页描述的能力令牌机制完全取代。",
+    "- 本页不再要求你“自由选择前后端各自的实现方式”：前端和 App 后端的职责是固定的，见下节。",
     "",
     "## 给开发者与 AI 的实施目标",
     "",
-    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名。",
+    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工，不要让浏览器前端持有 `x-api-key`。",
+    "",
+    "## 控制面 / 数据面与能力令牌",
+    "",
+    "- **控制面**（`multipart/init`、`multipart/complete`、`multipart/abort`、`multipart/parts`、`object/stat`、`object/locate`）：只允许 App 后端使用 `x-api-key` 调用，浏览器前端永远不直接访问。",
+    "- **数据面**（`multipart/part` 分片上传、`object/download` 下载）：浏览器前端应当直连 Storagent，但改用 App 后端签发的**能力令牌**（`token` 查询参数），不使用 `x-api-key`。",
+    "- 能力令牌由 App 后端使用共享的 `x-api-key` 明文作为 HMAC-SHA256 密钥，在本地对一份只读的能力描述签名，无需请求 Storagent（类似 S3 预签名 URL）：",
+    "",
+    markdownTable(
+      ["字段", "含义"],
+      [
+        ["ref", "该 x-api-key 的 SHA256 摘要，供 Storagent 反查对应的应用；本身不泄露明文 Key"],
+        ["act", "允许的动作：`upload_part` 或 `download`"],
+        ["key", "绑定的 object_key，必须与请求参数完全一致"],
+        ["exp", "Unix 秒级过期时间；上传令牌建议 2 小时量级，下载令牌建议 5-15 分钟量级"],
+        ["uid", "仅分片上传场景使用，绑定 upload_id"],
+      ],
+    ),
+    "",
+    "Token 格式固定为 `Base64Url(Payload JSON).Base64Url(HMAC-SHA256 签名)`。Storagent 收到请求后按 `ref` 反查对应 APIKey、解密出明文重新计算签名，并核对 `act`/`key`（及 `uid`）与请求参数完全一致、未过期才放行；前端即使截获 Token，也只能在有效期内对指定文件完成指定的单一动作。",
+    "",
+    "#### 能力令牌签发 · TypeScript",
+    "",
+    codeFence("typescript", API_GUIDE_CAPABILITY_TOKEN_CODE.typescript),
+    "",
+    "#### 能力令牌签发 · Python",
+    "",
+    codeFence("python", API_GUIDE_CAPABILITY_TOKEN_CODE.python),
     "",
     "### 不可违反的安全约束",
     "",
-    "- `x-api-key` 只能由服务端持有，并通过请求头发送。",
-    "- 不得把 APIKey 放入 query、URL、浏览器代码、移动端包、日志或异常信息。",
+    "- `x-api-key` 只能由 App 后端持有，并通过请求头发送；浏览器前端、移动端包、日志和异常信息中都不能出现它。",
+    "- 浏览器前端调用数据面接口时，必须使用能力令牌（`token` 查询参数），不得使用 `x-api-key`。",
     "- Base URL 与 APIKey 通过环境变量注入，不写死真实凭据。",
     "- `object_key` 应视作不透明字符串，必须使用标准 URL 编码或 JSON 序列化。",
     "- 上传失败或用户取消时调用 multipart abort；下载大文件时使用流式处理。",
@@ -827,28 +1026,36 @@ export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
     "- multipart complete 或 abort 会释放会话的跨区域预留容量。",
     "- 收到业务码 `413049` 后停止上传且不要自动重试，提示用户联系应用管理员处理配额。",
     "- 收到业务码 `413050` 后不要原样重试；使用不超过 64 MiB 的分片重新切分。",
+    "- 收到业务码 `401051`/`401052`/`403053` 后回到 App 后端重新签发能力令牌，不要重试原令牌。",
     "",
-    "## 接入流程",
+    "## 推荐流程",
     "",
-    "1. 从 `/api/public/endpoints` 获取候选 Storagent 地址。",
-    "2. 调用 `/api/public/endpoints/test` 并选择可达、低时延节点。",
-    "3. 拒绝空文件；使用非空文件的实际字节数作为 `size_bytes` 初始化 multipart，跨区域预留声明容量后保存 `upload_id` 和 `object_key`。",
-    "4. 以 5 MiB 为默认值，取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB；确保单片不超过 64 MiB、总片数不超过 10,000，上传时保存每片 `part_number` 与最新 `etag`。",
-    "5. 提交全部分片完成上传；失败且不可恢复时中止会话。complete 或 abort 都会释放会话预留容量。",
-    "6. 使用 POST stat 查询元信息；当前节点没有对象时按 `404032` 的 `available_at` 回退。",
-    "7. 使用 download 流式读取；需要主动选点时再调用 locate。",
+    "1. 前端从 `/api/v1/public/endpoints` 获取候选 Storagent 地址，并调用 `/api/v1/public/endpoints/test` 选择可达、低时延节点（公共接口，无需任何凭据）。",
+    "2. 前端向 App 后端发起上传请求；App 后端拒绝空文件后，用完整文件的 `size_bytes` 调用控制面 `multipart/init`，保存 `upload_id`/`object_key`，并签发分片上传能力令牌一并下发给前端。",
+    "3. 前端携带令牌直连数据面 `multipart/part` 上传分片（不经过 App 后端转发数据）；以 5 MiB 为默认值，取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB，单片不超过 64 MiB、总片数不超过 10,000。",
+    "4. 前端把全部分片的 `part_number`/`etag` 提交给 App 后端；App 后端调用控制面 `multipart/complete` 完成上传（失败且不可恢复时改为 `multipart/abort`），两者都会释放会话预留容量。",
+    "5. 下载时前端向 App 后端申请下载凭据；App 后端校验业务权限后（可选调用控制面 `object/locate` 选定最佳节点），签发下载能力令牌并拼出最终 URL 返回给前端。",
+    "6. 前端携带该 URL 直连数据面 `object/download` 流式下载，全程不接触 `x-api-key`。",
     "",
-    "## 环境与公共请求封装",
+    "## App 后端公共请求封装",
     "",
-    `- 运行环境：${meta.runtime}`,
-    `- 依赖：${meta.dependency}`,
-    "- 环境变量：`STORAGENT_BASE_URL`、`STORAGENT_API_KEY`",
+    "#### TypeScript",
     "",
-    codeFence(meta.fence, API_GUIDE_SETUP[language]),
+    codeFence("typescript", API_GUIDE_SERVER_SETUP.typescript),
+    "",
+    "#### Python",
+    "",
+    codeFence("python", API_GUIDE_SERVER_SETUP.python),
     "",
     "## API 参考",
     "",
   ]
+
+  const planeLabel: Record<ApiGuidePlane, string> = {
+    public: "公共接口，无需任何凭据",
+    control: "控制面 · 仅 App 后端可调用（`x-api-key`）",
+    data: "数据面 · 浏览器前端应直连（`x-api-key` 或能力令牌 `token` 二选一）",
+  }
 
   for (const endpoint of API_GUIDE_ENDPOINTS) {
     lines.push(
@@ -856,7 +1063,7 @@ export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
       "",
       endpoint.description,
       "",
-      `鉴权：${endpoint.authentication === "public" ? "公共接口，无需 APIKey" : "请求头 `x-api-key`"}`,
+      `鉴权：${planeLabel[endpoint.plane]}`,
       "",
     )
 
@@ -881,7 +1088,14 @@ export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
       lines.push("#### 实现注意", "", ...endpoint.notes.map((note) => `- ${note}`), "")
     }
 
-    lines.push(`#### ${meta.label} 示例`, "", codeFence(meta.fence, endpoint.examples[language]), "")
+    const variantOrder: ApiGuideCodeVariant[] = ["server-ts", "server-py", "browser"]
+    for (const variant of variantOrder) {
+      const code = endpoint.examples[variant]
+      if (!code) continue
+      const meta = API_GUIDE_CODE_VARIANTS[variant]
+      lines.push(`#### ${meta.label} 示例`, "", codeFence(meta.fence, code), "")
+    }
+
     if (endpoint.response) {
       lines.push("#### 成功响应示例", "", codeFence("json", endpoint.response), "")
     }
@@ -894,11 +1108,19 @@ export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
     "",
     markdownTable(["业务码", "含义", "建议处理"], API_GUIDE_ERROR_CODES.map((row) => [...row])),
     "",
-    codeFence(meta.fence, API_GUIDE_ERROR_EXAMPLES[language]),
+    "#### TypeScript",
+    "",
+    codeFence("typescript", API_GUIDE_ERROR_EXAMPLES.typescript),
+    "",
+    "#### Python",
+    "",
+    codeFence("python", API_GUIDE_ERROR_EXAMPLES.python),
     "",
     "## 接入验收清单",
     "",
-    "- [ ] APIKey 只存在服务端环境变量和 `x-api-key` 请求头中。",
+    "- [ ] `x-api-key` 只存在于 App 后端环境变量和 `x-api-key` 请求头中，浏览器前端从未持有过它。",
+    "- [ ] 数据面接口（`multipart/part`、`object/download`）由浏览器前端直连，携带能力令牌 `token`，而不是 `x-api-key`。",
+    "- [ ] 分片上传令牌绑定 upload_id + object_key，建议 2 小时量级有效期；下载令牌绑定 object_key，建议 5-15 分钟量级有效期。",
     "- [ ] Base URL 会从候选节点中探测选择，并设置连接与读取超时。",
     "- [ ] 空文件在 init 前被拒绝；分片按 MiB 对齐，非末片至少 5 MiB、单片不超过 64 MiB、总片数不超过 10,000。",
     "- [ ] 默认策略下会在 init 前拒绝超过 625 GiB 的文件，并提示联系管理员调整策略。",
@@ -906,15 +1128,70 @@ export function generateApiGuideMarkdown(language: ApiGuideLanguage) {
     "- [ ] multipart init 的 `size_bytes` 等于完整源文件大小，而不是单个分片大小；已了解 init 会跨区域预留该容量。",
     "- [ ] 能识别 `413049`，停止重试并提示联系应用管理员调整配额或清理空间。",
     "- [ ] 能识别 `413050`，不原样重试超限分片，并按不超过 64 MiB 重新切分。",
-    "- [ ] 刷新或进程重启后可以用 parts 接口恢复上传。",
+    "- [ ] 能识别 `401051`/`401052`/`403053`，回 App 后端重新签发令牌，而不是重试原令牌。",
+    "- [ ] 刷新或进程重启后可以用 parts 接口恢复上传（App 后端侧）。",
     "- [ ] 取消和不可恢复失败会调用 abort；complete 或 abort 后会话预留容量被释放。",
-    "- [ ] stat 使用 POST JSON，不把 APIKey 或 object_key 放入 stat URL。",
+    "- [ ] stat 使用 POST JSON，且只在 App 后端调用；不把 APIKey 或 object_key 放入浏览器可见的 URL。",
     "- [ ] 能处理 `404032` 并从 `available_at` 选择可用节点。",
     "- [ ] 大文件下载采用流式转发或落盘，不整文件驻留内存。",
-    "- [ ] 日志会脱敏请求头，不记录 APIKey。",
-    "- [ ] 已覆盖成功、密钥失效、断点续传、跨节点回退和限流场景。",
+    "- [ ] 日志会脱敏请求头，不记录 `x-api-key` 或能力令牌明文。",
+    "- [ ] 已覆盖成功、密钥失效、令牌过期/作用域不匹配、断点续传、跨节点回退和限流场景。",
     "",
   )
 
   return lines.join("\n")
+}
+
+// --- 版本登记表 ---
+//
+// 「功能接口引导」按业务接口版本分别打包内容，供 DocVersionSwitcher 切换（纯前端，
+// 不发请求）。当前只有 v1；新增版本时在这里补一个 key，TypeScript 会在漏填时报错。
+
+export type ApiGuideReleasedContent = {
+  status: "released"
+  version: string
+  versionPrefix: string
+  endpoints: ApiGuideEndpoint[]
+  serverSetup: Record<"typescript" | "python", string>
+  capabilityTokenCode: Record<"typescript" | "python", string>
+  errorExamples: Record<"typescript" | "python", string>
+  errorCodes: typeof API_GUIDE_ERROR_CODES
+  generateMarkdown: () => string
+}
+
+export type ApiGuideDevelopingContent = {
+  status: "developing"
+  version: string
+  summary: string
+  highlights: string[]
+}
+
+export type ApiGuideVersionContent = ApiGuideReleasedContent | ApiGuideDevelopingContent
+
+export const API_GUIDE_CONTENT_BY_VERSION: Record<DocVersion, ApiGuideVersionContent> = {
+  v1: {
+    status: "released",
+    version: API_VERSION,
+    versionPrefix: API_VERSION_PREFIX,
+    endpoints: API_GUIDE_ENDPOINTS,
+    serverSetup: API_GUIDE_SERVER_SETUP,
+    capabilityTokenCode: API_GUIDE_CAPABILITY_TOKEN_CODE,
+    errorExamples: API_GUIDE_ERROR_EXAMPLES,
+    errorCodes: API_GUIDE_ERROR_CODES,
+    generateMarkdown: generateApiGuideMarkdown,
+  },
+  v2: {
+    status: "developing",
+    version: "v2",
+    summary: "v2 尚在设计阶段，正式发布前会在这里提供和 v1 同样完整的接口参考。",
+    highlights: [
+      "更细粒度的能力令牌作用域（例如按目录前缀、按操作次数限流）",
+      "批量 / 目录级的对象操作接口",
+      "更丰富的跨区域复制状态与一致性查询",
+    ],
+  },
+}
+
+export function getApiGuideContent(version: DocVersion): ApiGuideVersionContent {
+  return API_GUIDE_CONTENT_BY_VERSION[version] ?? API_GUIDE_CONTENT_BY_VERSION[DEFAULT_DOC_VERSION]
 }

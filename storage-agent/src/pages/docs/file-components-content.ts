@@ -3,12 +3,13 @@ import {
   getApiGuideLanguage,
   type ApiGuideLanguage,
 } from "./api-guide-content"
+import { DEFAULT_DOC_VERSION, type DocVersion } from "./doc-versions"
 
 export type ComponentGuideLanguage = ApiGuideLanguage
 
 export const COMPONENT_GUIDE_LANGUAGES = API_GUIDE_LANGUAGES
 
-type ComponentGuideCode = {
+export type ComponentGuideCode = {
   implementation: string
   usage: string
   implementationTitle: string
@@ -237,7 +238,7 @@ export function StoragentFiles({
     let initialized: { upload_id: string; object_key: string } | null = null
 
     try {
-      initialized = await requestJSON<{ upload_id: string; object_key: string }>("/api/files/multipart/init", {
+      initialized = await requestJSON<{ upload_id: string; object_key: string }>("/api/v1/files/multipart/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -259,7 +260,7 @@ export function StoragentFiles({
         form.set("file", file.slice(start, Math.min(file.size, start + chunkSize)), file.name)
 
         const part = await requestJSON<{ part_number: number; etag: string }>(
-          "/api/files/multipart/part",
+          "/api/v1/files/multipart/part",
           { method: "POST", body: form },
         )
         parts.push({ part_number: part.part_number, etag: part.etag.replace(/^"+|"+$/g, "") })
@@ -267,7 +268,7 @@ export function StoragentFiles({
       }
 
       const completed = await requestJSON<{ bucket: string; object_key: string }>(
-        "/api/files/multipart/complete",
+        "/api/v1/files/multipart/complete",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -283,7 +284,7 @@ export function StoragentFiles({
       onUploaded?.({ bucket: completed.bucket, objectKey: completed.object_key })
     } catch (error) {
       if (initialized) {
-        void requestJSON("/api/files/multipart/abort", {
+        void requestJSON("/api/v1/files/multipart/abort", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(initialized),
@@ -301,7 +302,7 @@ export function StoragentFiles({
     setMessage("")
     setLocations([])
     try {
-      const result = await requestJSON<ObjectStat>("/api/files/object/stat", {
+      const result = await requestJSON<ObjectStat>("/api/v1/files/object/stat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ object_key: objectKey.trim() }),
@@ -323,7 +324,7 @@ export function StoragentFiles({
     try {
       const query = new URLSearchParams({ object_key: objectKey.trim(), offset: "0", length: "0" })
       const result = await requestJSON<{ available_at: Location[] }>(
-        \`/api/files/object/locate?\${query}\`,
+        \`/api/v1/files/object/locate?\${query}\`,
         { method: "GET" },
       )
       setLocations(result.available_at)
@@ -355,7 +356,7 @@ export function StoragentFiles({
     try {
       const query = new URLSearchParams({ object_key: objectKey.trim(), offset: "0", length: "0" })
       const metadata = await requestJSON<ObjectStat>(
-        location?.stat_url || "/api/files/object/stat",
+        location?.stat_url || "/api/v1/files/object/stat",
         {
           method: "POST",
           signal: controller.signal,
@@ -365,7 +366,7 @@ export function StoragentFiles({
       )
       const totalBytes = metadata.size
       const response = await fetch(
-        location?.download_url || joinURL(baseURL, \`/api/files/object/download?\${query}\`),
+        location?.download_url || joinURL(baseURL, \`/api/v1/files/object/download?\${query}\`),
         { signal: controller.signal, headers: { "x-api-key": apiKey } },
       )
       if (!response.ok) {
@@ -701,7 +702,7 @@ class StoragentFilesClient:
         chunk_size = multipart_chunk_size(size_bytes, self.chunk_size)
         initialized = self._json(
             "POST",
-            "/api/files/multipart/init",
+            "/api/v1/files/multipart/init",
             json={"content_type": mime, "size_bytes": size_bytes},
         )
         parts: list[dict[str, Any]] = []
@@ -715,7 +716,7 @@ class StoragentFilesClient:
                         break
                     response = self._json(
                         "POST",
-                        "/api/files/multipart/part",
+                        "/api/v1/files/multipart/part",
                         files={"file": (path.name, chunk, mime)},
                         data={
                             "upload_id": initialized["upload_id"],
@@ -731,7 +732,7 @@ class StoragentFilesClient:
 
             completed = self._json(
                 "POST",
-                "/api/files/multipart/complete",
+                "/api/v1/files/multipart/complete",
                 json={
                     "upload_id": initialized["upload_id"],
                     "object_key": initialized["object_key"],
@@ -743,7 +744,7 @@ class StoragentFilesClient:
             try:
                 self._json(
                     "POST",
-                    "/api/files/multipart/abort",
+                    "/api/v1/files/multipart/abort",
                     json={
                         "upload_id": initialized["upload_id"],
                         "object_key": initialized["object_key"],
@@ -756,14 +757,14 @@ class StoragentFilesClient:
     def stat_object(self, object_key: str) -> dict[str, Any]:
         return self._json(
             "POST",
-            "/api/files/object/stat",
+            "/api/v1/files/object/stat",
             json={"object_key": object_key},
         )
 
     def locate_object(self, object_key: str) -> dict[str, Any]:
         return self._json(
             "GET",
-            "/api/files/object/locate",
+            "/api/v1/files/object/locate",
             params={"object_key": object_key, "offset": 0, "length": 0},
         )
 
@@ -806,7 +807,7 @@ class StoragentFilesClient:
         else:
             response = self._request(
                 "GET",
-                "/api/files/object/download",
+                "/api/v1/files/object/download",
                 params={"object_key": object_key, "offset": 0, "length": 0},
                 stream=True,
             )
@@ -934,9 +935,13 @@ function markdownFence(language: string, code: string) {
   return "```" + language + "\n" + code.trim() + "\n```"
 }
 
-export function generateComponentGuideMarkdown(language: ComponentGuideLanguage) {
+export function generateComponentGuideMarkdown(
+  language: ComponentGuideLanguage,
+  version: DocVersion = DEFAULT_DOC_VERSION,
+) {
   const meta = getApiGuideLanguage(language)
-  const code = COMPONENT_GUIDE_CODE[language]
+  const versionContent = getComponentGuideContent(version)
+  const code = versionContent.status === "released" ? versionContent.code[language] : COMPONENT_GUIDE_CODE[language]
   const isTypeScript = language === "typescript"
   return [
     "# Storagent 文件组件接入指南",
@@ -979,7 +984,7 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "",
     "## 下载进度与取消契约",
     "",
-    "1. 下载前调用 `POST /api/files/object/stat`，使用响应中的 `size` 作为总字节数；跨节点下载使用定位结果中的 `stat_url` 和 `stat_body`。",
+    "1. 下载前调用 `POST /api/v1/files/object/stat`，使用响应中的 `size` 作为总字节数；跨节点下载使用定位结果中的 `stat_url` 和 `stat_body`。",
     "2. 读取下载响应流时累计已接收字节，并按不高于每 250ms 一次的频率更新速度和百分比，避免高频 UI 刷新。",
     "3. 只有响应流完整结束后才生成最终下载文件。取消、网络错误或服务错误均不得产出最终文件。",
     isTypeScript
@@ -1018,4 +1023,42 @@ export function generateComponentGuideMarkdown(language: ComponentGuideLanguage)
     "- [ ] 下载完成结果可被外部业务模块继续处理。",
     "",
   ].join("\n")
+}
+
+// --- 版本登记表 ---
+//
+// 「功能组件引导」按业务接口版本分别打包组件代码，供 DocVersionSwitcher 切换（纯前端，
+// 不发请求）。当前只有 v1；新增版本时在这里补一个 key，TypeScript 会在漏填时报错。
+
+export type ComponentGuideReleasedContent = {
+  status: "released"
+  version: string
+  code: Record<ComponentGuideLanguage, ComponentGuideCode>
+}
+
+export type ComponentGuideDevelopingContent = {
+  status: "developing"
+  version: string
+  summary: string
+  highlights: string[]
+}
+
+export type ComponentGuideVersionContent = ComponentGuideReleasedContent | ComponentGuideDevelopingContent
+
+export const COMPONENT_GUIDE_CONTENT_BY_VERSION: Record<DocVersion, ComponentGuideVersionContent> = {
+  v1: { status: "released", version: "v1", code: COMPONENT_GUIDE_CODE },
+  v2: {
+    status: "developing",
+    version: "v2",
+    summary: "v2 尚在设计阶段，正式发布前会在这里提供和 v1 同样完整的组件与代码示例。",
+    highlights: [
+      "上传 / 下载组件直接使用能力令牌，不再需要在演示里手动粘贴 APIKey",
+      "更贴近生产环境的分片重试与断点续传策略示例",
+      "补充更多框架（如 Vue）的接入组件参考",
+    ],
+  },
+}
+
+export function getComponentGuideContent(version: DocVersion): ComponentGuideVersionContent {
+  return COMPONENT_GUIDE_CONTENT_BY_VERSION[version] ?? COMPONENT_GUIDE_CONTENT_BY_VERSION[DEFAULT_DOC_VERSION]
 }

@@ -26,6 +26,7 @@ export default defineConfig([
       'src/components/docs/markdown-doc.tsx',
       'src/components/docs/nav-context.tsx',
       'src/components/docs/primitives.tsx',
+      'src/components/docs/version-switcher.tsx',
       'src/components/guides/api-key-context.tsx',
       'src/components/storage/BucketReplicateGraph.tsx',
       'src/components/theme-provider.tsx',

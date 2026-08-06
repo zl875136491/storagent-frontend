@@ -93,7 +93,7 @@ export function BackendEndpointSwitcher() {
     try {
       const ok = await probeBackendEndpointReachable(next)
       if (!ok) {
-        showErrorToast("该后端不可达：无法访问 /api/public/endpoints，请检查网络或地址后重试")
+        showErrorToast("该后端不可达：无法访问 /api/v1/public/endpoints，请检查网络或地址后重试")
         return
       }
       setApiBaseUrl(next)
