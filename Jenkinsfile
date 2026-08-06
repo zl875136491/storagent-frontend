@@ -22,8 +22,6 @@ pipeline {
         IMAGE_REPOSITORY = '10.17.158.118/storagent/storagent_frontend'
         // Registry token requests must use the proxied Docker daemon network path.
         BUILDKIT_NO_CLIENT_TOKEN = 'true'
-        HTTP_PROXY = 'http://10.17.167.251:7897'
-        HTTPS_PROXY = 'http://10.17.167.251:7897'
         NO_PROXY = 'localhost,127.0.0.1,::1,10.17.158.118,10.17.158.156,10.41.102.223,10.32.129.241,10.17.158.115,10.8.136.107,10.31.133.207'
     }
 
@@ -56,10 +54,67 @@ pipeline {
             }
         }
 
+        stage('Select Build Proxy') {
+            steps {
+                sh(label: 'Probe package registries through available proxies', script: '''#!/usr/bin/env bash
+set -euo pipefail
+
+mapfile -t targets < <(
+  grep -Eho 'https?://[^"[:space:]]+' storage-agent/package.json storage-agent/package-lock.json 2>/dev/null |
+  sed 's/[),;].*$//' | sort -u | head -6
+)
+[ "${#targets[@]}" -gt 0 ] || { echo 'No package registry URLs found' >&2; exit 1; }
+
+mapfile -t candidates < <(
+  for file in /opt/set_proxy_*.sh; do
+    grep -Eho 'https?://[[:alnum:].:-]+:[0-9]+' "$file" 2>/dev/null || true
+  done | sort -u
+)
+candidates+=(DIRECT)
+
+probe() {
+  local proxy="$1" target="$2" code
+  if [ "$proxy" = DIRECT ]; then
+    code=$(env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy curl --noproxy '*' -sS -L --connect-timeout 3 --max-time 8 -o /dev/null -w '%{http_code}' "$target" 2>/dev/null || true)
+  else
+    code=$(env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy curl --proxy "$proxy" -sS -L --connect-timeout 3 --max-time 8 -o /dev/null -w '%{http_code}' "$target" 2>/dev/null || true)
+  fi
+  [[ "$code" =~ ^[234][0-9][0-9]$ ]]
+}
+
+best=''
+best_elapsed=999999
+for proxy in "${candidates[@]}"; do
+  started=$SECONDS
+  passed=0
+  for target in "${targets[@]}"; do
+    probe "$proxy" "$target" && passed=$((passed + 1)) || true
+  done
+  elapsed=$((SECONDS - started))
+  echo "Proxy $proxy: $passed/${#targets[@]} targets passed in $elapsed s"
+  if [ "$passed" -eq "${#targets[@]}" ] && [ "$elapsed" -lt "$best_elapsed" ]; then
+    best="$proxy"
+    best_elapsed="$elapsed"
+  fi
+done
+
+[ -n "$best" ] || { echo 'No proxy passed all package registry probes' >&2; exit 1; }
+if [ "$best" = DIRECT ]; then
+  printf 'export HTTP_PROXY=\nexport HTTPS_PROXY=\nexport http_proxy=\nexport https_proxy=\n' > .selected-build-proxy.env
+else
+  printf 'export HTTP_PROXY=%q\nexport HTTPS_PROXY=%q\nexport http_proxy=%q\nexport https_proxy=%q\n' "$best" "$best" "$best" "$best" > .selected-build-proxy.env
+fi
+echo "Selected build proxy: $best"
+''')
+            }
+        }
+
         stage('Frontend CI') {
             steps {
                 sh(label: 'Run frontend CI in Node 22', script: '''#!/usr/bin/env bash
 set -euo pipefail
+
+. ./.selected-build-proxy.env
 
 docker build \
   --target build \
@@ -80,6 +135,8 @@ docker build \
             steps {
                 sh(label: 'Build frontend runtime image', script: '''#!/usr/bin/env bash
 set -euo pipefail
+
+. ./.selected-build-proxy.env
 
 docker build \
   --provenance=false \
