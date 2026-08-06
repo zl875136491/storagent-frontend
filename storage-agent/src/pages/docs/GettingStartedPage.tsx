@@ -11,6 +11,7 @@ import {
   DocTitle,
   useRegisterToc,
 } from "@/components/docs/primitives"
+import { DEFAULT_DOC_VERSION } from "./doc-versions"
 
 export default function GettingStartedPage() {
   const goDoc = useGoDoc()
@@ -27,8 +28,18 @@ export default function GettingStartedPage() {
 
   return (
     <div className="pb-10">
-      <DocTitle>快速开始</DocTitle>
-      <DocLead>三分钟内完成准备，并发出第一次文件接口请求。</DocLead>
+      <div className="flex flex-wrap items-center gap-2">
+        <DocTitle>快速开始</DocTitle>
+        <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
+          {DEFAULT_DOC_VERSION}
+        </span>
+      </div>
+      <DocLead>三分钟内完成准备，并发出第一次文件接口请求；本页示例对应当前业务接口版本 {DEFAULT_DOC_VERSION}。</DocLead>
+      <DocNote>
+        {DEFAULT_DOC_VERSION} 把接口按「控制面 / 数据面」拆开：本页第一次调用用的{" "}
+        <code className="font-mono text-[11px]">x-api-key</code> 只应出现在 App 后端环境里，浏览器前端不持有它。
+        分片上传、下载等前端可直连的数据面接口改用 App 后端签发的能力令牌，完整说明见「功能接口引导」。
+      </DocNote>
 
       <h2 id="prep" className="mt-8 scroll-m-24 text-xl font-semibold tracking-tight">
         准备
@@ -113,7 +124,9 @@ export default function GettingStartedPage() {
       <h2 id="first-call" className="mt-10 scroll-m-24 text-xl font-semibold tracking-tight">
         第一次 API 调用
       </h2>
-      <p className="mt-2 text-sm text-muted-foreground">用 stat 验证 Key 与 Base URL 是否可用：</p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        用 stat 验证 Key 与 Base URL 是否可用；这是一个控制面接口，请在 App 后端环境里执行，不要放进浏览器页面代码：
+      </p>
       <div className="mt-3">
         <DocCodeTabs
           tabs={[
@@ -124,19 +137,19 @@ export default function GettingStartedPage() {
               code: `export STORAGENT_BASE_URL="https://storagent.example.com"
 export STORAGENT_API_KEY="sk_..."
 
-curl -sS -X POST "$STORAGENT_BASE_URL/api/files/object/stat" \\
+curl -sS -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \\
   -H "Content-Type: application/json" \\
   -H "x-api-key: $STORAGENT_API_KEY" \\
   -d '{"object_key":"path/to/file.bin"}'`,
             },
             {
               id: "js",
-              label: "fetch",
+              label: "Node.js（App 后端）",
               language: "javascript",
               code: `const baseURL = process.env.STORAGENT_BASE_URL
 const apiKey = process.env.STORAGENT_API_KEY
 
-const res = await fetch(\`\${baseURL}/api/files/object/stat\`, {
+const res = await fetch(\`\${baseURL}/api/v1/files/object/stat\`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -153,7 +166,7 @@ console.log(await res.json())`,
               code: `import os, requests
 
 r = requests.post(
-    f"{os.environ['STORAGENT_BASE_URL'].rstrip('/')}/api/files/object/stat",
+    f"{os.environ['STORAGENT_BASE_URL'].rstrip('/')}/api/v1/files/object/stat",
     headers={"x-api-key": os.environ["STORAGENT_API_KEY"], "Content-Type": "application/json"},
     json={"object_key": "path/to/file.bin"},
     timeout=30,
@@ -173,10 +186,16 @@ print(r.json())`,
   "object_key": "path/to/file.bin",
   "size": 1048576,
   "etag": "...",
-  "content_type": "application/octet-stream"
+  "content_type": "application/octet-stream",
+  "last_modified": "2026-07-31T08:00:00Z",
+  "region": "beijing",
+  "local": true
 }`}
         />
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        看到 <code className="font-mono">local: false</code> 说明对象在其它区域，完整字段说明和跨区域回退流程见「功能接口引导」。
+      </p>
 
       <h2 id="next" className="mt-10 scroll-m-24 text-xl font-semibold tracking-tight">
         下一步

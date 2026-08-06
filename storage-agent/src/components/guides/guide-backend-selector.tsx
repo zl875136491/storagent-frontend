@@ -76,7 +76,7 @@ export function GuideBackendSelector({ value, onChange }: Props) {
     <div className="space-y-2">
       <Label className="text-muted-foreground">后端服务</Label>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        通过 <span className="font-mono">GET /api/public/endpoints/test</span> 探测；不可选项为失败；默认可用时延最低者。
+        通过 <span className="font-mono">GET /api/v1/public/endpoints/test</span> 探测；不可选项为失败；默认可用时延最低者。
       </p>
       <RadioGroup value={value} onValueChange={onChange} className="flex flex-wrap gap-2">
         {displayItems.map((it) => {

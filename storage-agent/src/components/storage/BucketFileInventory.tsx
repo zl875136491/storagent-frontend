@@ -166,7 +166,7 @@ function SortIndicator({ active, direction }: { active: boolean; direction: Sort
     : <ArrowDown className="h-3.5 w-3.5" aria-hidden />
 }
 
-const ONE_TIME_DOWNLOAD_PATH = "/api/storage/objects/one-time-download"
+const ONE_TIME_DOWNLOAD_PATH = "/api/v1/storage/objects/one-time-download"
 const ONE_TIME_DOWNLOAD_TOKEN = /^[A-Za-z0-9_-]{32,128}$/
 
 function resolveAdminDownloadUrl(value: string): string | null {

@@ -216,7 +216,7 @@ function AppShell() {
     try {
       return new PageAgent({
         model: aiConfig.model,
-        baseURL: "/api/ai/openai/v1",
+        baseURL: "/api/v1/ai/openai/v1",
         customFetch: fetchAIChatCompletionProxy,
         language: "zh-CN",
         maxSteps: aiConfig.max_steps,

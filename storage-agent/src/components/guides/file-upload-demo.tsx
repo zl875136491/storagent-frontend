@@ -141,7 +141,7 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
 
     try {
       const init = await jsonOrThrow<InitResp>(
-        await fetch(joinUrl(baseURL, "/api/files/multipart/init"), {
+        await fetch(joinUrl(baseURL, "/api/v1/files/multipart/init"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -172,7 +172,7 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
         fd.set("file", blob, file.name)
 
         const part = await jsonOrThrow<PartResp>(
-          await fetch(joinUrl(baseURL, "/api/files/multipart/part"), {
+          await fetch(joinUrl(baseURL, "/api/v1/files/multipart/part"), {
             method: "POST",
             headers: { "x-api-key": apiKey },
             body: fd,
@@ -184,7 +184,7 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
       }
 
       const complete = await jsonOrThrow<CompleteResp>(
-        await fetch(joinUrl(baseURL, "/api/files/multipart/complete"), {
+        await fetch(joinUrl(baseURL, "/api/v1/files/multipart/complete"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -204,7 +204,7 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
       onUploaded?.(finalResult)
     } catch (e) {
       if (uploadId && objectKey && baseURL) {
-        void fetch(joinUrl(baseURL, "/api/files/multipart/abort"), {
+        void fetch(joinUrl(baseURL, "/api/v1/files/multipart/abort"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

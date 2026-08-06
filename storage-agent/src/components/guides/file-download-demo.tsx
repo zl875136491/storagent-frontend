@@ -209,7 +209,7 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
     setLocations(null)
     setRedirectHint(null)
     try {
-      const resp = await fetch(joinUrl(baseURL, "/api/files/object/stat"), {
+      const resp = await fetch(joinUrl(baseURL, "/api/v1/files/object/stat"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -280,8 +280,8 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
           statBody: location.stat_body,
         }
       : {
-          downloadURL: joinUrl(baseURL, `/api/files/object/download?${query.toString()}`),
-          statURL: joinUrl(baseURL, "/api/files/object/stat"),
+          downloadURL: joinUrl(baseURL, `/api/v1/files/object/download?${query.toString()}`),
+          statURL: joinUrl(baseURL, "/api/v1/files/object/stat"),
           statBody: { object_key: key },
         }
     const controller = new AbortController()

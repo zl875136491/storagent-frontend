@@ -36,10 +36,10 @@ export function normalizePublicApiBase(url: string): string {
   return normalizeBase(url)
 }
 
-const PUBLIC_ENDPOINT_TEST_PATH = "/api/public/endpoints/test"
+const PUBLIC_ENDPOINT_TEST_PATH = "/api/v1/public/endpoints/test"
 
 /**
- * 对指定基址请求 `GET /api/public/endpoints/test`（约数百字节响应），
+ * 对指定基址请求 `GET /api/v1/public/endpoints/test`（约数百字节响应），
  * 用于探测连通性；`latencyMs` 为从发起请求到完整读取响应体的耗时。
  */
 export async function probePublicEndpointTest(
@@ -82,7 +82,7 @@ async function fetchEndpoints(
   baseUrl: string,
   timeoutMs: number,
 ): Promise<PublicEndpointsResponse | null> {
-  const url = `${normalizeBase(baseUrl)}/api/public/endpoints`
+  const url = `${normalizeBase(baseUrl)}/api/v1/public/endpoints`
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -96,7 +96,7 @@ async function fetchEndpoints(
   }
 }
 
-/** 切换后端前探测：对目标基址请求 GET /api/public/endpoints，成功解析即视为可达 */
+/** 切换后端前探测：对目标基址请求 GET /api/v1/public/endpoints，成功解析即视为可达 */
 export async function probeBackendEndpointReachable(baseUrl: string): Promise<boolean> {
   const json = await fetchEndpoints(normalizeBase(baseUrl), 12_000)
   return json != null
@@ -147,7 +147,7 @@ function createProbeState(onLinesUpdate?: (lines: ProbeLine[]) => void) {
 
 /**
  * 先尝试 localStorage 中的后端；失败则清除并重试 api.config 中的候选。
- * 使用 /api/public/endpoints 中 master === true 的 endpoint 作为当前后端。
+ * 使用 /api/v1/public/endpoints 中 master === true 的 endpoint 作为当前后端。
  */
 export async function resolveMasterBackend(
   candidates: string[],
