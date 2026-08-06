@@ -966,7 +966,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
       </div>
 
       <div className="docs-scroll flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
-        <div className="mt-auto grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <div className="grid flex-1 auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           {data.clusters.map((cluster) => {
             const capacityPercent = cluster.raw_capacity_bytes > 0
               ? cluster.raw_used_bytes / cluster.raw_capacity_bytes * 100
@@ -974,8 +974,8 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
             const clusterJob = latestJobFor(cluster.server, jobs)
             const jobActive = clusterJob?.status === "queued" || clusterJob?.status === "running"
             return (
-              <article key={cluster.server} className="flex flex-col rounded-md border border-border/80 bg-background">
-                <header className="flex items-start justify-between gap-3 border-b border-border/60 px-3.5 py-3">
+              <article key={cluster.server} className="flex h-full flex-col rounded-md border border-border/80 bg-background">
+                <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-3.5 py-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-sm font-semibold">{cluster.shown_name}集群</h2>
                     <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={cluster.endpoint}>{cluster.server} · {cluster.endpoint}</p>
@@ -983,26 +983,26 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                   <ClusterStatus status={cluster.status} />
                 </header>
 
-                <div className="px-3.5 py-3">
-                  {cluster.error ? <div className="mb-3 rounded-md bg-rose-500/10 px-2.5 py-2 text-[11px] text-rose-700 dark:text-rose-300">{cluster.error}</div> : null}
+                <div className="flex min-h-0 flex-1 flex-col px-3.5 py-3">
+                  {cluster.error ? <div className="mb-3 shrink-0 rounded-md bg-rose-500/10 px-2.5 py-2 text-[11px] text-rose-700 dark:text-rose-300">{cluster.error}</div> : null}
                   <ServerStatusDiagram cluster={cluster} />
 
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><HardDrive className="h-3 w-3" aria-hidden />磁盘</div><div className="mt-0.5 text-xs font-medium">{cluster.online_disks} / {cluster.online_disks + cluster.offline_disks} 在线</div></div>
-                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Box className="h-3 w-3" aria-hidden />对象</div><div className="mt-0.5 text-xs font-medium">{cluster.object_count.toLocaleString("zh-CN")}</div></div>
-                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Activity className="h-3 w-3" aria-hidden />探测耗时</div><div className="mt-0.5 font-mono text-xs font-medium">{cluster.reachable ? `${Math.round(cluster.command_latency_ms)} ms` : "—"}</div></div>
-                    <div><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock3 className="h-3 w-3" aria-hidden />运行时间</div><div className="mt-0.5 text-xs font-medium">{cluster.reachable ? formatDuration(cluster.uptime_seconds) : "—"}</div></div>
+                  <div className="mt-3 grid shrink-0 grid-cols-1 gap-y-3">
+                    <div className="flex items-center justify-between"><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><HardDrive className="h-3 w-3" aria-hidden />磁盘</div><div className="text-xs font-medium">{cluster.online_disks} / {cluster.online_disks + cluster.offline_disks} 在线</div></div>
+                    <div className="flex items-center justify-between"><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Box className="h-3 w-3" aria-hidden />对象</div><div className="text-xs font-medium">{cluster.object_count.toLocaleString("zh-CN")}</div></div>
+                    <div className="flex items-center justify-between"><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Activity className="h-3 w-3" aria-hidden />探测耗时</div><div className="font-mono text-xs font-medium">{cluster.reachable ? `${Math.round(cluster.command_latency_ms)} ms` : "—"}</div></div>
+                    <div className="flex items-center justify-between"><div className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock3 className="h-3 w-3" aria-hidden />运行时间</div><div className="text-xs font-medium">{cluster.reachable ? formatDuration(cluster.uptime_seconds) : "—"}</div></div>
                   </div>
 
-                  <div className="mt-4">
+                  <div className="mt-4 shrink-0">
                     <div className="flex items-center justify-between text-[10px]"><span className="text-muted-foreground">物理容量</span><span className="font-medium">{capacityPercent.toFixed(1)}%</span></div>
                     <Progress className="mt-1.5 h-1.5" value={capacityPercent} />
                     <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground"><span>{formatBytes(cluster.raw_used_bytes)} 已用</span><span>{formatBytes(cluster.raw_capacity_bytes)} 总量</span></div>
                   </div>
 
-                  <div className="mt-4 border-t border-border/60 pt-3">
-                    <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground"><span>驱动器</span><span>{cluster.healing_disks > 0 ? `${cluster.healing_disks} 修复中` : `${cluster.drives.length} 个`}</span></div>
-                    <div className="divide-y divide-border/50">
+                  <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-border/60 pt-3">
+                    <div className="mb-1.5 flex shrink-0 items-center justify-between text-[10px] text-muted-foreground"><span>驱动器</span><span>{cluster.healing_disks > 0 ? `${cluster.healing_disks} 修复中` : `${cluster.drives.length} 个`}</span></div>
+                    <div className="docs-scroll min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto">
                       {cluster.drives.map((drive) => (
                         <div key={`${drive.endpoint}:${drive.path}`} className="py-1.5 text-[10px]">
                           <div className="flex items-center justify-between gap-2"><span className="truncate font-mono" title={drive.endpoint}>{drive.endpoint || drive.path}</span><span className={drive.state.toLowerCase() === "ok" || drive.state.toLowerCase() === "online" ? "text-emerald-600" : "text-rose-600"}>{drive.state}</span></div>
@@ -1014,7 +1014,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                   </div>
                 </div>
 
-                <footer className="flex items-center justify-between gap-2 border-t border-border/60 px-3.5 py-2.5">
+                <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-border/60 px-3.5 py-2.5">
                   <div className="min-w-0 text-[10px]">
                     {clusterJob ? (
                       <>
