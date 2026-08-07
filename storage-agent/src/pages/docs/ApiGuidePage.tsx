@@ -14,6 +14,7 @@ import { DocComingSoon } from "@/components/docs/coming-soon"
 import { useDocVersion } from "@/components/docs/version-switcher"
 import {
   API_GUIDE_CODE_VARIANTS,
+  API_GUIDE_MINIMAL_DEMO,
   getApiGuideContent,
   type ApiGuideCodeVariant,
   type ApiGuidePlane,
@@ -38,6 +39,7 @@ export default function ApiGuidePage() {
       { id: "versioning", title: "版本说明", level: 2 as const },
       { id: "planes", title: "控制面 / 数据面", level: 2 as const },
       { id: "workflow", title: "推荐流程", level: 2 as const },
+      { id: "minimal-demo", title: "最小可运行 Demo", level: 2 as const },
       { id: "client-setup", title: "公共请求封装", level: 2 as const },
       ...content.endpoints.map((endpoint) => ({
         id: endpoint.id,
@@ -178,6 +180,52 @@ export default function ApiGuidePage() {
             { title: "申请并直连下载（App 后端签发 + 前端直连）", body: "App 后端校验业务权限后签发极短期下载令牌并拼出最终 URL；前端直接对该 URL 发起流式下载。" },
           ]}
         />
+      </section>
+
+      <section id="minimal-demo" className="mt-10 scroll-m-36">
+        <DocHeading id="minimal-demo-heading" level={2} className="mt-0">
+          最小可运行上传/下载 Demo
+        </DocHeading>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          把推荐流程收成一份可直接照抄的最小 Demo：App 后端持有{" "}
+          <code className="font-mono text-[11px]">x-api-key</code> 并签发令牌；浏览器只拿{" "}
+          <code className="font-mono text-[11px]">part_token</code> /{" "}
+          <code className="font-mono text-[11px]">download_url</code> 直连数据面。
+          下载本页 Markdown 时也会包含这一节。若浏览器直连出现{" "}
+          <code className="font-mono text-[11px]">TypeError: Failed to fetch</code>
+          ，先确认 Storagent 已把页面 Origin 加入{" "}
+          <code className="font-mono text-[11px]">BACKEND_CORS_ORIGINS</code> /{" "}
+          <code className="font-mono text-[11px]">FRONT_URL</code>。
+        </p>
+        <div className="mt-4">
+          <DocCodeTabs
+            tabs={[
+              {
+                id: "app-ts",
+                label: "App 后端 · TypeScript",
+                language: "typescript",
+                code: API_GUIDE_MINIMAL_DEMO["app-ts"],
+              },
+              {
+                id: "app-py",
+                label: "App 后端 · Python",
+                language: "python",
+                code: API_GUIDE_MINIMAL_DEMO["app-py"],
+              },
+              {
+                id: "browser",
+                label: "浏览器 · 完整上传下载",
+                language: "typescript",
+                code: API_GUIDE_MINIMAL_DEMO.browser,
+              },
+            ]}
+          />
+        </div>
+        <DocNote>
+          Demo 自检：init 响应不含 APIKey；Network 里 part/download 只有{" "}
+          <code className="font-mono text-[11px]">token</code>；complete 后下载内容与上传一致；空文件与超额{" "}
+          <code className="font-mono text-[11px]">413049</code> 按预期拒绝。
+        </DocNote>
       </section>
 
       <section id="client-setup" className="mt-10 scroll-m-36">
