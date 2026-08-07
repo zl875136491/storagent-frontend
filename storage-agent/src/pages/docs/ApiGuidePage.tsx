@@ -26,7 +26,9 @@ const PLANE_LABEL: Record<ApiGuidePlane, string> = {
   data: "数据面 · 前端可直连",
 }
 
-const VARIANT_ORDER: ApiGuideCodeVariant[] = ["server-ts", "server-py", "browser"]
+// 本文的默认实现约定：App 后端为 Python，App 前端为 TypeScript。
+// 其他技术栈只需遵守相同的调用边界、认证方式和字段约束自行适配。
+const VARIANT_ORDER: ApiGuideCodeVariant[] = ["server-py", "browser"]
 
 export default function ApiGuidePage() {
   const [version] = useDocVersion()
@@ -76,8 +78,8 @@ export default function ApiGuidePage() {
           </div>
           <DocLead>
             面向「App 后端 + 浏览器前端」协作的存储 HTTP API 参考，覆盖选点、分片上传直传、断点续传、
-            元信息查询、跨区域回退与流式下载直连。示例代码不再按语言区分整份文档，而是按角色（App 后端 /
-            浏览器前端）区分；本页只维护这一份 {content.version} Markdown。
+            元信息查询、跨区域回退与流式下载直连。本文固定使用 Python 编写 App 后端示例，使用 TypeScript
+            编写 App 前端示例；其他技术栈由开发者按同一接口边界自行适配。
           </DocLead>
         </div>
         <a
@@ -104,6 +106,11 @@ export default function ApiGuidePage() {
           历史未带版本号的 <code className="font-mono text-[11px]">/api/*</code> 接口已经<strong>完全下线，不再兼容</strong>：
           其鉴权模型允许前端直接持有 <code className="font-mono text-[11px]">x-api-key</code>，一旦经浏览器网络面板泄露即可
           被冒用发起任意上传/下载，视为不安全设计，已被 {content.version} 的能力令牌机制完全取代。
+        </DocNote>
+        <DocNote>
+          <strong className="text-foreground">本文实现约定：</strong>App 后端固定为 Python，负责业务鉴权、
+          控制面调用与能力令牌签发；App 前端固定为 TypeScript，负责携带 token 直连数据面。其他技术栈不再
+          提供并列示例，应依据相同的接口、认证和输入输出约束自行适配。
         </DocNote>
       </section>
 
@@ -149,20 +156,7 @@ export default function ApiGuidePage() {
         </DocNote>
         <div className="mt-4 space-y-3">
           <DocCodeTabs
-            tabs={[
-              {
-                id: "server-ts",
-                label: "能力令牌签发 · TypeScript",
-                language: "typescript",
-                code: content.capabilityTokenCode.typescript,
-              },
-              {
-                id: "server-py",
-                label: "能力令牌签发 · Python",
-                language: "python",
-                code: content.capabilityTokenCode.python,
-              },
-            ]}
+            tabs={[{ id: "server-py", label: "App 后端", language: "python", code: content.capabilityTokenCode.python }]}
           />
         </div>
       </section>
@@ -201,20 +195,14 @@ export default function ApiGuidePage() {
           <DocCodeTabs
             tabs={[
               {
-                id: "app-ts",
-                label: "App 后端 · TypeScript",
-                language: "typescript",
-                code: API_GUIDE_MINIMAL_DEMO["app-ts"],
-              },
-              {
                 id: "app-py",
-                label: "App 后端 · Python",
+                label: "App 后端",
                 language: "python",
                 code: API_GUIDE_MINIMAL_DEMO["app-py"],
               },
               {
                 id: "browser",
-                label: "浏览器 · 完整上传下载",
+                label: "浏览器前端",
                 language: "typescript",
                 code: API_GUIDE_MINIMAL_DEMO.browser,
               },
@@ -233,15 +221,12 @@ export default function ApiGuidePage() {
           App 后端公共请求封装
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          以下封装统一处理控制面调用的鉴权、超时和结构化错误；App 后端可任选其一实现语言，浏览器前端不需要这份封装
-          （前端只需拼接能力令牌发起 fetch，见各数据面接口示例）。
+          以下 Python 封装统一处理控制面调用的鉴权、超时和结构化错误；前端只需按 TypeScript 示例拼接能力令牌发起
+          fetch。其他技术栈可按同一行为自行适配。
         </p>
         <div className="mt-4">
           <DocCodeTabs
-            tabs={[
-              { id: "server-ts", label: "TypeScript", language: "typescript", code: content.serverSetup.typescript },
-              { id: "server-py", label: "Python", language: "python", code: content.serverSetup.python },
-            ]}
+            tabs={[{ id: "server-py", label: "App 后端", language: "python", code: content.serverSetup.python }]}
           />
         </div>
       </section>
@@ -320,10 +305,7 @@ export default function ApiGuidePage() {
         </div>
         <div className="mt-4">
           <DocCodeTabs
-            tabs={[
-              { id: "server-ts", label: "TypeScript", language: "typescript", code: content.errorExamples.typescript },
-              { id: "server-py", label: "Python", language: "python", code: content.errorExamples.python },
-            ]}
+            tabs={[{ id: "server-py", label: "App 后端", language: "python", code: content.errorExamples.python }]}
           />
         </div>
       </section>

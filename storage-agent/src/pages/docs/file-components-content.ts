@@ -1054,11 +1054,11 @@ export const COMPONENT_GUIDE_CONTENT_BY_VERSION: Record<DocVersion, ComponentGui
   v2: {
     status: "developing",
     version: "v2",
-    summary: "v2 尚在设计阶段，正式发布前会在这里提供和 v1 同样完整的组件与代码示例。",
+    summary: "v2 尚在设计阶段，正式发布前会在这里提供与 v1 对应的在线组件演示。",
     highlights: [
-      "上传 / 下载组件直接使用能力令牌，不再需要在演示里手动粘贴 APIKey",
-      "更贴近生产环境的分片重试与断点续传策略示例",
-      "补充更多框架（如 Vue）的接入组件参考",
+      "上传 / 下载演示直接使用能力令牌，不再需要手动粘贴 APIKey",
+      "补充分片重试与断点续传的可操作演示",
+      "展示更多组件状态和交互反馈",
     ],
   },
 }

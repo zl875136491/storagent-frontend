@@ -13,10 +13,10 @@ import FileComponentsGuidePage from "@/pages/docs/FileComponentsGuidePage"
 type DocId = "getting-started" | "usage-overview" | "api-guide" | "components"
 
 const NAV: { id: DocId; title: string; icon: typeof Rocket; hint: string }[] = [
-  { id: "getting-started", title: "快速开始", icon: Rocket, hint: "最短路径上手" },
-  { id: "usage-overview", title: "使用概览", icon: BookOpen, hint: "控制台怎么用" },
+  { id: "usage-overview", title: "使用概览", icon: BookOpen, hint: "控制台导航与准备" },
+  { id: "getting-started", title: "快速开始", icon: Rocket, hint: "v1 调用时序" },
   { id: "api-guide", title: "功能接口引导", icon: Plug, hint: "HTTP API 参考" },
-  { id: "components", title: "功能组件引导", icon: Layers, hint: "上传 / 下载演示" },
+  { id: "components", title: "功能组件演示", icon: Layers, hint: "在线上传 / 下载" },
 ]
 
 function resolveDocId(raw: string | null): DocId {
@@ -24,14 +24,14 @@ function resolveDocId(raw: string | null): DocId {
   if (raw === "getting-started" || raw === "usage-overview" || raw === "api-guide" || raw === "components") {
     return raw
   }
-  return "getting-started"
+  return "usage-overview"
 }
 
 function DocsShell() {
   const [searchParams] = useSearchParams()
   const goDoc = useGoDoc()
   const active = useMemo(() => resolveDocId(searchParams.get("doc")), [searchParams])
-  const showVersionSwitcher = active === "api-guide" || active === "components"
+  const showVersionSwitcher = active === "getting-started" || active === "api-guide" || active === "components"
   const shellScrollRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLDivElement>(null)
 

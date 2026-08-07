@@ -54,9 +54,9 @@ export const API_GUIDE_CODE_VARIANTS: Record<
   ApiGuideCodeVariant,
   { label: string; fence: string }
 > = {
-  "server-ts": { label: "App 后端 · TypeScript", fence: "typescript" },
-  "server-py": { label: "App 后端 · Python", fence: "python" },
-  browser: { label: "浏览器前端 · TypeScript", fence: "typescript" },
+  "server-ts": { label: "App 后端", fence: "typescript" },
+  "server-py": { label: "App 后端", fence: "python" },
+  browser: { label: "浏览器前端", fence: "typescript" },
 }
 
 // --- 以下类型 / 常量仍由「功能组件引导」（file-components-content.ts）复用，保持不变 ---
@@ -474,9 +474,12 @@ app.post("/app/download/url", async (req, res) => {
 app.listen(8790)`,
 
   "app-py": `# App 后端业务接口（FastAPI 示意）
-# 依赖上文的 storagent_request + issue_capability_token；x-api-key 只出现在这里。
+# 依赖上文的 storagent_request、StoragentAPIError、issue_capability_token。
+# x-api-key 只在服务端环境和控制面请求中出现，任何响应都不会返回它。
 import os
-from fastapi import FastAPI
+from urllib.parse import urlencode
+
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 app = FastAPI()
@@ -490,8 +493,9 @@ class InitBody(BaseModel):
 
 
 class PartItem(BaseModel):
-    part_number: int
-    etag: str
+    # Storagent 的 part_number 从 1 开始，最大 10,000；ETag 来自分片上传响应。
+    part_number: int = Field(..., ge=1, le=10_000)
+    etag: str = Field(..., min_length=1)
 
 
 class CompleteBody(BaseModel):
@@ -509,13 +513,34 @@ class DownloadBody(BaseModel):
     object_key: str
 
 
+def control_json(method: str, path: str, payload: dict):
+    """统一代理控制面错误；浏览器不会直接调用 Storagent 控制面。"""
+    try:
+        return storagent_request(method, path, json=payload).json()
+    except StoragentAPIError as exc:
+        # 保留 413049 等稳定业务码，供页面给出可操作的提示。
+        raise HTTPException(status_code=exc.status, detail=exc.body or {"message": str(exc)}) from exc
+
+
+def require_upload_permission() -> None:
+    # 替换为真实的用户、租户、配额和审计校验；Demo 只标出不可省略的业务边界。
+    return None
+
+
+def require_download_permission(object_key: str) -> None:
+    # 替换为真实的对象读权限校验，不能仅因为用户提交了 object_key 就签发下载链接。
+    return None
+
+
 @app.post("/app/upload/init")
 def upload_init(body: InitBody):
-    upload = storagent_request(
+    require_upload_permission()
+    # 使用完整文件大小初始化，Storagent 会据此做跨区域配额预留。
+    upload = control_json(
         "POST",
         "/api/v1/files/multipart/init",
-        json={"size_bytes": body.size_bytes, "content_type": body.content_type},
-    ).json()
+        {"size_bytes": body.size_bytes, "content_type": body.content_type},
+    )
     part_token = issue_capability_token(
         API_KEY,
         action="upload_part",
@@ -523,54 +548,67 @@ def upload_init(body: InitBody):
         upload_id=upload["upload_id"],
         expires_in_seconds=2 * 60 * 60,
     )
+    # 凭证绑定 upload_id + object_key，浏览器只能上传分片，不能调用控制面。
     return {
-        **upload,
+        "upload_id": upload["upload_id"],
+        "bucket": upload["bucket"],
+        "object_key": upload["object_key"],
         "part_token": part_token,
-        "storagent_base": STORAGE_BASE_URL,
         "part_url": f"{STORAGE_BASE_URL}/api/v1/files/multipart/part",
     }
 
 
 @app.post("/app/upload/complete")
 def upload_complete(body: CompleteBody):
-    return storagent_request(
+    require_upload_permission()
+    # 只有 complete 成功后对象才可见，并且 init 的预留容量会被释放。
+    return control_json(
         "POST",
         "/api/v1/files/multipart/complete",
-        json=body.model_dump(),
-    ).json()
+        body.model_dump(),
+    )
 
 
 @app.post("/app/upload/abort")
 def upload_abort(body: AbortBody):
-    return storagent_request(
+    require_upload_permission()
+    # 用户取消或不可恢复错误都应调用 abort，避免残留分片和预留容量。
+    return control_json(
         "POST",
         "/api/v1/files/multipart/abort",
-        json=body.model_dump(),
-    ).json()
+        body.model_dump(),
+    )
 
 
 @app.post("/app/download/url")
 def download_url(body: DownloadBody):
-    # 此处应先做业务鉴权
+    require_download_permission(body.object_key)
+    # 下载令牌有效期较短且绑定 object_key；APIKey 永远不进入 URL。
     token = issue_capability_token(
         API_KEY,
         action="download",
         object_key=body.object_key,
         expires_in_seconds=10 * 60,
     )
-    from urllib.parse import urlencode
     qs = urlencode({"object_key": body.object_key, "token": token})
     return {
         "download_url": f"{STORAGE_BASE_URL}/api/v1/files/object/download?{qs}",
         "object_key": body.object_key,
     }`,
 
-  browser: `// 浏览器前端：完整上传 + 下载（永不出现 x-api-key）
-// App 后端地址例如 http://127.0.0.1:8790；Storagent 数据面地址来自 init 响应
-const APP_BASE = "" // 与页面同源时留空；跨域时填 App 后端根地址
-const PART_SIZE = 5 * 1024 * 1024 // 5 MiB；可按 ceil(size/10000) 向上取 MiB 对齐增大
+  browser: `// 浏览器前端：完整上传 + 下载。此文件永远不出现 x-api-key。
+// APP_BASE 为空表示 App 接口与页面同源；跨域部署时填写 App 后端根地址。
+const APP_BASE = ""
+const MIB = 1024 * 1024
+const DEFAULT_PART_SIZE = 5 * MIB
+const MAX_PART_SIZE = 64 * MIB
+const MAX_PARTS = 10_000
+
+type UploadedPart = { part_number: number; etag: string }
+type DownloadProgress = { received_bytes: number; total_bytes: number | null }
 
 async function appJson(path: string, init?: RequestInit) {
+  // App 业务接口使用 JSON；下方上传分片使用 FormData，不能复用此请求头。
   const res = await fetch(APP_BASE + path, {
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
@@ -578,6 +616,24 @@ async function appJson(path: string, init?: RequestInit) {
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw Object.assign(new Error(\`App \${res.status}\`), { body })
   return body
+}
+
+function choosePartSize(fileSize: number): number {
+  // 同时满足：非末片至少 5 MiB、总片数最多 10,000、单片最多 64 MiB。
+  const requiredForPartCount = Math.ceil(fileSize / MAX_PARTS)
+  const partSize = Math.ceil(Math.max(DEFAULT_PART_SIZE, requiredForPartCount) / MIB) * MIB
+  if (partSize > MAX_PART_SIZE) {
+    throw new Error("文件超过默认分片策略的上限，请联系管理员调整策略")
+  }
+  return partSize
+}
+
+async function abortUpload(init: { upload_id: string; object_key: string }) {
+  // abort 是尽力清理：上传错误仍由调用方处理，不能被清理错误覆盖。
+  await appJson("/app/upload/abort", {
+    method: "POST",
+    body: JSON.stringify({ upload_id: init.upload_id, object_key: init.object_key }),
+  })
 }
 
 /** 上传：App init → 浏览器直连 part(token) → App complete */
@@ -595,41 +651,68 @@ export async function uploadFile(file: File) {
     object_key: string
     part_token: string
     part_url: string
-    storagent_base: string
   }
 
-  const parts: Array<{ part_number: number; etag: string }> = []
-  const totalParts = Math.ceil(file.size / PART_SIZE) || 1
-  for (let i = 0; i < totalParts; i++) {
-    const blob = file.slice(i * PART_SIZE, Math.min(file.size, (i + 1) * PART_SIZE))
+  const parts: UploadedPart[] = []
+  const partSize = choosePartSize(file.size)
+  const totalParts = Math.ceil(file.size / partSize)
+
+  try {
+    // 顺序上传便于排查；同一 part_number 重传时以最后成功 ETag 为准。
+    for (let i = 0; i < totalParts; i++) {
+    const start = i * partSize
+    const blob = file.slice(start, Math.min(file.size, start + partSize))
     const form = new FormData()
     form.set("upload_id", init.upload_id)
     form.set("object_key", init.object_key)
     form.set("part_number", String(i + 1))
     form.set("file", blob, \`part-\${i + 1}.bin\`)
 
-    // 数据面直连 Storagent；若出现 TypeError: Failed to fetch，检查 CORS 是否放行当前 Origin
+    // 数据面直连 Storagent；若出现 TypeError: Failed to fetch，检查 CORS 是否放行当前 Origin。
     const url = new URL(init.part_url)
     url.searchParams.set("token", init.part_token)
     const partRes = await fetch(url, { method: "POST", body: form })
     const partBody = await partRes.json().catch(() => ({}))
     if (!partRes.ok) throw Object.assign(new Error(\`part \${i + 1} \${partRes.status}\`), { body: partBody })
     parts.push({ part_number: partBody.part_number, etag: partBody.etag })
-  }
+    }
 
-  const done = await appJson("/app/upload/complete", {
-    method: "POST",
-    body: JSON.stringify({
-      upload_id: init.upload_id,
-      object_key: init.object_key,
-      parts,
-    }),
-  })
-  return done as { bucket: string; object_key: string; etag?: string }
+    // complete 成功后对象才可见，并会释放 init 创建的会话预留容量。
+    const done = await appJson("/app/upload/complete", {
+      method: "POST",
+      body: JSON.stringify({ upload_id: init.upload_id, object_key: init.object_key, parts }),
+    })
+    return done as { bucket: string; object_key: string; etag?: string }
+  } catch (error) {
+    // init 成功后，网络失败与用户取消都必须释放服务端会话。
+    await abortUpload(init).catch(() => undefined)
+    throw error
+  }
 }
 
-/** 下载：App 签发 download_url → 浏览器直连流式拉取并触发保存 */
-export async function downloadFile(objectKey: string, filename?: string) {
+async function responseToBlob(response: Response, onProgress?: (progress: DownloadProgress) => void) {
+  const total = Number(response.headers.get("content-length")) || null
+  const reader = response.body?.getReader()
+  if (!reader) return response.blob()
+
+  const chunks: Uint8Array[] = []
+  let received = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    received += value.byteLength
+    onProgress?.({ received_bytes: received, total_bytes: total })
+  }
+  return new Blob(chunks, { type: response.headers.get("content-type") || "application/octet-stream" })
+}
+
+/** 下载：App 签发 download_url -> 浏览器直连流式读取 -> 保存完整文件。 */
+export async function downloadFile(
+  objectKey: string,
+  filename?: string,
+  onProgress?: (progress: DownloadProgress) => void,
+) {
   const issued = await appJson("/app/download/url", {
     method: "POST",
     body: JSON.stringify({ object_key: objectKey }),
@@ -640,18 +723,22 @@ export async function downloadFile(objectKey: string, filename?: string) {
     const body = await res.json().catch(() => ({}))
     throw Object.assign(new Error(\`download \${res.status}\`), { body })
   }
-  const blob = await res.blob()
+  // 只有响应完整读取后才触发保存，网络中断不会生成可误用的残缺文件。
+  const blob = await responseToBlob(res, onProgress)
+  const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
-  a.href = URL.createObjectURL(blob)
+  a.href = url
   a.download = filename || objectKey.split("/").pop() || "download.bin"
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(a.href)
+  a.remove()
+  URL.revokeObjectURL(url)
   return { bytes: blob.size, object_key: objectKey }
 }
 
 // 用法：
-// const done = await uploadFile(fileInput.files[0])
-// await downloadFile(done.object_key)
+// const result = await uploadFile(fileInput.files![0])
+// await downloadFile(result.object_key, undefined, console.log)
 `,
 }
 
@@ -1243,7 +1330,7 @@ export function generateApiGuideMarkdown() {
     "",
     `- 当前业务接口版本为 **${API_VERSION}**，统一挂载在 \`${API_VERSION_PREFIX}\` 前缀下。`,
     "- 历史未带版本号的 `/api/*` 接口已经**完全下线，不再兼容**：其鉴权模型允许前端直接持有 `x-api-key`，一旦经浏览器网络面板泄露即可被冒用发起任意上传/下载，视为不安全设计，已被本页描述的能力令牌机制完全取代。",
-    "- 本页不再要求你“自由选择前后端各自的实现方式”：前端和 App 后端的职责是固定的，见下节。",
+    "- 本页固定使用 Python 编写 App 后端示例，使用 TypeScript 编写浏览器前端示例；其他技术栈请按相同接口边界自行适配。",
     "",
     "## 给开发者与 AI 的实施目标",
     "",
@@ -1269,11 +1356,7 @@ export function generateApiGuideMarkdown() {
     "",
     "Token 格式固定为 `Base64Url(Payload JSON).Base64Url(HMAC-SHA256 签名)`。Storagent 收到请求后按 `ref` 反查对应 APIKey、解密出明文重新计算签名，并核对 `act`/`key`（及 `uid`）与请求参数完全一致、未过期才放行；前端即使截获 Token，也只能在有效期内对指定文件完成指定的单一动作。",
     "",
-    "#### 能力令牌签发 · TypeScript",
-    "",
-    codeFence("typescript", API_GUIDE_CAPABILITY_TOKEN_CODE.typescript),
-    "",
-    "#### 能力令牌签发 · Python",
+    "#### 能力令牌签发 · App 后端 Python",
     "",
     codeFence("python", API_GUIDE_CAPABILITY_TOKEN_CODE.python),
     "",
@@ -1307,10 +1390,6 @@ export function generateApiGuideMarkdown() {
     "下面把推荐流程收成一份可直接照抄的最小 Demo（App 后端持有 `x-api-key` 并签发令牌；浏览器只拿 `part_token` / `download_url` 直连数据面）。",
     "实现前请先准备好上文的「能力令牌签发」与「App 后端公共请求封装」。若浏览器直连 part/download 出现 `TypeError: Failed to fetch`，先确认 Storagent 已把页面 Origin 加入 `BACKEND_CORS_ORIGINS` / `FRONT_URL`。",
     "",
-    "### App 后端业务接口 · TypeScript",
-    "",
-    codeFence("typescript", API_GUIDE_MINIMAL_DEMO["app-ts"]),
-    "",
     "### App 后端业务接口 · Python",
     "",
     codeFence("python", API_GUIDE_MINIMAL_DEMO["app-py"]),
@@ -1329,11 +1408,7 @@ export function generateApiGuideMarkdown() {
     "",
     "## App 后端公共请求封装",
     "",
-    "#### TypeScript",
-    "",
-    codeFence("typescript", API_GUIDE_SERVER_SETUP.typescript),
-    "",
-    "#### Python",
+    "#### App 后端 · Python",
     "",
     codeFence("python", API_GUIDE_SERVER_SETUP.python),
     "",
@@ -1378,7 +1453,8 @@ export function generateApiGuideMarkdown() {
       lines.push("#### 实现注意", "", ...endpoint.notes.map((note) => `- ${note}`), "")
     }
 
-    const variantOrder: ApiGuideCodeVariant[] = ["server-ts", "server-py", "browser"]
+    // 文档默认约定：App 后端为 Python，浏览器前端为 TypeScript。
+    const variantOrder: ApiGuideCodeVariant[] = ["server-py", "browser"]
     for (const variant of variantOrder) {
       const code = endpoint.examples[variant]
       if (!code) continue
@@ -1398,11 +1474,7 @@ export function generateApiGuideMarkdown() {
     "",
     markdownTable(["业务码", "含义", "建议处理"], API_GUIDE_ERROR_CODES.map((row) => [...row])),
     "",
-    "#### TypeScript",
-    "",
-    codeFence("typescript", API_GUIDE_ERROR_EXAMPLES.typescript),
-    "",
-    "#### Python",
+    "#### App 后端 · Python",
     "",
     codeFence("python", API_GUIDE_ERROR_EXAMPLES.python),
     "",

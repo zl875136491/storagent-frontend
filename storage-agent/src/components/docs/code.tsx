@@ -21,6 +21,16 @@ function highlightCode(code: string, language: string) {
   }
 }
 
+function languageTitle(language: string) {
+  const normalized = normalizeLanguage(language)
+  if (normalized === "typescript") return "TypeScript"
+  if (normalized === "javascript") return "JavaScript"
+  if (normalized === "python") return "Python"
+  if (normalized === "json") return "JSON"
+  if (normalized === "bash") return "Bash"
+  return language
+}
+
 export function DocCodeBlock({
   code,
   language = "bash",
@@ -98,7 +108,11 @@ export function DocCodeTabs({
           </button>
         ))}
       </div>
-      <DocCodeBlock code={current.code} language={current.language ?? current.id} title={current.label} />
+      <DocCodeBlock
+        code={current.code}
+        language={current.language ?? current.id}
+        title={languageTitle(current.language ?? current.id)}
+      />
     </div>
   )
 }

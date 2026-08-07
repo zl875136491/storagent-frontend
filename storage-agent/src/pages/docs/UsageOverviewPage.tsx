@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { Link } from "react-router-dom"
 import {
   FeatureWalkthrough,
   MockConsole,
@@ -14,6 +15,7 @@ const NAV = ["区域管理", "应用管理", "APIKey 管理", "MinIO 服务", "�
 export default function UsageOverviewPage() {
   const toc = useMemo(
     () => [
+      { id: "prepare", title: "接入准备", level: 2 as const },
       { id: "app", title: "应用与授权", level: 2 as const },
       { id: "apikey", title: "APIKey", level: 2 as const },
       { id: "topology", title: "复制拓扑", level: 2 as const },
@@ -32,6 +34,17 @@ export default function UsageOverviewPage() {
       <DocNote>
         普通用户聚焦「应用 → APIKey」；管理员额外负责区域 / MinIO / 授权 / 复制拓扑编辑。
       </DocNote>
+
+      <section id="prepare" className="mt-8 scroll-m-24 rounded-lg border border-border/70 bg-muted/20 p-4">
+        <h2 className="text-base font-semibold text-foreground">接入准备</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">先创建业务应用，等待管理员授权，再签发 APIKey。准备完成后到“快速开始”查看版本化的上传与下载调用时序。</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <Link className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-accent" to="/data/basic/application">1. 创建应用</Link>
+          <Link className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-accent" to="/data/basic/application">2. 等待授权</Link>
+          <Link className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-accent" to="/data/basic/api-key">3. 签发 APIKey</Link>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">APIKey 只保存在 App 后端环境变量中，用于控制面调用和能力令牌签发；不要放进浏览器或客户端包。</p>
+      </section>
 
       <section id="app" className="scroll-m-24">
         <FeatureWalkthrough

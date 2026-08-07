@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react"
-import { Download, Eye, EyeOff, KeyRound, Server } from "lucide-react"
-import { useSearchParams } from "react-router-dom"
+import { Eye, EyeOff, KeyRound, Server } from "lucide-react"
 
 import { ApiKeyProvider, useApiKey } from "@/components/guides/api-key-context"
 import { FileDownloadDemo } from "@/components/guides/file-download-demo"
@@ -10,8 +9,8 @@ import {
   useGuideDemoBackendSelection,
 } from "@/components/guides/guide-endpoints-context"
 import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
-import { DocCodeBlock } from "@/components/docs/code"
-import { LanguageBrandIcon } from "@/components/docs/language-brand-icon"
+import { DocComingSoon } from "@/components/docs/coming-soon"
+import { useGoDoc } from "@/components/docs/nav-context"
 import {
   DocHeading,
   DocLead,
@@ -19,20 +18,12 @@ import {
   DocTitle,
   useRegisterToc,
 } from "@/components/docs/primitives"
-import { DocComingSoon } from "@/components/docs/coming-soon"
 import { useDocVersion } from "@/components/docs/version-switcher"
-import { useGoDoc } from "@/components/docs/nav-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
-import {
-  COMPONENT_GUIDE_LANGUAGES,
-  generateComponentGuideMarkdown,
-  getComponentGuideContent,
-  type ComponentGuideLanguage,
-} from "./file-components-content"
-import { getApiGuideLanguage, isApiGuideLanguage } from "./api-guide-content"
+
+import { getComponentGuideContent } from "./file-components-content"
 
 function ApiKeyBox() {
   const { apiKey, setApiKey, clearApiKey } = useApiKey()
@@ -46,7 +37,7 @@ function ApiKeyBox() {
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-foreground">在线演示鉴权</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            上传和下载共用这一枚 APIKey，只在请求头 <code className="font-mono">x-api-key</code> 中发送。
+            上传和下载共用这枚 APIKey，并通过请求头 <code className="font-mono">x-api-key</code> 发送。
           </p>
         </div>
       </div>
@@ -91,52 +82,35 @@ function ApiKeyBox() {
         {apiKey ? <span className="text-[11px] text-muted-foreground">已保存，长度 {apiKey.length}</span> : null}
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        演示密钥仅用于当前浏览器的本地缓存。生产接入时请改由业务服务端保存，避免把 APIKey 放进前端包。
+        演示密钥只保存在当前浏览器。生产接入请由业务服务端保存，避免将 APIKey 放入前端包。
       </p>
     </div>
   )
 }
 
-function ComponentsGuideContent() {
+function ComponentsDemoContent() {
   const goDoc = useGoDoc()
-  const [searchParams, setSearchParams] = useSearchParams()
   const { apiKey } = useApiKey()
   const { base, setBase } = useGuideDemoBackendSelection()
   const [lastUploadedObjectKey, setLastUploadedObjectKey] = useState<string | null>(null)
   const [version] = useDocVersion()
   const versionContent = useMemo(() => getComponentGuideContent(version), [version])
-
-  const rawLanguage = searchParams.get("lang")
-  const language: ComponentGuideLanguage = isApiGuideLanguage(rawLanguage) ? rawLanguage : "typescript"
-  const languageMeta = getApiGuideLanguage(language)
   const toc = useMemo(() => {
     if (versionContent.status !== "released") {
       return [{ id: "coming-soon", title: "版本预告", level: 2 as const }]
     }
     return [
-      { id: "demo-config", title: "在线演示配置", level: 2 as const },
-      { id: "upload-demo", title: "在线上传", level: 2 as const },
-      { id: "download-demo", title: "在线下载", level: 2 as const },
-      { id: "integration-code", title: "接入代码", level: 2 as const },
+      { id: "demo-config", title: "演示配置", level: 2 as const },
+      { id: "upload-demo", title: "上传演示", level: 2 as const },
+      { id: "download-demo", title: "下载演示", level: 2 as const },
     ]
   }, [versionContent])
   useRegisterToc(toc)
 
-  const selectLanguage = (nextLanguage: ComponentGuideLanguage) => {
-    setSearchParams(
-      (previous) => {
-        const next = new URLSearchParams(previous)
-        next.set("lang", nextLanguage)
-        return next
-      },
-      { replace: true },
-    )
-  }
-
   if (versionContent.status !== "released") {
     return (
       <DocComingSoon
-        title="功能组件引导"
+        title="功能组件演示"
         version={versionContent.version}
         summary={versionContent.summary}
         highlights={versionContent.highlights}
@@ -144,67 +118,23 @@ function ComponentsGuideContent() {
     )
   }
 
-  const code = versionContent.code[language]
-  const markdownDownloadHref = `data:text/markdown;charset=utf-8,${encodeURIComponent(generateComponentGuideMarkdown(language, version))}`
-
   return (
     <div className="pb-10">
-      <div className="flex flex-col gap-5 border-b border-border/70 pb-6 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <DocTitle>功能组件引导</DocTitle>
-            <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
-              {version}
-            </span>
-          </div>
-          <DocLead>
-            用一套 APIKey 和服务端点在线验证上传、元信息查询、跨区域定位与可取消下载；上传会按文件实际大小预检 APP 配额，并在 5-64 MiB 范围内动态调整分片以满足 10,000 片上限，下方提供 TypeScript 与 Python 两种客户端实现。
-          </DocLead>
+      <div className="border-b border-border/70 pb-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <DocTitle>功能组件演示</DocTitle>
+          <span className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs font-semibold text-primary">
+            {version}
+          </span>
         </div>
-        <a
-          href={markdownDownloadHref}
-          download={`storagent-file-components-guide-${version}-${language}.md`}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`下载 ${languageMeta.label} 组件接入文档`}
-        >
-          <LanguageBrandIcon language={language} className="h-4 w-4" />
-          下载 {languageMeta.label} Markdown
-          <Download className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
-        </a>
-      </div>
-
-      <div className="sticky top-0 z-30 -mx-4 border-b border-border/70 bg-background px-4 py-3 sm:-mx-8 sm:px-8 lg:-mx-10 lg:px-10">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-xs font-medium text-foreground">示例语言</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">
-              切换后，上传、下载代码和 Markdown 文档保持一致；文档版本切换见右上角，两者互不影响、都不发请求。
-            </div>
-          </div>
-          <div className="grid w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/40 p-1 sm:w-auto" role="group" aria-label="组件示例语言">
-            {COMPONENT_GUIDE_LANGUAGES.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => selectLanguage(item.id)}
-                aria-pressed={language === item.id}
-                className={cn(
-                  "min-w-28 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                  language === item.id
-                    ? "bg-background text-foreground shadow-sm ring-1 ring-border"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        <DocLead>
+          在控制台中完成一次文件上传与下载，观察组件的配置、进度和结果联动。
+        </DocLead>
       </div>
 
       <section id="demo-config" className="mt-8 scroll-m-36">
         <DocHeading id="demo-config-heading" level={2} className="mt-0">
-          在线演示配置
+          演示配置
         </DocHeading>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <ApiKeyBox />
@@ -214,7 +144,7 @@ function ComponentsGuideContent() {
               <div className="min-w-0">
                 <h3 className="text-sm font-semibold text-foreground">共享服务端点</h3>
                 <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  上传和下载使用同一个已探测的 Storagent API 基址；切换后两处演示同时生效。
+                  上传和下载使用同一个 Storagent API 基址；切换后两处演示同时生效。
                 </p>
               </div>
             </div>
@@ -224,10 +154,18 @@ function ComponentsGuideContent() {
           </div>
         </div>
         <DocNote>
-          在线演示只验证文件接口。纯 HTTP 语义、请求字段和错误码见{" "}
+          本页只验证控制台组件交互。调用关系见
           <button
             type="button"
-            className="font-medium text-primary underline-offset-4 hover:underline"
+            className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
+            onClick={() => goDoc("getting-started")}
+          >
+            快速开始
+          </button>
+          ，请求约束见
+          <button
+            type="button"
+            className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
             onClick={() => goDoc("api-guide")}
           >
             功能接口引导
@@ -238,10 +176,10 @@ function ComponentsGuideContent() {
 
       <section id="upload-demo" className="mt-10 scroll-m-36">
         <DocHeading id="upload-demo-heading" level={2} className="mt-0">
-          在线上传
+          上传演示
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          选择文件后，演示会先拒绝空文件，再用完整文件字节数初始化 multipart，并在跨区域预留声明容量。默认分片为 5 MiB，按文件大小动态增大并向上对齐到 MiB；非末片至少 5 MiB、单片最多 64 MiB、总片数最多 10,000，因此默认策略最多支持 625 GiB，超出时会在 init 前拒绝。complete 或 abort 会释放会话预留。同一 part_number 可顺序重传，以最后一次成功上传的 ETag 和大小为准。新 APP 默认配额为 100 GiB；413049 表示配额超限，413050 表示分片过大，两者都不会原样重试。成功后 object_key 会自动带入下载演示。
+          选择文件并完成上传。成功后的 object_key 会自动填入下方下载演示。
         </p>
         <div className="mt-4">
           <FileUploadDemo
@@ -254,36 +192,13 @@ function ComponentsGuideContent() {
 
       <section id="download-demo" className="mt-10 scroll-m-36">
         <DocHeading id="download-demo-heading" level={2} className="mt-0">
-          在线下载
+          下载演示
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          下载过程实时展示完成比例、已接收数据量与传输速度，并可随时取消。若当前服务点没有副本，演示会展示可用节点并让跨节点下载沿用同一套进度控制。
+          可查看下载进度、已接收数据量和传输速度，也可取消正在进行的下载。
         </p>
         <div className="mt-4">
           <FileDownloadDemo apiKey={apiKey} baseURL={base} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
-        </div>
-      </section>
-
-      <section id="integration-code" className="mt-10 scroll-m-36">
-        <DocHeading id="integration-code-heading" level={2} className="mt-0">
-          接入代码
-        </DocHeading>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          {language === "typescript"
-            ? "完整 React 组件集成上传、object_key 回填、元信息、定位，以及带进度、速度和取消能力的跨节点下载；只依赖 React，加入项目后即可引入。"
-            : "完整 Python 客户端类封装上传、元信息、定位和流式下载；下载支持进度回调与取消事件，调用方可取得 object_key、完整上传响应或下载结果字典。"}
-        </p>
-        <div className="mt-5 space-y-5">
-          <DocCodeBlock
-            language={languageMeta.fence}
-            title={`${code.filename} · ${code.implementationTitle}`}
-            code={code.implementation}
-          />
-          <DocCodeBlock
-            language={languageMeta.fence}
-            title={`${languageMeta.label} · ${code.usageTitle}`}
-            code={code.usage}
-          />
         </div>
       </section>
     </div>
@@ -293,7 +208,7 @@ function ComponentsGuideContent() {
 function InnerPage() {
   return (
     <GuideEndpointsProvider>
-      <ComponentsGuideContent />
+      <ComponentsDemoContent />
     </GuideEndpointsProvider>
   )
 }
