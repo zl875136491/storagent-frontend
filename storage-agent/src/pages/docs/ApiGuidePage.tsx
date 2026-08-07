@@ -137,6 +137,13 @@ export default function ApiGuidePage() {
           本页固定了前后端各自的职责，不再由业务方“自由选择前后端实现”。App 后端与 Storagent 之间使用{" "}
           <code className="font-mono text-[11px]">x-api-key</code>；App 后端与浏览器前端之间约定的“能力令牌”
           由 App 后端用 x-api-key 本地签发（HMAC-SHA256），无需额外请求 Storagent。
+          浏览器要直连数据面时，Storagent 的{" "}
+          <code className="font-mono text-[11px]">BACKEND_CORS_ORIGINS</code> /{" "}
+          <code className="font-mono text-[11px]">FRONT_URL</code>{" "}
+          必须包含页面 Origin；否则预检会返回{" "}
+          <code className="font-mono text-[11px]">Disallowed CORS origin</code>，浏览器表现为{" "}
+          <code className="font-mono text-[11px]">TypeError: Failed to fetch</code>
+          （生产环境禁止使用通配符 <code className="font-mono text-[11px]">*</code>）。
         </DocNote>
         <div className="mt-4 space-y-3">
           <DocCodeTabs

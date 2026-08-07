@@ -989,6 +989,7 @@ export function generateApiGuideMarkdown() {
     "",
     "- **控制面**（`multipart/init`、`multipart/complete`、`multipart/abort`、`multipart/parts`、`object/stat`、`object/locate`）：只允许 App 后端使用 `x-api-key` 调用，浏览器前端永远不直接访问。",
     "- **数据面**（`multipart/part` 分片上传、`object/download` 下载）：浏览器前端应当直连 Storagent，但改用 App 后端签发的**能力令牌**（`token` 查询参数），不使用 `x-api-key`。",
+    "- **CORS**：浏览器直连数据面时，Storagent 的 `BACKEND_CORS_ORIGINS` / `FRONT_URL` 必须包含页面 Origin。生产环境禁止 `BACKEND_CORS_ORIGINS=[\"*\"]`；若未放行，预检返回 `Disallowed CORS origin`，浏览器表现为 `TypeError: Failed to fetch`（控制面 init 可能已成功，失败发生在随后的 part/download）。",
     "- 能力令牌由 App 后端使用共享的 `x-api-key` 明文作为 HMAC-SHA256 密钥，在本地对一份只读的能力描述签名，无需请求 Storagent（类似 S3 预签名 URL）：",
     "",
     markdownTable(
