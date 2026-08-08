@@ -13,10 +13,12 @@ import ApplicationPage from "./pages/data/ApplicationPage"
 import BucketPage from "./pages/data/BucketPage"
 import StorageBucketManagePage from "./pages/data/StorageBucketManagePage"
 import DocsPage from "./pages/docs/DocsPage"
-import AIConfigPage from "./pages/admin/AIConfigPage"
 import UserRolePage from "./pages/admin/UserRolePage"
 import UsagePage from "./pages/admin/UsagePage"
 import StorageOperationsPage from "./pages/admin/StorageOperationsPage"
+
+// AI configuration and assistant routes are intentionally not registered.
+// Their source remains under pages/admin and features/ai for a later re-enable.
 
 export function App() {
   return (
@@ -45,7 +47,6 @@ export function App() {
                 </Route>
               </Route>
               <Route path="docs" element={<DocsPage />} />
-              <Route path="admin/ai" element={<AIConfigPage />} />
               <Route path="admin/users" element={<UserRolePage />} />
               <Route path="admin/usage" element={<UsagePage />} />
               <Route path="admin/storage-operations" element={<StorageOperationsPage />} />

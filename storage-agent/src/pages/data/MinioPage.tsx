@@ -1,35 +1,16 @@
 import { useEffect, useState } from "react"
-import { Check, Pencil, Plus, X } from "lucide-react"
+import { Check, Pencil, X } from "lucide-react"
 import { useAuth } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
-  createMinioServerApi,
   fetchMinioServersApi,
-  fetchRegionsApi,
   updateMinioServerApi,
   type MinioServer,
-  type MinioServerCreateRequest,
-  type Region,
 } from "../../api/client"
 import { showErrorToast } from "../../api/toast"
-import { Modal } from "../../components/Modal"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
-import { DialogFooter } from "../../components/ui/dialog"
 import { Input } from "../../components/ui/input"
-import { Label } from "../../components/ui/label"
-
-const emptyCreateForm = (): MinioServerCreateRequest => ({
-  region: "",
-  name: "",
-  domain: "",
-  host: "",
-  server_port: 9000,
-  minio_port: 9000,
-  access_key: "",
-  secret_key: "",
-  replicate_weight: 0,
-})
 
 export default function MinioPage() {
   const { accessToken, user } = useAuth()
@@ -40,11 +21,6 @@ export default function MinioPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftWeight, setDraftWeight] = useState("")
   const [savingId, setSavingId] = useState<string | null>(null)
-
-  const [showCreate, setShowCreate] = useState(false)
-  const [regions, setRegions] = useState<Region[]>([])
-  const [createForm, setCreateForm] = useState<MinioServerCreateRequest>(emptyCreateForm)
-  const [creating, setCreating] = useState(false)
 
   const loadServers = async () => {
     setLoading(true)
@@ -69,56 +45,6 @@ export default function MinioPage() {
       setDraftWeight("")
     }
   }, [isAdmin])
-
-  const openCreate = () => {
-    setCreateForm(emptyCreateForm())
-    setShowCreate(true)
-    fetchRegionsApi(accessToken ?? undefined)
-      .then((resp) => {
-        setRegions(resp.data)
-        if (resp.data.length > 0) {
-          setCreateForm((f) => ({ ...f, region: resp.data[0].id }))
-        }
-      })
-      .catch(() => {
-        setRegions([])
-      })
-  }
-
-  const handleCreate = async () => {
-    if (!createForm.region) {
-      showErrorToast("请选择区域")
-      return
-    }
-    if (!createForm.name.trim() || !createForm.domain.trim() || !createForm.host.trim()) {
-      showErrorToast("请填写名称、Domain 与 MinIO FQDN")
-      return
-    }
-    if (!createForm.access_key.trim() || !createForm.secret_key.trim()) {
-      showErrorToast("请填写 Access Key 与 Secret Key")
-      return
-    }
-    setCreating(true)
-    try {
-      await createMinioServerApi(
-        {
-          ...createForm,
-          name: createForm.name.trim(),
-          domain: createForm.domain.trim().toLowerCase(),
-          host: createForm.host.trim(),
-          access_key: createForm.access_key.trim(),
-          secret_key: createForm.secret_key.trim(),
-        },
-        accessToken ?? undefined,
-      )
-      setShowCreate(false)
-      void loadServers()
-    } catch {
-      // toast
-    } finally {
-      setCreating(false)
-    }
-  }
 
   const startEditWeight = (server: MinioServer) => {
     setEditingId(server.id)
@@ -167,12 +93,6 @@ export default function MinioPage() {
             查看已注册的 MinIO 存储服务实例及其与区域的关联；复制集权重用于跨站复制调度。
           </p>
         </div>
-        {isAdmin ? (
-          <Button type="button" size="md" onClick={openCreate}>
-            <Plus className="mr-1 h-4 w-4" aria-hidden />
-            注册 MinIO
-          </Button>
-        ) : null}
       </div>
 
       {loading ? (
@@ -186,11 +106,7 @@ export default function MinioPage() {
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">
             <div className="text-sm font-medium text-foreground">暂无 MinIO 服务配置</div>
-            <div className="text-xs text-muted-foreground">
-              {isAdmin
-                ? "点击右上角「注册 MinIO」添加第一个服务实例。"
-                : "当前系统尚未注册任何 MinIO 服务，请联系管理员完成配置。"}
-            </div>
+            <div className="text-xs text-muted-foreground">当前系统尚未注册任何 MinIO 服务，请联系管理员完成配置。</div>
           </CardContent>
         </Card>
       ) : (
@@ -301,124 +217,6 @@ export default function MinioPage() {
             </Card>
           ))}
         </div>
-      )}
-
-      {showCreate && (
-        <Modal title="注册 MinIO 服务" onClose={() => setShowCreate(false)}>
-          <div className="space-y-3 p-1 text-sm">
-            <div>
-              <Label className="mb-1 block text-xs">所属区域</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={createForm.region}
-                onChange={(e) => setCreateForm((f) => ({ ...f, region: e.target.value }))}
-              >
-                {regions.length === 0 ? (
-                  <option value="">暂无区域，请先创建</option>
-                ) : (
-                  regions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.shown_name} ({r.name})
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="mb-1 block text-xs">名称</Label>
-                <Input
-                  value={createForm.name}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="例如 beijing-minio"
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">Domain</Label>
-                <Input
-                  value={createForm.domain}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, domain: e.target.value }))}
-                  placeholder="stor.1oa.com.cn"
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">MinIO 主机</Label>
-                <Input
-                  value={createForm.host}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, host: e.target.value }))}
-                  placeholder="10.0.0.1"
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">API 端口 (server_port)</Label>
-                <Input
-                  type="number"
-                  value={createForm.server_port}
-                  onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, server_port: Number(e.target.value) || 0 }))
-                  }
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">MinIO 端口 (minio_port)</Label>
-                <Input
-                  type="number"
-                  value={createForm.minio_port}
-                  onChange={(e) =>
-                    setCreateForm((f) => ({ ...f, minio_port: Number(e.target.value) || 0 }))
-                  }
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">Access Key</Label>
-                <Input
-                  value={createForm.access_key}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, access_key: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">Secret Key</Label>
-                <Input
-                  type="password"
-                  value={createForm.secret_key}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, secret_key: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label className="mb-1 block text-xs">复制集权重</Label>
-                <Input
-                  type="number"
-                  value={createForm.replicate_weight ?? 0}
-                  onChange={(e) =>
-                    setCreateForm((f) => ({
-                      ...f,
-                      replicate_weight: Number(e.target.value) || 0,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={creating}
-                onClick={() => setShowCreate(false)}
-              >
-                取消
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={creating || regions.length === 0}
-                onClick={() => void handleCreate()}
-              >
-                {creating ? "注册中…" : "确认注册"}
-              </Button>
-            </DialogFooter>
-          </div>
-        </Modal>
       )}
     </div>
   )

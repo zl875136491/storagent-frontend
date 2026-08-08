@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
 import {
   BookOpen,
   Boxes,
@@ -10,8 +10,6 @@ import {
   Globe2,
   KeyRound,
   LogOut,
-  Settings2,
-  Sparkles,
   UserRound,
   Users,
   Wrench,
@@ -20,12 +18,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useAuth } from "../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../auth/permissions"
 import { useNavigationLeaveBlock } from "../contexts/NavigationLeaveBlockContext"
-import {
-  fetchAIChatCompletionProxy,
-  fetchAIRuntimeConfigApi,
-  type AIRuntimeConfig,
-  type UserProfile,
-} from "../api/client"
+import { type UserProfile } from "../api/client"
 import { Button } from "../components/ui/button"
 import {
   SidebarProvider,
@@ -41,8 +34,6 @@ import {
 } from "../components/ui/sidebar"
 import { BackendEndpointSwitcher } from "../components/BackendEndpointSwitcher"
 import { ModeToggle } from "../components/mode-toggle"
-import { PageAgent } from "page-agent"
-import { showErrorToast } from "../api/toast"
 import { cn } from "../lib/utils"
 
 export default function AppLayout() {
@@ -166,15 +157,13 @@ function HeaderUserMenu({
 }
 
 function AppShell() {
-  const { user, logout, accessToken } = useAuth()
+  const { user, logout } = useAuth()
   const canManageUsers = hasPermission(user, PERMISSIONS.userManage)
   const canOperateStorage = hasPermission(user, PERMISSIONS.storageOperationsManage)
   const showSystemManagement = Boolean(user?.is_admin || canManageUsers || canOperateStorage)
   const location = useLocation()
   const { confirmIfBlocking } = useNavigationLeaveBlock()
   const { closeMobileDrawer } = useSidebar()
-  const [aiConfig, setAIConfig] = useState<AIRuntimeConfig | null>(null)
-  const [aiConfigLoading, setAIConfigLoading] = useState(true)
   const isDocsRoute = location.pathname === "/docs"
 
   const handleNavClick = useCallback(
@@ -187,48 +176,6 @@ function AppShell() {
     },
     [confirmIfBlocking, closeMobileDrawer],
   )
-
-  const loadAIConfig = useCallback(async () => {
-    if (!accessToken) {
-      setAIConfig(null)
-      setAIConfigLoading(false)
-      return
-    }
-    setAIConfigLoading(true)
-    try {
-      setAIConfig(await fetchAIRuntimeConfigApi(accessToken))
-    } catch {
-      setAIConfig(null)
-    } finally {
-      setAIConfigLoading(false)
-    }
-  }, [accessToken])
-
-  useEffect(() => {
-    void loadAIConfig()
-    const reload = () => void loadAIConfig()
-    window.addEventListener("storagent:ai-config-updated", reload)
-    return () => window.removeEventListener("storagent:ai-config-updated", reload)
-  }, [loadAIConfig])
-
-  const pageAgent = useMemo(() => {
-    if (!aiConfig?.enabled || !aiConfig.configured) return null
-    try {
-      return new PageAgent({
-        model: aiConfig.model,
-        baseURL: "/api/v1/ai/openai/v1",
-        customFetch: fetchAIChatCompletionProxy,
-        language: "zh-CN",
-        maxSteps: aiConfig.max_steps,
-      })
-    } catch {
-      return null
-    }
-  }, [aiConfig])
-
-  useEffect(() => {
-    return () => pageAgent?.dispose()
-  }, [pageAgent])
 
   return (
     <div className="flex h-screen min-w-0 overflow-hidden bg-background text-foreground">
@@ -330,15 +277,6 @@ function AppShell() {
                       )}
                     </NavLink>
                   ) : null}
-                  {user?.is_admin ? (
-                    <NavLink to="/admin/ai" onClick={handleNavClick}>
-                      {({ isActive }) => (
-                        <SidebarMenuButton active={isActive} icon={<Settings2 aria-hidden />}>
-                          AI 助手配置
-                        </SidebarMenuButton>
-                      )}
-                    </NavLink>
-                  ) : null}
                 </SidebarMenu>
               </div>
             ) : null}
@@ -346,25 +284,6 @@ function AppShell() {
 
           <div className="mt-auto border-t border-sidebar-border/60 pt-6">
             <SidebarSectionTitle>文档中心</SidebarSectionTitle>
-            <SidebarMenu>
-              <SidebarMenuButton
-                icon={<Sparkles aria-hidden />}
-                onClick={() => {
-                  if (aiConfigLoading) {
-                    showErrorToast("AI 助手配置正在加载")
-                    return
-                  }
-                  if (!pageAgent) {
-                    showErrorToast("AI 助手尚未启用或配置不可用")
-                    return
-                  }
-                  void pageAgent.panel.show()
-                  closeMobileDrawer()
-                }}
-              >
-                AI 助手
-              </SidebarMenuButton>
-            </SidebarMenu>
             <SidebarMenu>
               <NavLink to="/docs" onClick={handleNavClick}>
                 {({ isActive }) => (
