@@ -7,7 +7,7 @@ RUN npm ci
 
 COPY storage-agent/ ./
 
-ARG STORAGENT_API_SERVERS=http://10.41.102.223:6783,http://10.32.129.241:6783,http://10.17.158.115:6783,http://10.8.136.107:6783,http://10.31.133.207:6783
+ARG STORAGENT_API_SERVERS=/server/local,/server/bj,/server/tj,/server/ks,/server/sz,/server/hz
 ENV STORAGENT_API_SERVERS=${STORAGENT_API_SERVERS}
 
 RUN npm run ci
@@ -27,4 +27,3 @@ EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
-

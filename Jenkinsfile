@@ -12,8 +12,8 @@ pipeline {
     parameters {
         string(
             name: 'STORAGENT_API_SERVERS',
-            defaultValue: 'http://10.41.102.223:6783,http://10.32.129.241:6783,http://10.17.158.115:6783,http://10.8.136.107:6783,http://10.31.133.207:6783',
-            description: 'Backend candidate URLs as a JSON array or comma-separated list'
+            defaultValue: '/server/local,/server/bj,/server/tj,/server/ks,/server/sz,/server/hz',
+            description: 'Same-origin Nginx backend gateway paths as a JSON array or comma-separated list'
         )
     }
 

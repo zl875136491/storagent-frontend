@@ -112,6 +112,57 @@ export default function ApiGuidePage() {
           控制面调用与能力令牌签发；App 前端固定为 TypeScript，负责携带 token 直连数据面。其他技术栈不再
           提供并列示例，应依据相同的接口、认证和输入输出约束自行适配。
         </DocNote>
+        <DocNote>
+          <strong className="text-foreground">生产网关基址：</strong>浏览器使用同源路径而不是区域 IP 直连。
+          当前区域可用 <code className="font-mono text-[11px]">/server/local</code>，指定区域使用
+          <code className="ml-1 font-mono text-[11px]">/server/bj</code>、
+          <code className="ml-1 font-mono text-[11px]">/server/tj</code>、
+          <code className="ml-1 font-mono text-[11px]">/server/ks</code>、
+          <code className="ml-1 font-mono text-[11px]">/server/sz</code> 或
+          <code className="ml-1 font-mono text-[11px]">/server/hz</code>。每台服务器将
+          <code className="ml-1 font-mono text-[11px]">stor.1oa.com.cn</code> 解析到本机 Nginx，因此页面和 API
+          始终保持同源。
+        </DocNote>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-border/70">
+          <table className="w-full min-w-[38rem] text-left text-xs">
+            <thead className="border-b border-border/70 bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">目标区域</th>
+                <th className="px-3 py-2 font-medium">STORAGENT_BASE_URL</th>
+                <th className="px-3 py-2 font-medium">说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["当前服务器", "http://stor.1oa.com.cn/server/local", "每台服务器都指向自己的后端"],
+                ["北京", "http://stor.1oa.com.cn/server/bj", "指定北京后端"],
+                ["天津", "http://stor.1oa.com.cn/server/tj", "指定天津后端"],
+                ["昆山", "http://stor.1oa.com.cn/server/ks", "指定昆山后端"],
+                ["深圳", "http://stor.1oa.com.cn/server/sz", "指定深圳后端"],
+                ["杭州", "http://stor.1oa.com.cn/server/hz", "指定杭州后端"],
+              ].map(([region, baseUrl, description]) => (
+                <tr key={region} className="border-b border-border/50 last:border-b-0">
+                  <td className="px-3 py-2 text-foreground">{region}</td>
+                  <td className="px-3 py-2 font-mono text-[11px] text-foreground">{baseUrl}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <DocCodeBlock
+          className="mt-4"
+          language="bash"
+          title="App 后端环境变量与完整调用地址"
+          code={`# 选择目标区域；示例为北京。local 表示当前机器的后端。
+export STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/bj
+
+# 所有接口都将 API 路径直接追加到该基址。
+curl -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \
+  -H "x-api-key: $STORAGENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"object_key":"path/to/file.bin"}'`}
+        />
       </section>
 
       <section id="planes" className="mt-10 scroll-m-36">
@@ -123,7 +174,7 @@ export default function ApiGuidePage() {
             <Server className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
             <div className="mt-2 text-xs font-semibold text-foreground">Base URL</div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              使用 Storagent API 根地址，例如 https://storagent.example.com；通过公共端点探测就近选择。
+              App 后端设置完整网关地址，例如 http://stor.1oa.com.cn/server/bj；请求时追加 /api/v1/...。
             </p>
           </div>
           <div className="rounded-lg border border-border/70 p-3">

@@ -8,7 +8,7 @@ import {
   setApiBaseUrl,
   type PublicEndpointItem,
 } from "@/api/client"
-import { probeBackendEndpointReachable } from "@/api/backendResolver"
+import { apiBaseForEndpoint, probeBackendEndpointReachable } from "@/api/backendResolver"
 import { setStoredApiBase } from "@/api/apiBaseStorage"
 import { showErrorToast } from "@/api/toast"
 import { cn } from "@/lib/utils"
@@ -81,10 +81,10 @@ export function BackendEndpointSwitcher() {
     }
   }, [open])
 
-  const selected = items.find((it) => normalizeEndpoint(it.endpoint) === currentBase)
+  const selected = items.find((it) => normalizeEndpoint(apiBaseForEndpoint(it)) === currentBase)
 
   const handlePick = async (item: PublicEndpointItem) => {
-    const next = normalizeEndpoint(item.endpoint)
+    const next = normalizeEndpoint(apiBaseForEndpoint(item))
     if (next === currentBase) {
       setOpen(false)
       return
@@ -230,7 +230,7 @@ export function BackendEndpointSwitcher() {
           ) : (
             <ul className="space-y-0.5">
               {items.map((item) => {
-                const active = normalizeEndpoint(item.endpoint) === currentBase
+                const active = normalizeEndpoint(apiBaseForEndpoint(item)) === currentBase
                 return (
                   <li key={`${item.server_id}-${item.endpoint}`} role="none">
                     <button

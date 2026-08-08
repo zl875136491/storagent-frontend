@@ -29,8 +29,8 @@ function normalizeEnvironmentServerList(values: unknown[]): string[] {
     }
 
     const url = value.trim()
-    if (!/^https?:\/\//i.test(url)) {
-      throw new Error(`STORAGENT_API_SERVERS entry must use http or https: ${url}`)
+    if (!/^https?:\/\//i.test(url) && !/^\/server\/[a-z0-9-]+$/i.test(url)) {
+      throw new Error(`STORAGENT_API_SERVERS entry must use http(s) or a /server/{region} gateway path: ${url}`)
     }
     return url
   })

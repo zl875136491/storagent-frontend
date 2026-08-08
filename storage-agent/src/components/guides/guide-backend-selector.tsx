@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react"
 
-import { normalizePublicApiBase } from "@/api/backendResolver"
+import { apiBaseForEndpoint, normalizePublicApiBase } from "@/api/backendResolver"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
@@ -80,7 +80,7 @@ export function GuideBackendSelector({ value, onChange }: Props) {
       </p>
       <RadioGroup value={value} onValueChange={onChange} className="flex flex-wrap gap-2">
         {displayItems.map((it) => {
-          const base = normalizePublicApiBase(it.endpoint)
+          const base = normalizePublicApiBase(apiBaseForEndpoint(it))
           const h = healthByBase.get(base)
           const selectable = h?.status === "ok"
           return (

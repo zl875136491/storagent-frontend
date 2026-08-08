@@ -27,6 +27,18 @@ export interface ProbeLine {
   status: "pending" | "fail" | "success"
 }
 
+/**
+ * 生产环境通过本机 DNS 将 stor.1oa.com.cn 解析到当前区域的宿主 Nginx。
+ * 浏览器始终请求同源网关路径，Nginx 再根据该短码转发到目标区域。
+ */
+const REGION_GATEWAY_SEGMENTS: Record<string, string> = {
+  beijing: "bj",
+  tianjin: "tj",
+  kunshan: "ks",
+  shenzhen: "sz",
+  hangzhou: "hz",
+}
+
 function normalizeBase(url: string): string {
   return url.trim().replace(/\/$/, "")
 }
@@ -34,6 +46,27 @@ function normalizeBase(url: string): string {
 /** 公共 API 基址规范化（与列表项 `endpoint` 一致） */
 export function normalizePublicApiBase(url: string): string {
   return normalizeBase(url)
+}
+
+/** 将服务端返回的区域记录转换为浏览器实际使用的同源 Nginx 基址。 */
+export function apiBaseForEndpoint(endpoint: Pick<PublicEndpointItem, "name" | "endpoint">): string {
+  const segment = REGION_GATEWAY_SEGMENTS[endpoint.name.trim().toLowerCase()]
+  return segment ? `/server/${segment}` : normalizeBase(endpoint.endpoint)
+}
+
+/**
+ * 将 locate 返回的绝对 URL 收敛到同源网关。
+ * 未登记的区域保留原 URL，避免未知的新区域在前端被错误改写。
+ */
+export function gatewayUrlForRegion(region: string, url: string): string {
+  const segment = REGION_GATEWAY_SEGMENTS[region.trim().toLowerCase()]
+  if (!segment) return url
+  try {
+    const target = new URL(url)
+    return `/server/${segment}${target.pathname}${target.search}${target.hash}`
+  } catch {
+    return url
+  }
 }
 
 const PUBLIC_ENDPOINT_TEST_PATH = "/api/v1/public/endpoints/test"
@@ -68,6 +101,9 @@ export async function probePublicEndpointTest(
 /** 从基址 URL 提取用于展示的 IP/主机与端口 */
 export function hostPortLabel(baseUrl: string): string {
   const raw = normalizeBase(baseUrl)
+  // Same-origin gateway bases are paths rather than host URLs. Keeping the
+  // original path makes the startup probe list match the Nginx routes users see.
+  if (raw.startsWith("/")) return raw
   try {
     const withProto = raw.includes("://") ? raw : `http://${raw}`
     const u = new URL(withProto)
@@ -107,7 +143,7 @@ async function tryMasterEndpointFromProbeBase(baseUrl: string): Promise<string |
   if (!json?.data?.length) return null
   const master = json.data.find((e) => e.master === true)
   if (!master?.endpoint) return null
-  return normalizeBase(master.endpoint)
+  return apiBaseForEndpoint(master)
 }
 
 let probeLineSeq = 0

@@ -5,7 +5,7 @@ import {
   showSuccessToast,
 } from "./toast"
 import type { PublicEndpointsResponse } from "./backendResolver"
-import { failoverToAlternateBackend } from "./backendResolver"
+import { apiBaseForEndpoint, failoverToAlternateBackend } from "./backendResolver"
 import { CANDIDATE_SERVER_LIST } from "../config/serverList"
 import { setStoredApiBase } from "./apiBaseStorage"
 
@@ -1637,7 +1637,7 @@ export async function fetchUsageAcrossRegionsApi(
     targets.map(async (item) => ({
       item,
       response: await fetchUsageAtEndpoint(
-        item.endpoint,
+        apiBaseForEndpoint(item),
         item.region_id,
         item.shown_name,
         params,
@@ -1653,7 +1653,7 @@ export async function fetchUsageAcrossRegionsApi(
       data.push(result.value.response)
     } else {
       failures.push({
-        endpoint: item.endpoint,
+        endpoint: apiBaseForEndpoint(item),
         region: item.shown_name || item.region_id,
         message: result.reason instanceof Error ? result.reason.message : "请求失败",
       })

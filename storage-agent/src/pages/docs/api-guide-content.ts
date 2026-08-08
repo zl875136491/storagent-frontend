@@ -208,6 +208,8 @@ from typing import Any
 
 import requests
 
+# 生产示例：http://stor.1oa.com.cn/server/bj。
+# 使用 /server/local 时，Nginx 将请求转发给当前服务器本地后端。
 BASE_URL = os.getenv("STORAGENT_BASE_URL", "").rstrip("/")
 API_KEY = os.getenv("STORAGENT_API_KEY")
 
@@ -1334,7 +1336,25 @@ export function generateApiGuideMarkdown() {
     "",
     "## 给开发者与 AI 的实施目标",
     "",
-    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工，不要让浏览器前端持有 `x-api-key`。",
+    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。生产服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。将目标区域的完整基址写入 App 后端环境变量 `STORAGENT_BASE_URL`，然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/bj` 时，`POST /api/v1/files/object/stat` 的完整地址就是 `http://stor.1oa.com.cn/server/bj/api/v1/files/object/stat`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工，不要让浏览器前端持有 `x-api-key`。",
+    "",
+    "## 生产网关基址",
+    "",
+    "每台生产服务器都把 `stor.1oa.com.cn` 解析到自身宿主 Nginx。Nginx 根据 `/server/{region}` 将请求转发到对应的 Storagent 后端；`local` 永远表示发起请求的当前服务器。API 路径中的 `/server/{region}` 前缀会由 Nginx 移除，后端实际收到的仍是 `/api/v1/...`。",
+    "",
+    markdownTable(
+      ["目标区域", "STORAGENT_BASE_URL", "完整接口示例"],
+      [
+        ["当前服务器", "`http://stor.1oa.com.cn/server/local`", "`http://stor.1oa.com.cn/server/local/api/v1/public/endpoints`"],
+        ["北京", "`http://stor.1oa.com.cn/server/bj`", "`http://stor.1oa.com.cn/server/bj/api/v1/public/endpoints`"],
+        ["天津", "`http://stor.1oa.com.cn/server/tj`", "`http://stor.1oa.com.cn/server/tj/api/v1/public/endpoints`"],
+        ["昆山", "`http://stor.1oa.com.cn/server/ks`", "`http://stor.1oa.com.cn/server/ks/api/v1/public/endpoints`"],
+        ["深圳", "`http://stor.1oa.com.cn/server/sz`", "`http://stor.1oa.com.cn/server/sz/api/v1/public/endpoints`"],
+        ["杭州", "`http://stor.1oa.com.cn/server/hz`", "`http://stor.1oa.com.cn/server/hz/api/v1/public/endpoints`"],
+      ],
+    ),
+    "",
+    "App 后端配置示例：`STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/bj`。随后请求 `POST ${BASE_URL}/api/v1/files/object/stat`，并仅在 App 后端附加 `x-api-key` 请求头。浏览器页面位于同一网关时可使用相对路径 `/server/bj/api/v1/...`；浏览器不得持有 `x-api-key`。",
     "",
     "## 控制面 / 数据面与能力令牌",
     "",

@@ -14,6 +14,7 @@ import {
   type ObjectLocationItem,
   type ObjectLocateResponse,
 } from "@/api/client"
+import { gatewayUrlForRegion } from "@/api/backendResolver"
 import { formatBytes } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -275,8 +276,8 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
     const query = new URLSearchParams({ object_key: key, offset: "0", length: "0" })
     const target: DownloadTarget = location
       ? {
-          downloadURL: location.download_url,
-          statURL: location.stat_url,
+          downloadURL: gatewayUrlForRegion(location.region, location.download_url),
+          statURL: gatewayUrlForRegion(location.region, location.stat_url),
           statBody: location.stat_body,
         }
       : {
