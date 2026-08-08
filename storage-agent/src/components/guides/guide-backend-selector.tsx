@@ -76,7 +76,7 @@ export function GuideBackendSelector({ value, onChange }: Props) {
     <div className="space-y-2">
       <Label className="text-muted-foreground">后端服务</Label>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        通过 <span className="font-mono">GET /api/v1/public/endpoints/test</span> 探测；不可选项为失败；默认可用时延最低者。
+        使用 endpoints 返回的 Domain 网关调用 <span className="font-mono">GET /api/v1/public/endpoints/test</span> 探测；不可选项为失败；默认可用时延最低者。
       </p>
       <RadioGroup value={value} onValueChange={onChange} className="flex flex-wrap gap-2">
         {displayItems.map((it) => {
@@ -94,6 +94,9 @@ export function GuideBackendSelector({ value, onChange }: Props) {
               <span className="flex min-w-0 max-w-full items-center gap-2">
                 <span className="min-w-0 max-w-[9rem] truncate text-xs font-medium text-foreground sm:max-w-[11rem]">
                   {it.shown_name}
+                </span>
+                <span className="min-w-0 max-w-[11rem] truncate font-mono text-[10px] text-muted-foreground" title={base}>
+                  {it.domain || base}
                 </span>
                 <StatusBadge h={h} />
               </span>

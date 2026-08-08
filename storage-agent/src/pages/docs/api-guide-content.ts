@@ -750,7 +750,7 @@ export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
     method: "GET",
     path: "/api/v1/public/endpoints",
     summary: "列出服务端点",
-    description: "返回所有区域的 Storagent 与 MinIO 地址。浏览器前端可直接调用（公共信息，不含任何凭据），用于探测各 Storagent endpoint 并选择低时延节点。",
+    description: "返回所有区域的 Storagent 网关域名、API 基址和 MinIO 内网地址。浏览器前端以 domain + endpoint 为唯一探测来源，不再根据 IP 地址选择服务。",
     plane: "public",
     authentication: "public",
     params: [
@@ -762,8 +762,9 @@ export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
           { name: "data[].name", type: "string", required: true, description: "稳定区域标识，如 beijing" },
           { name: "data[].shown_name", type: "string", required: true, description: "区域展示名称" },
           { name: "data[].master", type: "boolean", required: true, description: "是否为该区域主节点" },
-          { name: "data[].endpoint", type: "string", required: true, description: "Storagent API 基址" },
-          { name: "data[].minio_endpoint", type: "string", required: true, description: "MinIO 地址，仅作拓扑信息使用" },
+          { name: "data[].domain", type: "string", required: true, description: "对外 Nginx 网关域名，例如 stor.1oa.com.cn；不含协议和路径" },
+          { name: "data[].endpoint", type: "string", required: true, description: "基于 domain 的 Storagent 网关基址，例如 http://stor.1oa.com.cn/server/bj" },
+          { name: "data[].minio_endpoint", type: "string", required: true, description: "MinIO 内网地址，仅作拓扑和运维信息使用，不能作为浏览器 API 基址" },
         ],
       },
     ],
@@ -775,13 +776,15 @@ export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
   name: string
   shown_name: string
   master: boolean
+  domain: string
   endpoint: string
   minio_endpoint: string
 }
 
-const response = await fetch("https://storagent.example.com/api/v1/public/endpoints")
+const response = await fetch("/server/local/api/v1/public/endpoints")
 const { data } = (await response.json()) as { data: Endpoint[] }
-console.table(data.map(({ name, endpoint, master }) => ({ name, endpoint, master })))`,
+// 使用服务端给出的 domain 网关地址探测，不要从 MinIO host:port 推导 API 地址。
+console.table(data.map(({ name, domain, endpoint, master }) => ({ name, domain, endpoint, master })))`,
     },
     response: `{
   "data": [
@@ -791,8 +794,9 @@ console.table(data.map(({ name, endpoint, master }) => ({ name, endpoint, master
       "name": "hangzhou",
       "shown_name": "杭州",
       "master": true,
-      "endpoint": "https://hz.example.com",
-      "minio_endpoint": "https://hz-minio.example.com"
+      "domain": "stor.1oa.com.cn",
+      "endpoint": "http://stor.1oa.com.cn/server/hz",
+      "minio_endpoint": "http://10.31.133.207:9000"
     }
   ]
 }`,
@@ -802,14 +806,14 @@ console.table(data.map(({ name, endpoint, master }) => ({ name, endpoint, master
     method: "GET",
     path: "/api/v1/public/endpoints/test",
     summary: "探测端点延迟",
-    description: "返回 512 字节随机二进制，避免缓存干扰。浏览器前端对候选 endpoint 并发探测，优先选择可达且耗时最低的节点，作为后续数据面直传/直连下载的目标地址。",
+    description: "返回 512 字节随机二进制，避免缓存干扰。浏览器前端对 endpoints 返回的 domain 网关地址并发探测，优先选择可达且耗时最低的节点；不得将 MinIO 内网 IP 用作探测地址。",
     plane: "public",
     authentication: "public",
     params: [],
     notes: ["响应类型为 application/octet-stream，不是 JSON。生产实现应设置超时，并定期重新探测。"],
     examples: {
       browser: `const startedAt = performance.now()
-const response = await fetch("https://storagent.example.com/api/v1/public/endpoints/test")
+const response = await fetch("http://stor.1oa.com.cn/server/bj/api/v1/public/endpoints/test")
 const payload = new Uint8Array(await response.arrayBuffer())
 console.log({ bytes: payload.byteLength, elapsedMs: performance.now() - startedAt })`,
     },

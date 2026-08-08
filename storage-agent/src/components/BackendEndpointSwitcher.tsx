@@ -146,7 +146,7 @@ export function BackendEndpointSwitcher() {
             <>
               <div
                 className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-tight sm:hidden"
-                title={`${selected.name} · ${selected.endpoint}`}
+                title={`${selected.name} · ${apiBaseForEndpoint(selected)}`}
               >
                 <span className="min-w-0 flex-1 truncate font-semibold text-foreground">
                   {selected.shown_name}
@@ -170,9 +170,9 @@ export function BackendEndpointSwitcher() {
                 </span>
                 <span
                   className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground"
-                  title={selected.endpoint}
+                  title={apiBaseForEndpoint(selected)}
                 >
-                  {selected.endpoint}
+                  {apiBaseForEndpoint(selected)}
                 </span>
                 {selected.master ? (
                   <span className="shrink-0 rounded bg-primary/15 px-1 py-px text-[9px] font-medium text-primary">
@@ -232,7 +232,7 @@ export function BackendEndpointSwitcher() {
               {items.map((item) => {
                 const active = normalizeEndpoint(apiBaseForEndpoint(item)) === currentBase
                 return (
-                  <li key={`${item.server_id}-${item.endpoint}`} role="none">
+                  <li key={`${item.server_id}-${item.domain ?? item.endpoint}`} role="none">
                     <button
                       type="button"
                       role="option"
@@ -258,11 +258,11 @@ export function BackendEndpointSwitcher() {
                         className="min-w-0 truncate font-mono text-[10px] leading-none text-muted-foreground/95"
                         title={
                           item.minio_endpoint
-                            ? `API: ${item.endpoint}\nMinIO: ${item.minio_endpoint}`
-                            : item.endpoint
+                            ? `Domain: ${item.domain ?? "未配置"}\nAPI: ${apiBaseForEndpoint(item)}\nMinIO: ${item.minio_endpoint}`
+                            : apiBaseForEndpoint(item)
                         }
                       >
-                        {item.endpoint}
+                        {apiBaseForEndpoint(item)}
                       </span>
                       {item.master ? (
                         <span className="justify-self-end rounded bg-primary/15 px-1 py-px text-[9px] font-medium text-primary">

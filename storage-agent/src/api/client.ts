@@ -154,6 +154,8 @@ export interface MinioServer {
   id: string
   region: SimpleRegion
   name: string
+  /** 对外 Nginx 网关域名；不含协议、端口和路径 */
+  domain: string
   host: string
   /** 对外服务 / 代理端口 */
   server_port: number
@@ -171,6 +173,7 @@ export interface MinioServerListResponse {
 export interface MinioServerCreateRequest {
   region: string
   name: string
+  domain: string
   host: string
   server_port: number
   minio_port: number

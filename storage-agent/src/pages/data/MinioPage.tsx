@@ -22,6 +22,7 @@ import { Label } from "../../components/ui/label"
 const emptyCreateForm = (): MinioServerCreateRequest => ({
   region: "",
   name: "",
+  domain: "",
   host: "",
   server_port: 9000,
   minio_port: 9000,
@@ -89,8 +90,8 @@ export default function MinioPage() {
       showErrorToast("请选择区域")
       return
     }
-    if (!createForm.name.trim() || !createForm.host.trim()) {
-      showErrorToast("请填写名称与主机地址")
+    if (!createForm.name.trim() || !createForm.domain.trim() || !createForm.host.trim()) {
+      showErrorToast("请填写名称、Domain 与 MinIO FQDN")
       return
     }
     if (!createForm.access_key.trim() || !createForm.secret_key.trim()) {
@@ -103,6 +104,7 @@ export default function MinioPage() {
         {
           ...createForm,
           name: createForm.name.trim(),
+          domain: createForm.domain.trim().toLowerCase(),
           host: createForm.host.trim(),
           access_key: createForm.access_key.trim(),
           secret_key: createForm.secret_key.trim(),
@@ -220,16 +222,18 @@ export default function MinioPage() {
 
                 <div className="mt-2 grid grid-cols-2 gap-3 border-t border-dashed border-border/70 pt-3">
                   <div>
-                    <div className="text-muted-foreground/70">主机地址</div>
-                    <div className="mt-0.5 break-all text-xs text-foreground/80">{server.host}</div>
+                    <div className="text-muted-foreground/70">MinIO FQDN</div>
+                    <div className="mt-0.5 break-all font-mono text-xs text-foreground/80">
+                      {server.host}:{server.minio_port}
+                    </div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground/70">服务端口</div>
+                    <div className="text-muted-foreground/70">Domain</div>
+                    <div className="mt-0.5 break-all font-mono text-xs text-foreground/80">{server.domain || "未配置"}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground/70">Storagent API 端口</div>
                     <div className="mt-0.5 font-mono text-xs text-foreground/80">{server.server_port}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground/70">MinIO 端口</div>
-                    <div className="mt-0.5 font-mono text-xs text-foreground/80">{server.minio_port}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground/70">复制集权重</div>
@@ -330,7 +334,15 @@ export default function MinioPage() {
                 />
               </div>
               <div>
-                <Label className="mb-1 block text-xs">主机</Label>
+                <Label className="mb-1 block text-xs">Domain</Label>
+                <Input
+                  value={createForm.domain}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, domain: e.target.value }))}
+                  placeholder="stor.1oa.com.cn"
+                />
+              </div>
+              <div>
+                <Label className="mb-1 block text-xs">MinIO 主机</Label>
                 <Input
                   value={createForm.host}
                   onChange={(e) => setCreateForm((f) => ({ ...f, host: e.target.value }))}

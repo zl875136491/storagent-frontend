@@ -10,7 +10,9 @@ export interface PublicEndpointItem {
   name: string
   shown_name: string
   master: boolean
-  /** Storagent API 地址 */
+  /** 对外 Nginx 网关域名 */
+  domain?: string
+  /** 基于 domain 生成的 Storagent API 网关地址 */
   endpoint: string
   /** MinIO 直连地址（可选，新后端提供） */
   minio_endpoint?: string
@@ -48,10 +50,17 @@ export function normalizePublicApiBase(url: string): string {
   return normalizeBase(url)
 }
 
-/** 将服务端返回的区域记录转换为浏览器实际使用的同源 Nginx 基址。 */
-export function apiBaseForEndpoint(endpoint: Pick<PublicEndpointItem, "name" | "endpoint">): string {
+/**
+ * 对外 endpoints 已以 domain 网关地址为准。生产页面通过同源路径访问时，
+ * 保留其路径形式；域名缺失的旧服务才使用 endpoint 兼容回退。
+ */
+export function apiBaseForEndpoint(endpoint: Pick<PublicEndpointItem, "name" | "domain" | "endpoint">): string {
+  const domain = endpoint.domain?.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "")
   const segment = REGION_GATEWAY_SEGMENTS[endpoint.name.trim().toLowerCase()]
-  return segment ? `/server/${segment}` : normalizeBase(endpoint.endpoint)
+  if (domain && segment) {
+    return `${window.location.protocol}//${domain}/server/${segment}`
+  }
+  return normalizeBase(endpoint.endpoint)
 }
 
 /**
