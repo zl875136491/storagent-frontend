@@ -948,7 +948,7 @@ export function generateComponentGuideMarkdown(
     "",
     `> 示例语言：${meta.label}；产出文件：\`${code.filename}\`；运行环境：${meta.runtime}。`,
     "",
-    "> **v1 重要说明**：下文示例仍使用 `x-api-key` 直接调用文件接口，仅适用于控制台「功能组件引导」的**可信内网 / 临时演示**。",
+    "> **v1 重要说明**：控制台「功能组件演示」通过登录态和 APIKey 对象引用调用服务端演示代理；浏览器不会获得或传输 APIKey 明文。",
     "> 互联网生产接入必须按「功能接口引导」v1 Markdown：App 后端持有 `x-api-key`，浏览器只携带能力令牌直连数据面（见该文档「最小可运行上传/下载 Demo」一节）。",
     "",
     "## 给开发者与 AI 的实施目标",
@@ -959,7 +959,7 @@ export function generateComponentGuideMarkdown(
     "",
     "## 安全约束",
     "",
-    "- **演示路径**：APIKey 只使用 `x-api-key` 请求头，不得放入 URL 或日志；仅限可信环境。",
+    "- **控制台演示路径**：浏览器只发送当前用户已持有 APIKey 的对象引用；服务端验证归属、吊销状态、有效期和应用状态后执行操作，APIKey 明文不进入浏览器、URL 或日志。",
     "- **生产路径（v1）**：浏览器不得持有 `x-api-key`；分片上传 / 下载改用 App 后端签发的能力令牌 `token`；页面 Origin 须加入 Storagent `BACKEND_CORS_ORIGINS` / `FRONT_URL`。",
     "- `stat` 使用 POST JSON；`locate` 与 `download` 的 object_key 使用标准 URL 编码。",
     "- 上传异常时调用 multipart abort；下载大文件采用流式处理，不得先将完整响应载入内存后才更新进度。",
@@ -973,7 +973,7 @@ export function generateComponentGuideMarkdown(
     "- 下载前使用 POST stat 获取准确总大小；下载过程中至少展示已接收字节、总大小、百分比和实时速度。",
     "- 用户取消下载时必须立即中断网络读取，并且不得保存或保留可被误用的残缺文件。",
     isTypeScript
-      ? "- 浏览器组件适合可信内网或临时演示。互联网生产系统应由业务服务端代持 APIKey，并按功能接口引导 v1 签发能力令牌。"
+      ? "- 控制台演示组件使用服务端代理，适合验证交互与权限边界。互联网生产系统仍应由业务服务端代持 APIKey，并按功能接口引导 v1 签发能力令牌。"
       : "- APIKey 应由服务端环境变量或密钥管理系统注入；不要把明文 Key 编译进前端包。",
     "",
     "## 上传配额与分片重传契约",
@@ -1011,7 +1011,7 @@ export function generateComponentGuideMarkdown(
     "",
     "## 接入验收清单",
     "",
-    "- [ ] APIKey 只进入 `x-api-key` 请求头。",
+    "- [ ] 控制台演示只提交 APIKey 对象引用；APIKey 明文不进入浏览器存储、请求头、URL 或日志。",
     "- [ ] 上传保存 upload_id、object_key、part_number 与 ETag；同一编号重传后覆盖保存最后成功 ETag。",
     "- [ ] 空文件会在 init 前被拒绝；分片按 MiB 对齐，非末片至少 5 MiB、单片不超过 64 MiB、总片数不超过 10,000。",
     "- [ ] 默认策略下会在 init 前拒绝超过 625 GiB 的文件，并提示联系管理员调整策略。",

@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react"
-import { Eye, EyeOff, KeyRound, Server } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { KeyRound, Server } from "lucide-react"
 
-import { ApiKeyProvider, useApiKey } from "@/components/guides/api-key-context"
 import { FileDownloadDemo } from "@/components/guides/file-download-demo"
 import { FileUploadDemo } from "@/components/guides/file-upload-demo"
 import {
@@ -19,16 +18,30 @@ import {
   useRegisterToc,
 } from "@/components/docs/primitives"
 import { useDocVersion } from "@/components/docs/version-switcher"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { fetchDemoApiKeysApi, type DemoAPIKey } from "@/api/client"
+import { useAuth } from "@/auth/AuthContext"
 
 import { getComponentGuideContent } from "./file-components-content"
 
-function ApiKeyBox() {
-  const { apiKey, setApiKey, clearApiKey } = useApiKey()
-  const [draft, setDraft] = useState(apiKey)
-  const [show, setShow] = useState(false)
+function ApiKeyBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { accessToken } = useAuth()
+  const [keys, setKeys] = useState<DemoAPIKey[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void fetchDemoApiKeysApi(accessToken ?? undefined)
+      .then((response) => {
+        if (!active) return
+        setKeys(response.data)
+        if (value && !response.data.some((item) => item.id === value)) onChange("")
+      })
+      .catch((reason) => active && setError(reason instanceof Error ? reason.message : "无法读取 APIKey"))
+      .finally(() => active && setLoading(false))
+    return () => { active = false }
+  }, [accessToken, onChange, value])
 
   return (
     <div className="rounded-lg border border-border/70 bg-card/40 p-4">
@@ -37,52 +50,29 @@ function ApiKeyBox() {
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-foreground">在线演示鉴权</h3>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            上传和下载共用这枚 APIKey，并通过请求头 <code className="font-mono">x-api-key</code> 发送。
+            选择本人有效的 APIKey 对象。浏览器仅发送对象引用，服务端按当前登录用户解析密钥。
           </p>
         </div>
       </div>
       <div className="mt-4 space-y-2">
-        <Label htmlFor="demo-api-key">APIKey</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="demo-api-key"
-            type={show ? "text" : "password"}
-            placeholder="粘贴控制台签发的 APIKey"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-          />
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            title={show ? "隐藏 APIKey" : "显示 APIKey"}
-            aria-label={show ? "隐藏 APIKey" : "显示 APIKey"}
-            onClick={() => setShow((value) => !value)}
-          >
-            {show ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
-          </Button>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" onClick={() => setApiKey(draft)} disabled={!draft.trim()}>
-          保存 APIKey
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            clearApiKey()
-            setDraft("")
-          }}
-          disabled={!apiKey && !draft}
+        <Label htmlFor="demo-api-key">可用 APIKey</Label>
+        <select
+          id="demo-api-key"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          value={value}
+          disabled={loading}
+          onChange={(event) => onChange(event.target.value)}
         >
-          清除
-        </Button>
-        {apiKey ? <span className="text-[11px] text-muted-foreground">已保存，长度 {apiKey.length}</span> : null}
+          <option value="">{loading ? "正在读取可用 APIKey..." : "选择 APIKey"}</option>
+          {keys.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.application.shown_name || item.application.name} · {item.key_hint}
+            </option>
+          ))}
+        </select>
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        演示密钥只保存在当前浏览器。生产接入请由业务服务端保存，避免将 APIKey 放入前端包。
+        {error ? error : keys.length ? "密钥明文不会返回或保存到浏览器，吊销和过期会在调用前再次校验。" : "没有可用 APIKey。请先创建并等待所属应用准备完成。"}
       </p>
     </div>
   )
@@ -90,7 +80,9 @@ function ApiKeyBox() {
 
 function ComponentsDemoContent() {
   const goDoc = useGoDoc()
-  const { apiKey } = useApiKey()
+  const { accessToken } = useAuth()
+  const [apiKeyId, setApiKeyId] = useState("")
+  const selectApiKey = useCallback((next: string) => setApiKeyId(next), [])
   const { base, setBase } = useGuideDemoBackendSelection()
   const [lastUploadedObjectKey, setLastUploadedObjectKey] = useState<string | null>(null)
   const [version] = useDocVersion()
@@ -137,7 +129,7 @@ function ComponentsDemoContent() {
           演示配置
         </DocHeading>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <ApiKeyBox />
+          <ApiKeyBox value={apiKeyId} onChange={selectApiKey} />
           <div className="rounded-lg border border-border/70 bg-card/40 p-4">
             <div className="flex items-start gap-3">
               <Server className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden />
@@ -183,7 +175,8 @@ function ComponentsDemoContent() {
         </p>
         <div className="mt-4">
           <FileUploadDemo
-            apiKey={apiKey}
+            apiKeyId={apiKeyId}
+            accessToken={accessToken ?? undefined}
             baseURL={base}
             onUploaded={(result) => setLastUploadedObjectKey(result.objectKey)}
           />
@@ -198,7 +191,12 @@ function ComponentsDemoContent() {
           可查看下载进度、已接收数据量和传输速度，也可取消正在进行的下载。
         </p>
         <div className="mt-4">
-          <FileDownloadDemo apiKey={apiKey} baseURL={base} defaultObjectKey={lastUploadedObjectKey ?? undefined} />
+          <FileDownloadDemo
+            apiKeyId={apiKeyId}
+            accessToken={accessToken ?? undefined}
+            baseURL={base}
+            defaultObjectKey={lastUploadedObjectKey ?? undefined}
+          />
         </div>
       </section>
     </div>
@@ -214,9 +212,5 @@ function InnerPage() {
 }
 
 export default function FileComponentsGuidePage() {
-  return (
-    <ApiKeyProvider>
-      <InnerPage />
-    </ApiKeyProvider>
-  )
+  return <InnerPage />
 }

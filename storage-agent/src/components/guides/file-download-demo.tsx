@@ -10,7 +10,6 @@ import { GuideBackendSelector } from "@/components/guides/guide-backend-selector
 import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 import {
   extractCrossRegionLocations,
-  locateObjectApi,
   type ObjectLocationItem,
   type ObjectLocateResponse,
 } from "@/api/client"
@@ -19,7 +18,9 @@ import { formatBytes } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 type Props = {
-  apiKey: string
+  /** Opaque APIKey object reference. The browser never receives its secret. */
+  apiKeyId: string
+  accessToken?: string
   /** 页面级共享后端；未提供时组件保留独立选择能力。 */
   baseURL?: string
   defaultObjectKey?: string
@@ -52,6 +53,11 @@ type DownloadTarget = {
   statBody: { object_key: string }
 }
 
+type DemoCredentials = {
+  apiKeyId: string
+  accessToken: string
+}
+
 function joinUrl(baseURL: string, path: string) {
   return `${baseURL.replace(/\/$/, "")}${path}`
 }
@@ -81,14 +87,24 @@ function saveBlob(blob: Blob, objectKey: string) {
   window.URL.revokeObjectURL(objUrl)
 }
 
-async function fetchObjectSize(target: DownloadTarget, apiKey: string, signal: AbortSignal) {
+function demoHeaders(credentials: DemoCredentials, headers?: HeadersInit) {
+  const next = new Headers(headers)
+  next.set("Authorization", `Bearer ${credentials.accessToken}`)
+  next.set("x-demo-api-key-id", credentials.apiKeyId)
+  return next
+}
+
+function demoUrl(url: string) {
+  return url.replace("/api/v1/files/", "/api/v1/demo/files/")
+}
+
+async function fetchObjectSize(target: DownloadTarget, credentials: DemoCredentials, signal: AbortSignal) {
   const resp = await fetch(target.statURL, {
     method: "POST",
     signal,
-    headers: {
+    headers: demoHeaders(credentials, {
       "Content-Type": "application/json",
-      "x-api-key": apiKey,
-    },
+    }),
     body: JSON.stringify(target.statBody),
   })
   const text = await readErrorText(resp)
@@ -103,14 +119,14 @@ async function fetchObjectSize(target: DownloadTarget, apiKey: string, signal: A
 
 async function downloadFromUrl({
   target,
-  apiKey,
+  credentials,
   objectKey,
   signal,
   totalBytes,
   onProgress,
 }: {
   target: DownloadTarget
-  apiKey: string
+  credentials: DemoCredentials
   objectKey: string
   signal: AbortSignal
   totalBytes: number | null
@@ -119,7 +135,7 @@ async function downloadFromUrl({
   const resp = await fetch(target.downloadURL, {
     method: "GET",
     signal,
-    headers: { "x-api-key": apiKey },
+    headers: demoHeaders(credentials),
   })
   if (!resp.ok) {
     const text = await readErrorText(resp)
@@ -170,7 +186,7 @@ async function downloadFromUrl({
   return { receivedBytes, totalBytes: resolvedTotal ?? receivedBytes, speedBytesPerSecond: averageSpeed }
 }
 
-export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObjectKey, className }: Props) {
+export function FileDownloadDemo({ apiKeyId, accessToken, baseURL: providedBaseURL, defaultObjectKey, className }: Props) {
   const { base: selectedBaseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
     useGuideDemoBackendSelection()
   const baseURL = providedBaseURL ?? selectedBaseURL
@@ -196,13 +212,13 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
   const downloading = downloadProgress?.phase === "downloading"
 
   const canCall = Boolean(
-    baseURL && apiKey && objectKey.trim() && !loading &&
+    baseURL && apiKeyId && accessToken && objectKey.trim() && !loading &&
     (providedBaseURL !== undefined || (!backendListLoading && !backendListError)),
   )
 
   const fetchStat = async () => {
     if (!baseURL) throw new Error("请先选择可达的后端服务")
-    if (!apiKey) throw new Error("apiKey 为空")
+    if (!apiKeyId || !accessToken) throw new Error("请先选择 APIKey")
     if (!objectKey.trim()) throw new Error("object_key 为空")
 
     setLoading(true)
@@ -210,12 +226,11 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
     setLocations(null)
     setRedirectHint(null)
     try {
-      const resp = await fetch(joinUrl(baseURL, "/api/v1/files/object/stat"), {
+      const resp = await fetch(joinUrl(baseURL, "/api/v1/demo/files/object/stat"), {
         method: "POST",
-        headers: {
+        headers: demoHeaders({ apiKeyId, accessToken }, {
           "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
+        }),
         body: JSON.stringify({ object_key: objectKey.trim() }),
       })
       const text = await readErrorText(resp)
@@ -241,14 +256,20 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
 
   const locate = async () => {
     if (!baseURL) throw new Error("请先选择可达的后端服务")
-    if (!apiKey) throw new Error("apiKey 为空")
+    if (!apiKeyId || !accessToken) throw new Error("请先选择 APIKey")
     if (!objectKey.trim()) throw new Error("object_key 为空")
 
     setLoading(true)
     setError(null)
     setRedirectHint(null)
     try {
-      const data = await locateObjectApi(baseURL, apiKey, objectKey.trim())
+      const query = new URLSearchParams({ object_key: objectKey.trim(), offset: "0", length: "0" })
+      const response = await fetch(joinUrl(baseURL, `/api/v1/demo/files/object/locate?${query.toString()}`), {
+        headers: demoHeaders({ apiKeyId, accessToken }),
+      })
+      const text = await readErrorText(response)
+      if (!response.ok) throw new Error(text || `定位失败: ${response.status}`)
+      const data = JSON.parse(text) as ObjectLocateResponse
       setLocateInfo(data)
       setLocations(data.available_at.length > 0 ? data.available_at : null)
       if (!data.local_exists && data.available_at.length === 0) {
@@ -269,20 +290,20 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
 
   const download = async (location?: ObjectLocationItem) => {
     if (!baseURL) throw new Error("请先选择可达的后端服务")
-    if (!apiKey) throw new Error("apiKey 为空")
+    if (!apiKeyId || !accessToken) throw new Error("请先选择 APIKey")
     if (!objectKey.trim()) throw new Error("object_key 为空")
 
     const key = objectKey.trim()
     const query = new URLSearchParams({ object_key: key, offset: "0", length: "0" })
     const target: DownloadTarget = location
       ? {
-          downloadURL: gatewayUrlForRegion(location.region, location.download_url),
-          statURL: gatewayUrlForRegion(location.region, location.stat_url),
+          downloadURL: demoUrl(gatewayUrlForRegion(location.region, location.download_url)),
+          statURL: demoUrl(gatewayUrlForRegion(location.region, location.stat_url)),
           statBody: location.stat_body,
         }
       : {
-          downloadURL: joinUrl(baseURL, `/api/v1/files/object/download?${query.toString()}`),
-          statURL: joinUrl(baseURL, "/api/v1/files/object/stat"),
+          downloadURL: joinUrl(baseURL, `/api/v1/demo/files/object/download?${query.toString()}`),
+          statURL: joinUrl(baseURL, "/api/v1/demo/files/object/stat"),
           statBody: { object_key: key },
         }
     const controller = new AbortController()
@@ -300,7 +321,8 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
       setRedirectHint(null)
     }
     try {
-      const totalBytes = await fetchObjectSize(target, apiKey, controller.signal)
+      const credentials = { apiKeyId, accessToken }
+      const totalBytes = await fetchObjectSize(target, credentials, controller.signal)
       setDownloadProgress({
         phase: "downloading",
         receivedBytes: 0,
@@ -309,7 +331,7 @@ export function FileDownloadDemo({ apiKey, baseURL: providedBaseURL, defaultObje
       })
       const completed = await downloadFromUrl({
         target,
-        apiKey,
+        credentials,
         objectKey: key,
         signal: controller.signal,
         totalBytes,

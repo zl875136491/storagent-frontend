@@ -1512,6 +1512,22 @@ export interface APIKeyListResponse {
   data: APIKey[]
 }
 
+export interface DemoAPIKey {
+  /** Opaque replicated APIKey reference; never the plaintext secret. */
+  id: string
+  key_hint: string
+  application: SimpleApplication
+  expired_at: string | null
+}
+
+export interface DemoAPIKeyListResponse {
+  data: DemoAPIKey[]
+}
+
+export async function fetchDemoApiKeysApi(accessToken?: string): Promise<DemoAPIKeyListResponse> {
+  return apiGet<DemoAPIKeyListResponse>("/api/v1/demo/api-keys", accessToken)
+}
+
 export interface APIKeyCreateRequest {
   application_id: string
   /**

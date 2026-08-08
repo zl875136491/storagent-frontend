@@ -10,7 +10,9 @@ import { useGuideDemoBackendSelection } from "@/components/guides/guide-endpoint
 import { cn } from "@/lib/utils"
 
 type Props = {
-  apiKey: string
+  /** Opaque APIKey object reference. The secret stays on the backend. */
+  apiKeyId: string
+  accessToken?: string
   /** 页面级共享后端；未提供时组件保留独立选择能力。 */
   baseURL?: string
   chunkSizeBytes?: number
@@ -98,7 +100,7 @@ function multipartChunkSize(fileSize: number, configuredSize = DEFAULT_CHUNK_SIZ
   return chunkSize
 }
 
-export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeBytes, onUploaded, className }: Props) {
+export function FileUploadDemo({ apiKeyId, accessToken, baseURL: providedBaseURL, chunkSizeBytes, onUploaded, className }: Props) {
   const { base: selectedBaseURL, setBase: setBackendBase, listLoading: backendListLoading, listError: backendListError } =
     useGuideDemoBackendSelection()
   const baseURL = providedBaseURL ?? selectedBaseURL
@@ -110,7 +112,7 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
   const [resultOpen, setResultOpen] = useState(false)
 
   const canUpload = Boolean(
-    baseURL && apiKey && file && file.size > 0 && !uploading &&
+    baseURL && apiKeyId && accessToken && file && file.size > 0 && !uploading &&
     (providedBaseURL !== undefined || (!backendListLoading && !backendListError)),
   )
 
@@ -121,7 +123,11 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
       return
     }
     if (!baseURL) throw new Error("请先选择可达的后端服务")
-    if (!apiKey) throw new Error("apiKey 为空")
+    if (!apiKeyId || !accessToken) throw new Error("请先选择 APIKey")
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      "x-demo-api-key-id": apiKeyId,
+    }
 
     let chunkSize: number
     try {
@@ -141,11 +147,11 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
 
     try {
       const init = await jsonOrThrow<InitResp>(
-        await fetch(joinUrl(baseURL, "/api/v1/files/multipart/init"), {
+        await fetch(joinUrl(baseURL, "/api/v1/demo/files/multipart/init"), {
           method: "POST",
           headers: {
+            ...headers,
             "Content-Type": "application/json",
-            "x-api-key": apiKey,
           },
           body: JSON.stringify({
             content_type: file.type || "application/octet-stream",
@@ -172,9 +178,9 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
         fd.set("file", blob, file.name)
 
         const part = await jsonOrThrow<PartResp>(
-          await fetch(joinUrl(baseURL, "/api/v1/files/multipart/part"), {
+          await fetch(joinUrl(baseURL, "/api/v1/demo/files/multipart/part"), {
             method: "POST",
-            headers: { "x-api-key": apiKey },
+            headers,
             body: fd,
           }),
         )
@@ -184,11 +190,11 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
       }
 
       const complete = await jsonOrThrow<CompleteResp>(
-        await fetch(joinUrl(baseURL, "/api/v1/files/multipart/complete"), {
+        await fetch(joinUrl(baseURL, "/api/v1/demo/files/multipart/complete"), {
           method: "POST",
           headers: {
+            ...headers,
             "Content-Type": "application/json",
-            "x-api-key": apiKey,
           },
           body: JSON.stringify({
             upload_id: init.upload_id,
@@ -204,11 +210,11 @@ export function FileUploadDemo({ apiKey, baseURL: providedBaseURL, chunkSizeByte
       onUploaded?.(finalResult)
     } catch (e) {
       if (uploadId && objectKey && baseURL) {
-        void fetch(joinUrl(baseURL, "/api/v1/files/multipart/abort"), {
+        void fetch(joinUrl(baseURL, "/api/v1/demo/files/multipart/abort"), {
           method: "POST",
           headers: {
+            ...headers,
             "Content-Type": "application/json",
-            "x-api-key": apiKey,
           },
           body: JSON.stringify({ upload_id: uploadId, object_key: objectKey }),
         }).catch(() => undefined)
