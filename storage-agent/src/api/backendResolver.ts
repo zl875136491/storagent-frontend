@@ -39,6 +39,7 @@ const REGION_GATEWAY_SEGMENTS: Record<string, string> = {
   kunshan: "ks",
   shenzhen: "sz",
   hangzhou: "hz",
+  local: "local",
 }
 
 function normalizeBase(url: string): string {
@@ -60,6 +61,19 @@ export function apiBaseForEndpoint(endpoint: Pick<PublicEndpointItem, "name" | "
   if (domain && segment) {
     return `${window.location.protocol}//${domain}/server/${segment}`
   }
+  return normalizeBase(endpoint.endpoint)
+}
+
+/**
+ * Interactive documentation calls through the browser's current origin.
+ * The regional prefix lets Nginx route a request without switching domains,
+ * keeping authenticated demo requests free of cross-origin preflights.
+ */
+export function sameOriginGatewayBaseForEndpoint(
+  endpoint: Pick<PublicEndpointItem, "name" | "endpoint">,
+): string {
+  const segment = REGION_GATEWAY_SEGMENTS[endpoint.name.trim().toLowerCase()]
+  if (segment) return `/server/${segment}`
   return normalizeBase(endpoint.endpoint)
 }
 

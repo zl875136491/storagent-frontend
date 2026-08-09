@@ -11,7 +11,7 @@ import {
 } from "react"
 
 import type { PublicEndpointItem } from "@/api/backendResolver"
-import { apiBaseForEndpoint, normalizePublicApiBase, probePublicEndpointTest } from "@/api/backendResolver"
+import { normalizePublicApiBase, probePublicEndpointTest, sameOriginGatewayBaseForEndpoint } from "@/api/backendResolver"
 import { fetchPublicEndpointsApi } from "@/api/client"
 
 export type GuideEndpointProbe = { status: "pending" } | { status: "ok"; latencyMs: number } | { status: "fail" }
@@ -30,7 +30,7 @@ const GuideEndpointsContext = createContext<GuideEndpointsContextValue | null>(n
 function pickDisplayItems(items: PublicEndpointItem[]): PublicEndpointItem[] {
   const byBase = new Map<string, PublicEndpointItem>()
   for (const it of items) {
-    const k = normalizePublicApiBase(apiBaseForEndpoint(it))
+    const k = normalizePublicApiBase(sameOriginGatewayBaseForEndpoint(it))
     const cur = byBase.get(k)
     if (!cur) {
       byBase.set(k, it)
@@ -61,7 +61,7 @@ export function GuideEndpointsProvider({ children }: { children: ReactNode }) {
       const resp = await fetchPublicEndpointsApi()
       const items = resp.data ?? []
       setRawItems(items)
-      const bases = pickDisplayItems(items).map((it) => normalizePublicApiBase(apiBaseForEndpoint(it)))
+      const bases = pickDisplayItems(items).map((it) => normalizePublicApiBase(sameOriginGatewayBaseForEndpoint(it)))
 
       const initial = new Map<string, GuideEndpointProbe>()
       for (const b of bases) initial.set(b, { status: "pending" })

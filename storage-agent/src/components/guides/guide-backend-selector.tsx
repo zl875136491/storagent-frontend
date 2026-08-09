@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react"
 
-import { apiBaseForEndpoint, normalizePublicApiBase } from "@/api/backendResolver"
+import { normalizePublicApiBase, sameOriginGatewayBaseForEndpoint } from "@/api/backendResolver"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
@@ -76,11 +76,11 @@ export function GuideBackendSelector({ value, onChange }: Props) {
     <div className="space-y-2">
       <Label className="text-muted-foreground">后端服务</Label>
       <p className="text-[11px] leading-snug text-muted-foreground">
-        使用 endpoints 返回的 Domain 网关调用 <span className="font-mono">GET /api/v1/public/endpoints/test</span> 探测；不可选项为失败；默认可用时延最低者。
+        通过当前页面的区域网关调用 <span className="font-mono">GET /api/v1/public/endpoints/test</span> 探测；不可选项为失败；默认可用时延最低者。
       </p>
       <RadioGroup value={value} onValueChange={onChange} className="flex flex-wrap gap-2">
         {displayItems.map((it) => {
-          const base = normalizePublicApiBase(apiBaseForEndpoint(it))
+          const base = normalizePublicApiBase(sameOriginGatewayBaseForEndpoint(it))
           const h = healthByBase.get(base)
           const selectable = h?.status === "ok"
           return (
