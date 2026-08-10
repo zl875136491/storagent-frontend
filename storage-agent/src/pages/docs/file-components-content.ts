@@ -1052,14 +1052,11 @@ export type ComponentGuideVersionContent = ComponentGuideReleasedContent | Compo
 export const COMPONENT_GUIDE_CONTENT_BY_VERSION: Record<DocVersion, ComponentGuideVersionContent> = {
   v1: { status: "released", version: "v1", code: COMPONENT_GUIDE_CODE },
   v2: {
-    status: "developing",
+    status: "released",
     version: "v2",
-    summary: "v2 尚在设计阶段，正式发布前会在这里提供与 v1 对应的在线组件演示。",
-    highlights: [
-      "上传 / 下载演示直接使用能力令牌，不再需要手动粘贴 APIKey",
-      "补充分片重试与断点续传的可操作演示",
-      "展示更多组件状态和交互反馈",
-    ],
+    // v2 reuses the upload/download component interaction but its console
+    // verification panel additionally covers the native object lifecycle APIs.
+    code: COMPONENT_GUIDE_CODE,
   },
 }
 

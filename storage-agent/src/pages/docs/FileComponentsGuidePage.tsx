@@ -28,7 +28,6 @@ function ApiKeyBox({ value, onChange }: { value: string; onChange: (value: strin
   const { accessToken } = useAuth()
   const [keys, setKeys] = useState<DemoAPIKey[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -38,42 +37,14 @@ function ApiKeyBox({ value, onChange }: { value: string; onChange: (value: strin
         setKeys(response.data)
         if (value && !response.data.some((item) => item.id === value)) onChange("")
       })
-      .catch((reason) => active && setError(reason instanceof Error ? reason.message : "无法读取 APIKey"))
       .finally(() => active && setLoading(false))
     return () => { active = false }
   }, [accessToken, onChange, value])
 
   return (
     <div className="rounded-lg border border-border/70 bg-card/40 p-4">
-      <div className="flex items-start gap-3">
-        <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" aria-hidden />
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-foreground">在线演示鉴权</h3>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            选择本人有效的 APIKey 对象。浏览器仅发送对象引用，服务端按当前登录用户解析密钥。
-          </p>
-        </div>
-      </div>
-      <div className="mt-4 space-y-2">
-        <Label htmlFor="demo-api-key">可用 APIKey</Label>
-        <select
-          id="demo-api-key"
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-          value={value}
-          disabled={loading}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">{loading ? "正在读取可用 APIKey..." : "选择 APIKey"}</option>
-          {keys.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.application.shown_name || item.application.name} · {item.key_hint}
-            </option>
-          ))}
-        </select>
-      </div>
-      <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-        {error ? error : keys.length ? "密钥明文不会返回或保存到浏览器，吊销和过期会在调用前再次校验。" : "没有可用 APIKey。请先创建并等待所属应用准备完成。"}
-      </p>
+      <div className="flex items-start gap-3"><KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" aria-hidden /><div><h3 className="text-sm font-semibold text-foreground">演示鉴权</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">选择本人有效 APIKey 对象；浏览器不会接触密钥明文。</p></div></div>
+      <div className="mt-4 space-y-2"><Label htmlFor="demo-api-key">可用 APIKey</Label><select id="demo-api-key" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={value} disabled={loading} onChange={(event) => onChange(event.target.value)}><option value="">{loading ? "正在读取可用 APIKey..." : "选择 APIKey"}</option>{keys.map((item) => <option key={item.id} value={item.id}>{item.application.shown_name || item.application.name} · {item.key_hint}</option>)}</select></div>
     </div>
   )
 }
@@ -120,7 +91,7 @@ function ComponentsDemoContent() {
           </span>
         </div>
         <DocLead>
-          在控制台中完成一次文件上传与下载，观察组件的配置、进度和结果联动。
+          用真实浏览器交互演示上传与下载组件。完整接口验证已迁移至系统管理中的服务运维。
         </DocLead>
       </div>
 
@@ -146,7 +117,7 @@ function ComponentsDemoContent() {
           </div>
         </div>
         <DocNote>
-          本页只验证控制台组件交互。调用关系见
+          上传与下载演示都通过当前登录用户的 APIKey 对象引用完成鉴权。调用关系见
           <button
             type="button"
             className="ml-1 font-medium text-primary underline-offset-4 hover:underline"
@@ -199,6 +170,7 @@ function ComponentsDemoContent() {
           />
         </div>
       </section>
+
     </div>
   )
 }

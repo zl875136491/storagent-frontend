@@ -26,7 +26,7 @@ export type DocVersionMeta = {
 
 export const DOC_VERSIONS: readonly DocVersionMeta[] = [
   { id: "v1", label: "v1", status: "current" },
-  { id: "v2", label: "v2", status: "developing" },
+  { id: "v2", label: "v2", status: "current" },
 ]
 
 export const DEFAULT_DOC_VERSION: DocVersion = "v1"

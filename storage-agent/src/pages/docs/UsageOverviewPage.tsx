@@ -16,6 +16,7 @@ export default function UsageOverviewPage() {
   const toc = useMemo(
     () => [
       { id: "prepare", title: "接入准备", level: 2 as const },
+      { id: "gateway", title: "服务入口", level: 2 as const },
       { id: "app", title: "应用与授权", level: 2 as const },
       { id: "apikey", title: "APIKey", level: 2 as const },
       { id: "topology", title: "复制拓扑", level: 2 as const },
@@ -44,6 +45,32 @@ export default function UsageOverviewPage() {
           <Link className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-accent" to="/data/basic/api-key">3. 签发 APIKey</Link>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">APIKey 只保存在 App 后端环境变量中，用于控制面调用和能力令牌签发；不要放进浏览器或客户端包。</p>
+      </section>
+
+      <section id="gateway" className="mt-8 scroll-m-24 rounded-lg border border-border/70 bg-muted/20 p-4">
+        <h2 className="text-base font-semibold text-foreground">服务入口</h2>
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Storagent 的页面和 API 都经 Nginx 进入。根路径只提供控制台；所有后端调用必须带
+          <code className="mx-1 rounded bg-background px-1 font-mono text-[11px] text-foreground">/server/{"{region}"}</code>
+          前缀，Nginx 会在转发前移除该前缀。
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-md border border-border/60 bg-background">
+          <table className="w-full min-w-[34rem] text-left text-xs">
+            <thead className="border-b border-border/60 bg-muted/35 text-muted-foreground">
+              <tr><th className="px-3 py-2 font-medium">环境</th><th className="px-3 py-2 font-medium">网关基址</th><th className="px-3 py-2 font-medium">路由结果</th></tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-border/50"><td className="px-3 py-2 text-foreground">生产</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://stor.1oa.com.cn/server/bj</td><td className="px-3 py-2 text-muted-foreground">指定北京后端；其他区域使用各自短码</td></tr>
+              <tr className="border-b border-border/50"><td className="px-3 py-2 text-foreground">NUC 测试默认</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://10.32.12.110/server/local</td><td className="px-3 py-2 text-muted-foreground">宿主入口默认进入 A，local 指向 A</td></tr>
+              <tr className="border-b border-border/50"><td className="px-3 py-2 text-foreground">NUC 测试 A</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://10.32.12.110/server/nuc-a</td><td className="px-3 py-2 text-muted-foreground">显式访问 nuc-docker-a</td></tr>
+              <tr><td className="px-3 py-2 text-foreground">NUC 测试 B</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://10.32.12.110/server/nuc-b</td><td className="px-3 py-2 text-muted-foreground">显式访问 nuc-docker-b</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          例如将 <code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">/api/v1/public/endpoints</code> 追加到网关基址。
+          直接访问 <code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">http://10.32.12.110/api/...</code> 不会进入后端。
+        </p>
       </section>
 
       <section id="app" className="scroll-m-24">
