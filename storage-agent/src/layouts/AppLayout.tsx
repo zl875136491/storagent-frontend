@@ -10,6 +10,7 @@ import {
   Globe2,
   KeyRound,
   LogOut,
+  ServerCog,
   UserRound,
   Users,
   Wrench,
@@ -160,7 +161,9 @@ function AppShell() {
   const { user, logout } = useAuth()
   const canManageUsers = hasPermission(user, PERMISSIONS.userManage)
   const canOperateStorage = hasPermission(user, PERMISSIONS.storageOperationsManage)
-  const showSystemManagement = Boolean(user?.is_admin || canManageUsers || canOperateStorage)
+  // 服务运维只向管理员和具有“运维管理员”角色的账户开放。
+  const canOperateService = user?.is_admin === true || user?.roles.some((role) => role.name === "运维管理员") === true
+  const showSystemManagement = Boolean(user?.is_admin || canManageUsers || canOperateStorage || canOperateService)
   const location = useLocation()
   const { confirmIfBlocking } = useNavigationLeaveBlock()
   const { closeMobileDrawer } = useSidebar()
@@ -273,6 +276,15 @@ function AppShell() {
                       {({ isActive }) => (
                         <SidebarMenuButton active={isActive} icon={<Wrench aria-hidden />}>
                           存储运维
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
+                  {canOperateService ? (
+                    <NavLink to="/admin/service-operations" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<ServerCog aria-hidden />}>
+                          服务运维
                         </SidebarMenuButton>
                       )}
                     </NavLink>

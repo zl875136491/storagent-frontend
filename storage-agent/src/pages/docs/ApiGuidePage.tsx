@@ -14,7 +14,6 @@ import { DocComingSoon } from "@/components/docs/coming-soon"
 import { useDocVersion } from "@/components/docs/version-switcher"
 import {
   API_GUIDE_CODE_VARIANTS,
-  API_GUIDE_MINIMAL_DEMO,
   getApiGuideContent,
   type ApiGuideCodeVariant,
   type ApiGuidePlane,
@@ -123,6 +122,15 @@ export default function ApiGuidePage() {
           <code className="ml-1 font-mono text-[11px]">stor.1oa.com.cn</code> 解析到本机 Nginx，因此页面和 API
           始终保持同源。
         </DocNote>
+        <DocNote>
+          <strong className="text-foreground">NUC 测试网关基址：</strong>测试控制台位于
+          <code className="ml-1 font-mono text-[11px]">http://10.32.12.110</code>，宿主 Nginx 再转发至测试网关。
+          <code className="ml-1 font-mono text-[11px]">/server/local</code> 与
+          <code className="ml-1 font-mono text-[11px]">/server/nuc-a</code> 指向 A，
+          <code className="ml-1 font-mono text-[11px]">/server/nuc-b</code> 指向 B。根路径
+          <code className="ml-1 font-mono text-[11px]">/</code> 只返回前端，任何 API 都不能省略
+          <code className="ml-1 font-mono text-[11px]">/server/{"{region}"}</code>。
+        </DocNote>
         <div className="mt-4 overflow-x-auto rounded-lg border border-border/70">
           <table className="w-full min-w-[38rem] text-left text-xs">
             <thead className="border-b border-border/70 bg-muted/40 text-muted-foreground">
@@ -140,6 +148,9 @@ export default function ApiGuidePage() {
                 ["昆山", "http://stor.1oa.com.cn/server/ks", "指定昆山后端"],
                 ["深圳", "http://stor.1oa.com.cn/server/sz", "指定深圳后端"],
                 ["杭州", "http://stor.1oa.com.cn/server/hz", "指定杭州后端"],
+                ["NUC 测试默认", "http://10.32.12.110/server/local", "宿主入口的 local 指向后端 A"],
+                ["NUC 测试 A", "http://10.32.12.110/server/nuc-a", "显式访问 nuc-docker-a"],
+                ["NUC 测试 B", "http://10.32.12.110/server/nuc-b", "显式访问 nuc-docker-b"],
               ].map(([region, baseUrl, description]) => (
                 <tr key={region} className="border-b border-border/50 last:border-b-0">
                   <td className="px-3 py-2 text-foreground">{region}</td>
@@ -158,7 +169,7 @@ export default function ApiGuidePage() {
 export STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/bj
 
 # 所有接口都将 API 路径直接追加到该基址。
-curl -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \
+curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
   -H "x-api-key: $STORAGENT_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"object_key":"path/to/file.bin"}'`}
@@ -174,7 +185,7 @@ curl -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \
             <Server className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
             <div className="mt-2 text-xs font-semibold text-foreground">Base URL</div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              App 后端设置完整网关地址，例如 http://stor.1oa.com.cn/server/bj；请求时追加 /api/v1/...。
+              App 后端设置完整网关地址，例如 http://stor.1oa.com.cn/server/bj；请求时追加 {content.versionPrefix}/...。
             </p>
           </div>
           <div className="rounded-lg border border-border/70 p-3">
@@ -249,13 +260,13 @@ curl -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \
                 id: "app-py",
                 label: "App 后端",
                 language: "python",
-                code: API_GUIDE_MINIMAL_DEMO["app-py"],
+                code: content.minimalDemo["app-py"],
               },
               {
                 id: "browser",
                 label: "浏览器前端",
                 language: "typescript",
-                code: API_GUIDE_MINIMAL_DEMO.browser,
+                code: content.minimalDemo.browser,
               },
             ]}
           />
@@ -263,7 +274,7 @@ curl -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \
         <DocNote>
           Demo 自检：init 响应不含 APIKey；Network 里 part/download 只有{" "}
           <code className="font-mono text-[11px]">token</code>；complete 后下载内容与上传一致；空文件与超额{" "}
-          <code className="font-mono text-[11px]">413049</code> 按预期拒绝。
+          <code className="font-mono text-[11px]">{version === "v2" ? "quota.exceeded" : "413049"}</code> 按预期拒绝。
         </DocNote>
       </section>
 
@@ -332,7 +343,7 @@ curl -X POST "$STORAGENT_BASE_URL/api/v1/files/object/stat" \
           错误与跨区域回退
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          失败响应通常包含 msg、data 和稳定业务 code。调用侧应同时检查 HTTP 状态与业务码，并保留可恢复上下文。
+          {version === "v2" ? "失败响应包含 error.code、retryable、details 与 request_id。调用侧应记录请求 ID，并仅在 retryable=true 时退避重试。" : "失败响应通常包含 msg、data 和稳定业务 code。调用侧应同时检查 HTTP 状态与业务码，并保留可恢复上下文。"}
         </p>
         <div className="mt-4 overflow-x-auto rounded-lg border border-border/70">
           <table className="w-full min-w-[34rem] text-left text-xs">

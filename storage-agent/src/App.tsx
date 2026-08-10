@@ -16,6 +16,7 @@ import DocsPage from "./pages/docs/DocsPage"
 import UserRolePage from "./pages/admin/UserRolePage"
 import UsagePage from "./pages/admin/UsagePage"
 import StorageOperationsPage from "./pages/admin/StorageOperationsPage"
+import ServiceOperationsPage from "./pages/admin/ServiceOperationsPage"
 
 // AI configuration and assistant routes are intentionally not registered.
 // Their source remains under pages/admin and features/ai for a later re-enable.
@@ -50,6 +51,7 @@ export function App() {
               <Route path="admin/users" element={<UserRolePage />} />
               <Route path="admin/usage" element={<UsagePage />} />
               <Route path="admin/storage-operations" element={<StorageOperationsPage />} />
+              <Route path="admin/service-operations" element={<ServiceOperationsPage />} />
             </Route>
           </Route>
 

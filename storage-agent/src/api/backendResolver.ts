@@ -40,6 +40,8 @@ const REGION_GATEWAY_SEGMENTS: Record<string, string> = {
   shenzhen: "sz",
   hangzhou: "hz",
   local: "local",
+  "nuc-docker-a": "nuc-a",
+  "nuc-docker-b": "nuc-b",
 }
 
 function normalizeBase(url: string): string {
@@ -52,8 +54,10 @@ export function normalizePublicApiBase(url: string): string {
 }
 
 /**
- * 对外 endpoints 已以 domain 网关地址为准。生产页面通过同源路径访问时，
- * 保留其路径形式；域名缺失的旧服务才使用 endpoint 兼容回退。
+ * A configured domain remains the canonical public gateway address. Older NUC
+ * endpoint records have no domain yet, so known regions fall back to the
+ * current entrypoint's same-origin gateway path instead of exposing an IP.
+ * Unknown legacy regions still retain their endpoint address for compatibility.
  */
 export function apiBaseForEndpoint(endpoint: Pick<PublicEndpointItem, "name" | "domain" | "endpoint">): string {
   const domain = endpoint.domain?.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "")
@@ -61,6 +65,7 @@ export function apiBaseForEndpoint(endpoint: Pick<PublicEndpointItem, "name" | "
   if (domain && segment) {
     return `${window.location.protocol}//${domain}/server/${segment}`
   }
+  if (segment) return `/server/${segment}`
   return normalizeBase(endpoint.endpoint)
 }
 

@@ -35,7 +35,7 @@ export type ApiGuideCodeVariant = "server-ts" | "server-py" | "browser"
 
 export type ApiGuideEndpoint = {
   id: string
-  method: "GET" | "POST"
+  method: "GET" | "POST" | "DELETE"
   path: string
   summary: string
   description: string
@@ -49,6 +49,8 @@ export type ApiGuideEndpoint = {
 
 export const API_VERSION = "v1"
 export const API_VERSION_PREFIX = "/api/v1"
+export const API_V2_VERSION = "v2"
+export const API_V2_VERSION_PREFIX = "/api/v2"
 
 export const API_GUIDE_CODE_VARIANTS: Record<
   ApiGuideCodeVariant,
@@ -1308,6 +1310,130 @@ export const API_GUIDE_ERROR_CODES = [
   ["403053", "能力令牌与请求的动作或对象不匹配", "检查 object_key/upload_id 是否与签发时一致；不要跨对象复用令牌"],
 ] as const
 
+type ApiGuideErrorCode = readonly [string, string, string]
+
+const replaceApiVersion = (value: string) => value.replaceAll("/api/v1", "/api/v2")
+
+// v2 preserves the routes, not the v1 numeric error contract. Apply this to
+// every inherited description, note and example so the rendered page and its
+// Markdown export never describe two incompatible error models.
+const upgradeV2Text = (value: string) => replaceApiVersion(value)
+  .replaceAll("413049", "quota.exceeded")
+  .replaceAll("413050", "upload.part_too_large")
+  .replaceAll("404032", "object.not_found")
+  .replaceAll("404033", "object.not_found")
+  .replaceAll("429041", "rate_limit.exceeded")
+  .replaceAll("503040", "system.dependency_unavailable")
+  .replaceAll("401051", "auth.capability.invalid")
+  .replaceAll("401052", "auth.capability.expired")
+  .replaceAll("403053", "auth.capability.scope_mismatch")
+
+// v2 keeps v1 upload/download routes, so derive those entries and add v2's
+// response envelope. New lifecycle routes are maintained below as their own API.
+const inheritedV2Endpoints: ApiGuideEndpoint[] = API_GUIDE_ENDPOINTS.map((endpoint) => ({
+  ...endpoint,
+  path: replaceApiVersion(endpoint.path),
+  description: upgradeV2Text(endpoint.description) + " v2 成功响应统一为 { data, request_id }；请记录 request_id 以便定位问题。",
+  notes: endpoint.notes?.map(upgradeV2Text),
+  examples: Object.fromEntries(Object.entries(endpoint.examples).map(([role, example]) => [role, example ? upgradeV2Text(example) : example])) as ApiGuideEndpoint["examples"],
+  response: endpoint.response ? "{\n  \"data\": " + endpoint.response + ",\n  \"request_id\": \"req-...\"\n}" : undefined,
+}))
+
+const V2_OBJECT_ENDPOINTS: ApiGuideEndpoint[] = [
+  {
+    id: "objects-list", method: "GET", path: "/api/v2/files/objects", summary: "列出对象与回收站",
+    description: "返回当前 App 的对象生命周期列表。v2 的删除、恢复和分享均以 object_id 为目标，不以 object_key 作为路径参数。",
+    plane: "control", authentication: "api-key",
+    params: [apiKeyHeaders(), { title: "Query", rows: [
+      { name: "prefix", type: "string", description: "按 object_key 前缀过滤" },
+      { name: "state", type: "active | trash | all", description: "默认 active；trash 只显示软删除对象" },
+      { name: "limit", type: "integer", description: "1-1000，默认 100" },
+      { name: "cursor", type: "string", description: "上一页返回的 next_cursor" },
+    ] }, { title: "Returns", rows: [
+      { name: "data.items[]", type: "array", required: true, description: "对象 ID、键、大小、状态与恢复期限" },
+      { name: "data.next_cursor", type: "string | null", description: "下一页游标" },
+      { name: "data.has_more", type: "boolean", required: true, description: "是否还有下一页" },
+      { name: "request_id", type: "string", required: true, description: "本次请求的追踪标识" },
+    ] }],
+    notes: ["App 后端负责将业务文件记录映射到 object_id；浏览器不持有 x-api-key。", "soft_deleted 对象不应再通过 stat、locate 或普通下载接口提供内容。"],
+    examples: { "server-py": "# App 后端：页面列表或回收站查询由此处代理。\nresponse = storagent_v2_request(\"GET\", \"/api/v2/files/objects\", params={\"state\": \"trash\", \"limit\": 100})\nitems = response[\"data\"][\"items\"]\nrequest_id = response[\"request_id\"]" },
+    response: "{\n  \"data\": {\n    \"items\": [{\"object_id\": \"obj-...\", \"object_key\": \"...\", \"size_bytes\": 1048576, \"state\": \"soft_deleted\", \"restore_until\": \"2026-09-09T08:00:00Z\"}],\n    \"next_cursor\": null, \"has_more\": false\n  }, \"request_id\": \"req-...\"\n}",
+  },
+  {
+    id: "objects-delete", method: "DELETE", path: "/api/v2/files/objects/{object_id}", summary: "软删除对象",
+    description: "将 active 对象标记为 soft_deleted。对象在 MinIO 中仍保留至恢复期结束，但应用逻辑配额会立即扣除该对象大小。",
+    plane: "control", authentication: "api-key",
+    params: [apiKeyHeaders(), { title: "Path", rows: [{ name: "object_id", type: "string", required: true, description: "objects 列表返回的不可变对象标识" }] }, { title: "Returns", rows: [{ name: "data.state", type: "soft_deleted", required: true, description: "删除后的状态" }, { name: "data.restore_until", type: "datetime", required: true, description: "恢复截止时间" }, { name: "request_id", type: "string", required: true, description: "请求追踪标识" }] }],
+    notes: ["删除为幂等操作：对已经在回收站的同一对象再次请求不会物理删除 MinIO 数据。", "默认恢复期为 30 天；过期后由周期任务归档/清理，在线 API 不再可访问。"],
+    examples: { "server-py": "# 先完成业务权限校验，再以 object_id 调用软删除。\nresponse = storagent_v2_request(\"DELETE\", \"/api/v2/files/objects/\" + object_id)\ndeleted = response[\"data\"]" },
+    response: "{\n  \"data\": {\"object_id\": \"obj-...\", \"state\": \"soft_deleted\", \"restore_until\": \"2026-09-09T08:00:00Z\"},\n  \"request_id\": \"req-...\"\n}",
+  },
+  {
+    id: "objects-restore", method: "POST", path: "/api/v2/files/objects/{object_id}/restore", summary: "恢复软删除对象",
+    description: "在 restore_until 前将 soft_deleted 对象恢复为 active。恢复会重新校验当前 App 的逻辑配额。",
+    plane: "control", authentication: "api-key",
+    params: [apiKeyHeaders(), { title: "Path", rows: [{ name: "object_id", type: "string", required: true, description: "回收站列表返回的对象标识" }] }],
+    notes: ["如果恢复会超过配额，返回 HTTP 409 与 error.code=quota.restore_exceeded。", "已过恢复期限或已永久清理的对象不能经接口恢复。"],
+    examples: { "server-py": "response = storagent_v2_request(\"POST\", \"/api/v2/files/objects/\" + object_id + \"/restore\")\nrestored = response[\"data\"]" },
+    response: "{\n  \"data\": {\"object_id\": \"obj-...\", \"state\": \"active\"},\n  \"request_id\": \"req-...\"\n}",
+  },
+  {
+    id: "objects-share", method: "POST", path: "/api/v2/files/objects/{object_id}/share", summary: "创建一次性分享下载地址",
+    description: "仅为 active 对象创建一次性下载地址。分享 token 位于 URL hash 中，浏览器不会将其发送到 Web 服务器访问日志。",
+    plane: "control", authentication: "api-key",
+    params: [apiKeyHeaders("application/json"), { title: "Path", rows: [{ name: "object_id", type: "string", required: true, description: "active 对象标识" }] }, { title: "Body", rows: [{ name: "expires_in_seconds", type: "integer", required: true, description: "60-900 秒" }, { name: "download_name", type: "string", description: "可选下载文件名" }] }],
+    notes: ["分享 URL 只能成功兑换一次；首次成功后 token 原子失效。", "不要把 hash 中 token 提取到日志、分析 SDK、referrer 或业务数据库。"],
+    examples: { "server-py": "response = storagent_v2_request(\"POST\", \"/api/v2/files/objects/\" + object_id + \"/share\", json={\"expires_in_seconds\": 300, \"download_name\": \"report.pdf\"})\n# 只将 download_url 交给获授权用户；不要记录其 hash fragment。\ndownload_url = response[\"data\"][\"download_url\"]" },
+    response: "{\n  \"data\": {\"share_id\": \"share-...\", \"download_url\": \"https://.../api/v2/storage/objects/one-time-download#token=...\", \"single_use\": true, \"expires_in_seconds\": 300},\n  \"request_id\": \"req-...\"\n}",
+  },
+  {
+    id: "one-time-bootstrap", method: "GET", path: "/api/v2/storage/objects/one-time-download", summary: "一次性下载引导页",
+    description: "公开 HTML 引导页。从 hash 读取 token 后立即移除 hash，并以表单 POST 到同一路径。该请求不使用 x-api-key。",
+    plane: "public", authentication: "public", params: [],
+    notes: ["响应设置 no-store 与 no-referrer。客户端通常只需导航到 share 返回的 download_url，不应自行拼接 token。"],
+    examples: { browser: "// 直接导航即可：引导页会从 hash 取 token，再 POST 兑换。\nwindow.location.assign(downloadUrl)" },
+  },
+  {
+    id: "one-time-redeem", method: "POST", path: "/api/v2/storage/objects/one-time-download", summary: "兑换一次性下载",
+    description: "接收引导页表单提交的 token，首次成功后返回对象二进制流并立即使 token 失效。该接口公开且不使用 x-api-key。",
+    plane: "public", authentication: "public", params: [{ title: "Form", rows: [{ name: "token", type: "string", required: true, description: "仅由引导页从 URL hash 提交" }] }],
+    notes: ["重复兑换、过期、已撤销的 token 返回 HTTP 410 与 error.code=share.invalid 或 share.consumed。"],
+    examples: { browser: "// 正常浏览器流程由 GET 引导页自动提交，业务代码无需 fetch token。" },
+  },
+]
+
+export const API_GUIDE_V2_ENDPOINTS: ApiGuideEndpoint[] = [...inheritedV2Endpoints, ...V2_OBJECT_ENDPOINTS]
+
+export const API_GUIDE_V2_ERROR_CODES: readonly ApiGuideErrorCode[] = [
+  ["auth.credentials.invalid", "凭据无效或缺失", "检查 App 后端登录/JWT 或 x-api-key，不自动重试"],
+  ["auth.api_key.invalid", "APIKey 无效", "更新 App 后端安全配置，不向浏览器暴露密钥"],
+  ["auth.capability.expired", "能力令牌已过期", "回到 App 后端重新签发令牌"],
+  ["object.deleted", "对象处于回收站", "提示用户在恢复期限内执行 restore"],
+  ["object.purged", "对象已永久清理", "在线接口不可恢复，联系运维查询归档"],
+  ["quota.exceeded", "上传超过 App 逻辑配额", "停止上传并提示清理或调整配额"],
+  ["quota.restore_exceeded", "恢复将超过当前配额", "先清理空间或调整配额，再发起恢复"],
+  ["upload.part_too_large", "上传分片过大", "重新切分为不超过 64 MiB 的分片"],
+  ["share.invalid", "分享链接无效或过期", "重新创建分享地址"],
+  ["share.consumed", "分享地址已使用", "一次性链接不可重试，重新创建"],
+  ["storage.unavailable", "存储依赖暂不可用", "可按 retryable=true 退避重试并保留 request_id"],
+]
+
+export const API_GUIDE_V2_SERVER_SETUP: Record<"typescript" | "python", string> = {
+  typescript: "// v2 控制面请求封装：成功为 { data, request_id }，失败为 { error, request_id }。\nasync function storagentV2(path: string, init: RequestInit = {}) {\n  const response = await fetch(BASE_URL + path, { ...init, headers: { \"x-api-key\": API_KEY!, ...(init.headers ?? {}) } })\n  const body = await response.json().catch(() => null)\n  if (!response.ok) throw Object.assign(new Error(body?.error?.message ?? (\"Storagent HTTP \" + response.status)), { status: response.status, error: body?.error, requestId: body?.request_id })\n  return body as { data: unknown; request_id: string }\n}",
+  python: "# v2 控制面请求封装：记录 request_id，按稳定字符串错误码处理。\ndef storagent_v2_request(method: str, path: str, **kwargs: Any) -> dict[str, Any]:\n    response = requests.request(method, BASE_URL + path, headers={\"x-api-key\": API_KEY, **kwargs.pop(\"headers\", {})}, timeout=30, **kwargs)\n    body = response.json()\n    if not response.ok:\n        error = body.get(\"error\", {})\n        raise StoragentAPIError(response.status_code, {**error, \"request_id\": body.get(\"request_id\")})\n    return body  # { data, request_id }",
+}
+
+export const API_GUIDE_V2_ERROR_EXAMPLES: Record<"typescript" | "python", string> = {
+  typescript: "try {\n  await storagentV2(\"/api/v2/files/objects/obj-.../restore\", { method: \"POST\" })\n} catch (error: any) {\n  if (error.error?.code === \"quota.restore_exceeded\") showQuotaRecoveryGuidance()\n  console.error(\"Storagent v2 failed\", { requestId: error.requestId, code: error.error?.code })\n}",
+  python: "try:\n    restored = storagent_v2_request(\"POST\", \"/api/v2/files/objects/\" + object_id + \"/restore\")\nexcept StoragentAPIError as exc:\n    body = exc.body or {}\n    if body.get(\"code\") == \"quota.restore_exceeded\":\n        print(\"恢复会超过当前配额，请先释放空间\")\n    print(\"request_id:\", body.get(\"request_id\"))\n    raise",
+}
+
+export const API_GUIDE_V2_MINIMAL_DEMO: Record<"app-ts" | "app-py" | "browser", string> = {
+  "app-ts": upgradeV2Text(API_GUIDE_MINIMAL_DEMO["app-ts"]),
+  "app-py": upgradeV2Text(API_GUIDE_MINIMAL_DEMO["app-py"]),
+  browser: upgradeV2Text(API_GUIDE_MINIMAL_DEMO.browser),
+}
+
 function markdownTable(headers: string[], rows: string[][]) {
   const escape = (value: string) => value.replace(/\|/g, "\\|").replace(/\n/g, " ")
   return [
@@ -1355,6 +1481,19 @@ export function generateApiGuideMarkdown() {
         ["昆山", "`http://stor.1oa.com.cn/server/ks`", "`http://stor.1oa.com.cn/server/ks/api/v1/public/endpoints`"],
         ["深圳", "`http://stor.1oa.com.cn/server/sz`", "`http://stor.1oa.com.cn/server/sz/api/v1/public/endpoints`"],
         ["杭州", "`http://stor.1oa.com.cn/server/hz`", "`http://stor.1oa.com.cn/server/hz/api/v1/public/endpoints`"],
+      ],
+    ),
+    "",
+    "## NUC 测试网关基址",
+    "",
+    "NUC 测试环境的宿主入口为 `http://10.32.12.110`。宿主 Nginx 将请求转发到测试网关 A；根路径 `/` 只返回控制台，API 也必须保留 `/server/{region}` 前缀。`local` 和 `nuc-a` 指向后端 A，`nuc-b` 指向后端 B。",
+    "",
+    markdownTable(
+      ["目标区域", "STORAGENT_BASE_URL", "完整接口示例"],
+      [
+        ["NUC 默认（A）", "`http://10.32.12.110/server/local`", "`http://10.32.12.110/server/local/api/v1/public/endpoints`"],
+        ["NUC A", "`http://10.32.12.110/server/nuc-a`", "`http://10.32.12.110/server/nuc-a/api/v1/public/endpoints`"],
+        ["NUC B", "`http://10.32.12.110/server/nuc-b`", "`http://10.32.12.110/server/nuc-b/api/v1/public/endpoints`"],
       ],
     ),
     "",
@@ -1530,6 +1669,45 @@ export function generateApiGuideMarkdown() {
   return lines.join("\n")
 }
 
+/** v2 Markdown uses the same inherited upload/download material plus its own lifecycle routes. */
+export function generateV2ApiGuideMarkdown() {
+  // The v1 generator already owns the shared upload/download material. Its
+  // numeric-error appendix must not leak into v2, which uses string codes.
+  const inherited = upgradeV2Text(generateApiGuideMarkdown()).replaceAll("（v1）", "（v2）")
+  const withoutV1ErrorAppendix = inherited.slice(0, inherited.indexOf("## 错误处理与跨区域回退"))
+  const lines = [
+    withoutV1ErrorAppendix,
+    "",
+    "## v2 响应与错误契约",
+    "",
+    "成功 JSON 响应固定为 { data, request_id }。失败 JSON 响应固定为 { error: { code, message, retryable, details }, request_id }。error.code 是稳定字符串；记录 request_id，并只在 retryable=true 时退避重试。",
+    "",
+    "```json",
+    "{\n  \"error\": {\n    \"code\": \"quota.restore_exceeded\",\n    \"message\": \"恢复对象将超过存储限额\",\n    \"retryable\": false,\n    \"details\": {}\n  },\n  \"request_id\": \"req-...\"\n}",
+    "```",
+    "",
+    "## v2 对象生命周期与一次性分享",
+    "",
+    "软删除会立即释放应用逻辑配额，MinIO 原始数据保留至恢复期结束。恢复时会重新校验配额。分享 token 位于 URL hash，不会进入 Web 服务器访问日志；首次成功兑换后立即失效。",
+    "",
+  ]
+  const planeLabel: Record<ApiGuidePlane, string> = { public: "公共接口，无需 x-api-key", control: "控制面，仅 App 后端使用 x-api-key", data: "数据面，浏览器使用 token" }
+  for (const endpoint of V2_OBJECT_ENDPOINTS) {
+    lines.push("### " + endpoint.method + " " + endpoint.path + " - " + endpoint.summary, "", endpoint.description, "", "鉴权：" + planeLabel[endpoint.plane], "")
+    for (const section of endpoint.params) {
+      lines.push("#### " + section.title, "", markdownTable(["字段", "类型", "必填", "说明"], section.rows.map((row) => ["`" + row.name + "`", row.type ? "`" + row.type + "`" : "-", row.required ? "是" : "否", row.description])), "")
+    }
+    if (endpoint.notes?.length) lines.push("#### 实现注意", "", ...endpoint.notes.map((note) => "- " + note), "")
+    for (const variant of ["server-py", "browser"] as const) {
+      const example = endpoint.examples[variant]
+      if (example) lines.push("#### " + API_GUIDE_CODE_VARIANTS[variant].label + " 示例", "", codeFence(API_GUIDE_CODE_VARIANTS[variant].fence, example), "")
+    }
+    if (endpoint.response) lines.push("#### 成功响应示例", "", codeFence("json", endpoint.response), "")
+  }
+  lines.push("## v2 错误码分类", "", markdownTable(["错误码", "含义", "建议处理"], API_GUIDE_V2_ERROR_CODES.map((row) => [...row])), "", "## v2 接入验收补充", "", "- [ ] 成功和失败日志都保存 request_id，失败按 error.code 分类。", "- [ ] 使用 objects 列表获得 object_id；删除后展示 restore_until，恢复失败处理 quota.restore_exceeded。", "- [ ] 分享只对 active 对象创建；download_url 的 hash token 不进入日志、埋点或 referrer。", "- [ ] 已验证一次性地址首次兑换成功、第二次兑换返回 410，且公开兑换不附加 x-api-key。", "")
+  return lines.join("\n")
+}
+
 // --- 版本登记表 ---
 //
 // 「功能接口引导」按业务接口版本分别打包内容，供 DocVersionSwitcher 切换（纯前端，
@@ -1543,7 +1721,8 @@ export type ApiGuideReleasedContent = {
   serverSetup: Record<"typescript" | "python", string>
   capabilityTokenCode: Record<"typescript" | "python", string>
   errorExamples: Record<"typescript" | "python", string>
-  errorCodes: typeof API_GUIDE_ERROR_CODES
+  minimalDemo: Record<"app-ts" | "app-py" | "browser", string>
+  errorCodes: readonly ApiGuideErrorCode[]
   generateMarkdown: () => string
 }
 
@@ -1565,18 +1744,21 @@ export const API_GUIDE_CONTENT_BY_VERSION: Record<DocVersion, ApiGuideVersionCon
     serverSetup: API_GUIDE_SERVER_SETUP,
     capabilityTokenCode: API_GUIDE_CAPABILITY_TOKEN_CODE,
     errorExamples: API_GUIDE_ERROR_EXAMPLES,
+    minimalDemo: API_GUIDE_MINIMAL_DEMO,
     errorCodes: API_GUIDE_ERROR_CODES,
     generateMarkdown: generateApiGuideMarkdown,
   },
   v2: {
-    status: "developing",
-    version: "v2",
-    summary: "v2 尚在设计阶段，正式发布前会在这里提供和 v1 同样完整的接口参考。",
-    highlights: [
-      "更细粒度的能力令牌作用域（例如按目录前缀、按操作次数限流）",
-      "批量 / 目录级的对象操作接口",
-      "更丰富的跨区域复制状态与一致性查询",
-    ],
+    status: "released",
+    version: API_V2_VERSION,
+    versionPrefix: API_V2_VERSION_PREFIX,
+    endpoints: API_GUIDE_V2_ENDPOINTS,
+    serverSetup: API_GUIDE_V2_SERVER_SETUP,
+    capabilityTokenCode: API_GUIDE_CAPABILITY_TOKEN_CODE,
+    errorExamples: API_GUIDE_V2_ERROR_EXAMPLES,
+    minimalDemo: API_GUIDE_V2_MINIMAL_DEMO,
+    errorCodes: API_GUIDE_V2_ERROR_CODES,
+    generateMarkdown: generateV2ApiGuideMarkdown,
   },
 }
 
