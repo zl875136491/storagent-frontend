@@ -5,7 +5,7 @@ import { KeyRound, Server } from "lucide-react"
 import { fetchDemoApiKeysApi, type DemoAPIKey } from "@/api/client"
 import { useAuth } from "@/auth/AuthContext"
 import { DocVersionSwitcher, useDocVersion } from "@/components/docs/version-switcher"
-import { StorageApiVerificationPanel } from "@/components/guides/StorageApiVerificationPanel"
+import { StorageApiVerificationPanel, type VerificationDetail } from "@/components/guides/StorageApiVerificationPanel"
 import { GuideBackendSelector } from "@/components/guides/guide-backend-selector"
 import { GuideEndpointsProvider, useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 import { Card, CardContent } from "@/components/ui/card"
@@ -69,10 +69,43 @@ function ApiKeyRunSelector({ value, onChange }: { value: string; onChange: (valu
   )
 }
 
+function DetailValue({ value }: { value: unknown }) {
+  return <pre className="max-h-80 overflow-auto rounded-md border border-border/70 bg-muted/30 p-3 font-mono text-[11px] leading-relaxed text-foreground whitespace-pre-wrap break-words">{value === undefined ? "-" : JSON.stringify(value, null, 2)}</pre>
+}
+
+function VerificationDetailPanel({ detail }: { detail: VerificationDetail }) {
+  return (
+    <section className="mt-6 border-t border-border/70 pt-6" aria-live="polite">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">接口调用详情</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{detail.label} · <span className="font-mono text-xs">{detail.path}</span></p>
+        </div>
+        <div className="text-right text-xs text-muted-foreground">
+          <div>{detail.status ? "HTTP " + detail.status : "未收到 HTTP 响应"}</div>
+          <div className="mt-1 font-mono">{detail.requestId || "无 request ID"}</div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="min-w-0">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">Request</h3>
+          <DetailValue value={detail.request} />
+        </div>
+        <div className="min-w-0">
+          <h3 className="mb-2 text-sm font-semibold text-foreground">Response</h3>
+          <DetailValue value={detail.response ?? { error: detail.result }} />
+        </div>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">记录时间：{new Date(detail.capturedAt).toLocaleString()} · 结果：{detail.result || "-"}</p>
+    </section>
+  )
+}
+
 function ServiceOperationsWorkspace() {
   const { accessToken } = useAuth()
   const [version] = useDocVersion()
   const [apiKeyId, setApiKeyId] = useState("")
+  const [selectedDetail, setSelectedDetail] = useState<VerificationDetail | null>(null)
   const selectApiKey = useCallback((next: string) => setApiKeyId(next), [])
   const { base, setBase, listLoading, listError } = useGuideDemoBackendSelection()
 
@@ -100,8 +133,9 @@ function ServiceOperationsWorkspace() {
           </CardContent>
         </Card>
 
-        <div className="min-w-0"><StorageApiVerificationPanel version={version} baseURL={base} apiKeyId={apiKeyId} accessToken={accessToken ?? undefined} /></div>
+        <div className="min-w-0"><StorageApiVerificationPanel version={version} baseURL={base} apiKeyId={apiKeyId} accessToken={accessToken ?? undefined} onDetailSelect={setSelectedDetail} /></div>
       </section>
+      {selectedDetail ? <VerificationDetailPanel detail={selectedDetail} /> : null}
     </div>
   )
 }

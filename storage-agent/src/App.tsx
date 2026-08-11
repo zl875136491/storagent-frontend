@@ -34,7 +34,7 @@ export function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route index element={<Navigate to="/data/basic/region" replace />} />
+              <Route index element={<Navigate to="/docs" replace />} />
               <Route path="data">
                 <Route path="basic">
                   <Route path="region" element={<RegionPage />} />
@@ -55,7 +55,7 @@ export function App() {
             </Route>
           </Route>
 
-          <Route path="*" element={<Navigate to="/data/basic/region" replace />} />
+          <Route path="*" element={<Navigate to="/docs" replace />} />
         </Routes>
         </NavigationLeaveBlockProvider>
       </BrowserRouter>

@@ -3,6 +3,8 @@ import {
   BookOpen,
   Boxes,
   ChartScatter,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronDown,
   Database,
   FileStack,
@@ -196,6 +198,19 @@ function AppShell() {
         <SidebarContent>
           <div className="space-y-6">
             <div>
+              <SidebarSectionTitle>文档中心</SidebarSectionTitle>
+              <SidebarMenu>
+                <NavLink to="/docs" onClick={handleNavClick}>
+                  {({ isActive }) => (
+                    <SidebarMenuButton active={isActive} icon={<BookOpen aria-hidden />}>
+                      使用文档
+                    </SidebarMenuButton>
+                  )}
+                </NavLink>
+              </SidebarMenu>
+            </div>
+
+            <div>
               <SidebarSectionTitle>基础数据管理</SidebarSectionTitle>
               <SidebarMenu>
                 <NavLink to="/data/basic/region" onClick={handleNavClick}>
@@ -294,17 +309,8 @@ function AppShell() {
             ) : null}
           </div>
 
-          <div className="mt-auto border-t border-sidebar-border/60 pt-6">
-            <SidebarSectionTitle>文档中心</SidebarSectionTitle>
-            <SidebarMenu>
-              <NavLink to="/docs" onClick={handleNavClick}>
-                {({ isActive }) => (
-                  <SidebarMenuButton active={isActive} icon={<BookOpen aria-hidden />}>
-                    使用文档
-                  </SidebarMenuButton>
-                )}
-              </NavLink>
-            </SidebarMenu>
+          <div className="mt-auto border-t border-sidebar-border/60 pt-4">
+            <SidebarCollapseControl />
           </div>
         </SidebarContent>
       </Sidebar>
@@ -338,5 +344,22 @@ function AppShell() {
         </main>
       </div>
     </div>
+  )
+}
+
+function SidebarCollapseControl() {
+  const { collapsed, setCollapsed } = useSidebar()
+
+  return (
+    <button
+      type="button"
+      onClick={() => setCollapsed((current) => !current)}
+      className="hidden w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground md:flex md:group-data-[collapsed=true]/sidebar:justify-center md:group-data-[collapsed=true]/sidebar:px-2"
+      aria-label={collapsed ? "展开边栏" : "折叠边栏"}
+      title={collapsed ? "展开边栏" : "折叠边栏"}
+    >
+      {collapsed ? <ChevronsRight className="h-4 w-4 shrink-0" aria-hidden /> : <ChevronsLeft className="h-4 w-4 shrink-0" aria-hidden />}
+      <span className="md:group-data-[collapsed=true]/sidebar:sr-only">{collapsed ? "展开边栏" : "折叠边栏"}</span>
+    </button>
   )
 }
