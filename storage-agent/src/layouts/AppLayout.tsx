@@ -187,11 +187,20 @@ function AppShell() {
       <SidebarMobileBackdrop />
       <Sidebar className="backdrop-blur">
         <SidebarHeader>
-          <div className="break-words text-[11px] font-semibold uppercase tracking-[0.14em] text-sidebar-primary-foreground/95 md:group-data-[collapsed=true]/sidebar:sr-only">
-            Storage Agent
-          </div>
-          <div className="text-sm font-semibold leading-snug text-sidebar-foreground md:group-data-[collapsed=true]/sidebar:sr-only">
-            跨区域存储系统
+          <div className="relative flex min-h-[2.875rem] items-center">
+            <div className="space-y-1.5 md:group-data-[collapsed=true]/sidebar:sr-only">
+              <div className="break-words text-[11px] font-semibold uppercase tracking-[0.14em] text-sidebar-primary-foreground/95">
+                Storage Agent
+              </div>
+              <div className="text-sm font-semibold leading-snug text-sidebar-foreground">
+                跨区域存储系统
+              </div>
+            </div>
+            <img
+              src="/cross2.png"
+              alt="Storage Agent"
+              className="hidden h-8 w-8 object-contain md:group-data-[collapsed=true]/sidebar:block"
+            />
           </div>
         </SidebarHeader>
 

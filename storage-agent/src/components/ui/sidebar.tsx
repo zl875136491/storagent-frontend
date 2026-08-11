@@ -143,7 +143,7 @@ export function SidebarHeader({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("mb-6 min-w-0 space-y-1.5 md:group-data-[collapsed=true]/sidebar:mb-2", className)} {...props}>
+    <div className={cn("mb-6 min-w-0 min-h-[2.875rem] space-y-1.5", className)} {...props}>
       {children}
     </div>
   )
