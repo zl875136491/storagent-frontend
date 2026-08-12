@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
-import { Navigate, NavLink } from "react-router-dom"
-import { DatabaseZap, KeyRound, Server, ServerCog } from "lucide-react"
+import { Navigate } from "react-router-dom"
+import { KeyRound, Server } from "lucide-react"
 
 import { fetchDemoApiKeysApi, type DemoAPIKey } from "@/api/client"
 import { useAuth } from "@/auth/AuthContext"
@@ -10,7 +10,6 @@ import { GuideBackendSelector } from "@/components/guides/guide-backend-selector
 import { GuideEndpointsProvider, useGuideDemoBackendSelection } from "@/components/guides/guide-endpoints-context"
 import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
 
 function canOperateService(user: ReturnType<typeof useAuth>["user"]) {
   return user?.is_admin === true || user?.roles.some((role) => role.name === "运维管理员") === true
@@ -76,7 +75,7 @@ function DetailValue({ value, emptyLabel }: { value: unknown; emptyLabel: string
 
 function VerificationDetailPanel({ detail }: { detail: VerificationDetail | null }) {
   return (
-    <Card className="h-[42rem] min-h-0 rounded-lg shadow-none" aria-live="polite">
+    <Card className="h-full min-h-[42rem] rounded-lg shadow-none" aria-live="polite">
       <CardContent className="flex h-full min-h-0 flex-col p-5">
         <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-4">
           <div className="min-w-0">
@@ -104,34 +103,6 @@ function VerificationDetailPanel({ detail }: { detail: VerificationDetail | null
   )
 }
 
-function ServiceOperationsTabs() {
-  return (
-    <nav className="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="tablist" aria-label="服务运维视图">
-      <NavLink
-        to="/admin/service-operations"
-        end
-        className={({ isActive }) => cn(
-          "inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs transition-colors",
-          isActive ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <DatabaseZap className="h-3.5 w-3.5" aria-hidden />
-        接口验证
-      </NavLink>
-      <NavLink
-        to="/admin/service-operations/loading-test"
-        className={({ isActive }) => cn(
-          "inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs transition-colors",
-          isActive ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <ServerCog className="h-3.5 w-3.5" aria-hidden />
-        加载测试
-      </NavLink>
-    </nav>
-  )
-}
-
 function ServiceOperationsWorkspace() {
   const { accessToken } = useAuth()
   const [version] = useDocVersion()
@@ -149,26 +120,26 @@ function ServiceOperationsWorkspace() {
             面向存储服务的受控验收工作台。选择目标网关和 APIKey 对象后，系统会执行当前版本全部存储接口，并保留每一步的 HTTP 状态与请求 ID。
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <DocVersionSwitcher className="shrink-0" />
-          <ServiceOperationsTabs />
-        </div>
+        <DocVersionSwitcher className="shrink-0" />
       </div>
 
-      <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
-        <div className="min-w-0 space-y-4">
-          <Card className="rounded-lg shadow-none">
-            <CardContent className="grid gap-4 p-5 lg:grid-cols-2">
-              <div>
-                <div className="mb-3"><h2 className="text-base font-semibold text-foreground">运行配置</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">修改版本、端点或 APIKey 后，将从新的验证上下文开始执行。</p></div>
-                <ApiKeyRunSelector value={apiKeyId} onChange={selectApiKey} />
-              </div>
-              <div className="rounded-lg border border-border/70 bg-background p-4"><div className="flex items-start gap-3"><Server className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden /><div className="min-w-0"><h2 className="text-sm font-semibold text-foreground">目标服务</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">使用公共探测接口选择可达网关。当前选择会用于本次完整验证的所有请求。</p></div></div><div className="mt-4"><GuideBackendSelector value={base} onChange={setBase} /></div>{listLoading ? <p className="mt-3 text-[11px] text-muted-foreground">正在探测后端健康状态。</p> : null}{listError ? <p className="mt-3 text-[11px] text-destructive">{listError}</p> : null}</div>
-            </CardContent>
-          </Card>
+      <Card className="mb-4 shrink-0 rounded-lg shadow-none">
+        <CardContent className="grid gap-4 p-5 xl:grid-cols-[minmax(20rem,0.78fr)_minmax(0,1.22fr)]">
+          <div>
+            <div className="mb-3"><h2 className="text-base font-semibold text-foreground">运行配置</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">修改版本、端点或 APIKey 后，将从新的验证上下文开始执行。</p></div>
+            <ApiKeyRunSelector value={apiKeyId} onChange={selectApiKey} />
+          </div>
+          <div className="rounded-lg border border-border/70 bg-background p-4"><div className="flex items-start gap-3"><Server className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden /><div className="min-w-0"><h2 className="text-sm font-semibold text-foreground">目标服务</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">使用公共探测接口选择可达网关。当前选择会用于本次完整验证的所有请求。</p></div></div><div className="mt-4"><GuideBackendSelector value={base} onChange={setBase} /></div>{listLoading ? <p className="mt-3 text-[11px] text-muted-foreground">正在探测后端健康状态。</p> : null}{listError ? <p className="mt-3 text-[11px] text-destructive">{listError}</p> : null}</div>
+        </CardContent>
+      </Card>
+
+      <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
+        <div className="min-w-0">
           <StorageApiVerificationPanel version={version} baseURL={base} apiKeyId={apiKeyId} accessToken={accessToken ?? undefined} onDetailSelect={setSelectedDetail} />
         </div>
-        <VerificationDetailPanel detail={selectedDetail} />
+        <div className="min-h-0">
+          <VerificationDetailPanel detail={selectedDetail} />
+        </div>
       </section>
     </div>
   )

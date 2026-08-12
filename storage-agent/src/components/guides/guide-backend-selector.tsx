@@ -1,6 +1,5 @@
-import { Loader2 } from "lucide-react"
-
 import { normalizePublicApiBase, sameOriginGatewayBaseForEndpoint } from "@/api/backendResolver"
+import { BrandLoading } from "@/components/BrandLoading"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
@@ -55,10 +54,7 @@ export function GuideBackendSelector({ value, onChange }: Props) {
 
   if (listLoading) {
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-        加载后端列表…
-      </div>
+      <BrandLoading label="正在加载后端列表..." compact iconClassName="h-5 w-5" />
     )
   }
 
@@ -78,7 +74,7 @@ export function GuideBackendSelector({ value, onChange }: Props) {
       <p className="text-[11px] leading-snug text-muted-foreground">
         通过当前页面的区域网关调用 <span className="font-mono">GET /api/v1/public/endpoints/test</span> 探测；不可选项为失败；默认可用时延最低者。
       </p>
-      <RadioGroup value={value} onValueChange={onChange} className="flex flex-wrap gap-2">
+      <RadioGroup value={value} onValueChange={onChange} className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
         {displayItems.map((it) => {
           const base = normalizePublicApiBase(sameOriginGatewayBaseForEndpoint(it))
           const h = healthByBase.get(base)

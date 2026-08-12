@@ -386,7 +386,7 @@ export function StorageApiVerificationPanel({ version, baseURL, apiKeyId, access
             ))}</tbody>
           </table>
         </div>
-        {summary ? <p className={cn("text-sm", summary.includes("完整验证通过") ? "text-emerald-700 dark:text-emerald-300" : "text-destructive")} role="status">{summary}</p> : null}
+        {summary?.includes("完整验证通过") ? <p className="text-sm text-emerald-700 dark:text-emerald-300" role="status">{summary}</p> : null}
         {!ready ? <p className="text-xs text-muted-foreground">请先选择可用 APIKey 和服务端点。</p> : null}
       </CardContent>
     </Card>
