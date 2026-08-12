@@ -172,6 +172,25 @@
   }
 }
 
+@keyframes brand-mark-inertia-spin {
+  /* A full revolution is five distinct 72-degree steps. */
+  0% { transform: rotate(0deg); animation-timing-function: cubic-bezier(0.18, 0.82, 0.32, 1); }
+  20% { transform: rotate(72deg); animation-timing-function: cubic-bezier(0.18, 0.82, 0.32, 1); }
+  40% { transform: rotate(144deg); animation-timing-function: cubic-bezier(0.18, 0.82, 0.32, 1); }
+  60% { transform: rotate(216deg); animation-timing-function: cubic-bezier(0.18, 0.82, 0.32, 1); }
+  80% { transform: rotate(288deg); animation-timing-function: cubic-bezier(0.18, 0.82, 0.32, 1); }
+  100% { transform: rotate(360deg); }
+}
+
+.brand-mark-loading {
+  animation: brand-mark-inertia-spin 3.7s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark-loading { animation-duration: 4s; }
+}
+
 /* 代码高亮主题：使用 highlight.js 的标准 GitHub 语法高亮配色（按语言 token 上色）
    - 明亮主题：默认（light）
    - 暗黑主题：仅在 .dark 下生效
