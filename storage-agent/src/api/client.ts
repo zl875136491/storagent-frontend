@@ -572,6 +572,43 @@ export interface UsageAcrossRegionsResponse {
   failures: UsageRegionFailure[]
 }
 
+export interface AuditEventItem {
+  id: string
+  action: string
+  actor: string
+  resource: string
+  success: boolean
+  detail: string
+  region: string
+  created_at: string
+}
+
+export interface AuditEventListResponse {
+  data: AuditEventItem[]
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+}
+
+export interface AuditEventOptionsResponse {
+  actions: string[]
+  actors: string[]
+  regions: string[]
+}
+
+export interface AuditEventQueryParams {
+  start_at?: string
+  end_at?: string
+  action?: string
+  actor?: string
+  region?: string
+  resource?: string
+  success?: boolean
+  page?: number
+  page_size?: number
+}
+
 /** 存储桶跨站点复制规则状态（与 GET …/replicates 一致） */
 export interface BucketReplicateRuleStatus {
   status: string
@@ -1571,6 +1608,29 @@ export async function fetchUsageOptionsApi(
   accessToken?: string,
 ): Promise<UsageOptionsResponse> {
   return apiGet<UsageOptionsResponse>("/api/v1/usage/options", accessToken)
+}
+
+export async function fetchAuditEventOptionsApi(
+  accessToken?: string,
+): Promise<AuditEventOptionsResponse> {
+  return apiGet<AuditEventOptionsResponse>("/api/v1/audit/options", accessToken)
+}
+
+export async function fetchAuditEventsApi(
+  params: AuditEventQueryParams,
+  accessToken?: string,
+): Promise<AuditEventListResponse> {
+  const query = new URLSearchParams()
+  if (params.start_at) query.set("start_at", params.start_at)
+  if (params.end_at) query.set("end_at", params.end_at)
+  if (params.action) query.set("action", params.action)
+  if (params.actor) query.set("actor", params.actor)
+  if (params.region) query.set("region", params.region)
+  if (params.resource) query.set("resource", params.resource)
+  if (params.success !== undefined) query.set("success", String(params.success))
+  query.set("page", String(params.page ?? 1))
+  query.set("page_size", String(params.page_size ?? 50))
+  return apiGet<AuditEventListResponse>(`/api/v1/audit/events?${query.toString()}`, accessToken)
 }
 
 function buildUsageQuery(params: UsageQueryParams): string {

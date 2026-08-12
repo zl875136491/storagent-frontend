@@ -3,6 +3,7 @@ import {
   BookOpen,
   Boxes,
   ChartScatter,
+  ClipboardList,
   ChevronDown,
   Database,
   FileStack,
@@ -289,6 +290,15 @@ function AppShell() {
                       {({ isActive }) => (
                         <SidebarMenuButton active={isActive} icon={<ChartScatter aria-hidden />}>
                           用量统计
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
+                  {user?.is_admin ? (
+                    <NavLink to="/admin/audit" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<ClipboardList aria-hidden />}>
+                          审计日志
                         </SidebarMenuButton>
                       )}
                     </NavLink>
