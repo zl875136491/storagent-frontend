@@ -7,7 +7,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react"
-import { Menu, X } from "lucide-react"
+import { ChevronsLeft, ChevronsRight, Menu, X } from "lucide-react"
 import { cn } from "../../lib/utils"
 
 interface SidebarContextValue {
@@ -121,13 +121,13 @@ export function Sidebar({
       data-collapsed={collapsed ? "true" : "false"}
       data-mobile-open={mobileOpen ? "true" : "false"}
       className={cn(
-        "group/sidebar flex flex-col border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground/90",
+        "group/sidebar flex flex-col overflow-hidden border-r border-sidebar-border bg-sidebar px-4 py-6 text-sidebar-foreground/90",
         /* 移动端：抽屉 */
         "fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] max-w-[100vw] transition-transform duration-200 ease-out",
         mobileOpen ? "translate-x-0" : "-translate-x-full",
         /* 桌面端：静态侧栏 */
-        "md:relative md:inset-y-auto md:left-auto md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:transition-none",
-        "data-[collapsed=true]:md:w-[4.25rem]",
+        "md:relative md:inset-y-auto md:left-auto md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:transition-[width,padding] md:duration-200 md:ease-linear",
+        "data-[collapsed=true]:md:w-[4.25rem] data-[collapsed=true]:md:px-2",
         className,
       )}
       {...props}
@@ -173,8 +173,8 @@ export function SidebarSectionTitle({
   return (
     <div
       className={cn(
-        "mb-2 text-[11px] font-semibold text-sidebar-foreground/65",
-        railMode && "sr-only",
+        "mb-2 h-4 overflow-hidden text-[11px] font-semibold text-sidebar-foreground/65 transition-[height,opacity] duration-150",
+        railMode && "opacity-0",
         className,
       )}
       {...props}
@@ -218,10 +218,10 @@ export function SidebarMenuButton({
       type="button"
       data-active={active ? "true" : "false"}
       className={cn(
-        "my-2 flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors",
+        "my-2 flex h-11 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-[background-color,color,padding,gap] duration-200",
         "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         "data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary",
-        railMode && "justify-center px-2",
+        railMode && "justify-center gap-0 px-0",
         className,
       )}
       {...props}
@@ -230,6 +230,7 @@ export function SidebarMenuButton({
         <span
           className={cn(
             "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-sidebar-primary/15 text-sidebar-primary [&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0",
+            "transition-colors duration-200",
             railMode && "bg-sidebar-primary/20",
           )}
         >
@@ -238,8 +239,8 @@ export function SidebarMenuButton({
       )}
       <span
         className={cn(
-          "min-w-0 flex-1 truncate",
-          railMode && "sr-only w-0 flex-none overflow-hidden p-0",
+          "min-w-0 flex-1 truncate whitespace-nowrap opacity-100 transition-[width,opacity,margin] duration-150",
+          railMode && "w-0 flex-none overflow-hidden opacity-0",
         )}
       >
         {children}
@@ -269,15 +270,13 @@ export function SidebarTrigger({
         }
       }}
       className={cn(
-        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground",
+        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-sidebar-border/60 bg-transparent text-sidebar-foreground/85 shadow-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         className,
       )}
       {...props}
     >
       {isMdUp ? (
-        <span className="text-sm leading-none" aria-hidden>
-          {collapsed ? "›" : "‹"}
-        </span>
+        collapsed ? <ChevronsRight className="h-4 w-4" aria-hidden /> : <ChevronsLeft className="h-4 w-4" aria-hidden />
       ) : mobileOpen ? (
         <X className="h-4 w-4" strokeWidth={2} aria-hidden />
       ) : (

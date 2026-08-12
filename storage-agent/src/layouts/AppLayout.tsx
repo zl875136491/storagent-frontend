@@ -3,8 +3,6 @@ import {
   BookOpen,
   Boxes,
   ChartScatter,
-  ChevronsLeft,
-  ChevronsRight,
   ChevronDown,
   Database,
   FileStack,
@@ -188,7 +186,7 @@ function AppShell() {
       <Sidebar className="backdrop-blur">
         <SidebarHeader>
           <div className="relative flex min-h-[2.875rem] items-center">
-            <div className="space-y-1.5 md:group-data-[collapsed=true]/sidebar:sr-only">
+            <div className="min-w-0 space-y-1.5 overflow-hidden whitespace-nowrap opacity-100 transition-[width,opacity] duration-150 md:group-data-[collapsed=true]/sidebar:w-0 md:group-data-[collapsed=true]/sidebar:opacity-0">
               <div className="break-words text-[11px] font-semibold uppercase tracking-[0.14em] text-sidebar-primary-foreground/95">
                 Storage Agent
               </div>
@@ -199,7 +197,7 @@ function AppShell() {
             <img
               src="/cross2.png"
               alt="Storage Agent"
-              className="hidden h-8 w-8 object-contain md:group-data-[collapsed=true]/sidebar:block"
+              className="pointer-events-none absolute left-0 h-8 w-8 scale-90 object-contain opacity-0 transition-[opacity,transform] duration-150 md:group-data-[collapsed=true]/sidebar:scale-100 md:group-data-[collapsed=true]/sidebar:opacity-100"
             />
           </div>
         </SidebarHeader>
@@ -319,7 +317,7 @@ function AppShell() {
           </div>
 
           <div className="mt-auto border-t border-sidebar-border/60 pt-4">
-            <SidebarCollapseControl />
+            <SidebarTrigger className="hidden w-full justify-start px-2.5 md:flex md:group-data-[collapsed=true]/sidebar:justify-center md:group-data-[collapsed=true]/sidebar:px-0" />
           </div>
         </SidebarContent>
       </Sidebar>
@@ -353,22 +351,5 @@ function AppShell() {
         </main>
       </div>
     </div>
-  )
-}
-
-function SidebarCollapseControl() {
-  const { collapsed, setCollapsed } = useSidebar()
-
-  return (
-    <button
-      type="button"
-      onClick={() => setCollapsed((current) => !current)}
-      className="hidden w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground md:flex md:group-data-[collapsed=true]/sidebar:justify-center md:group-data-[collapsed=true]/sidebar:px-2"
-      aria-label={collapsed ? "展开边栏" : "折叠边栏"}
-      title={collapsed ? "展开边栏" : "折叠边栏"}
-    >
-      {collapsed ? <ChevronsRight className="h-4 w-4 shrink-0" aria-hidden /> : <ChevronsLeft className="h-4 w-4 shrink-0" aria-hidden />}
-      <span className="md:group-data-[collapsed=true]/sidebar:sr-only">{collapsed ? "展开边栏" : "折叠边栏"}</span>
-    </button>
   )
 }
