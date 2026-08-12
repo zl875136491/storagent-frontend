@@ -185,27 +185,27 @@ function AppShell() {
       <SidebarMobileBackdrop />
       <Sidebar className="backdrop-blur">
         <SidebarHeader>
-          <div className="relative flex min-h-[2.875rem] items-center">
-            <div className="min-w-0 space-y-1.5 overflow-hidden whitespace-nowrap opacity-100 transition-[width,opacity] duration-150 md:group-data-[collapsed=true]/sidebar:w-0 md:group-data-[collapsed=true]/sidebar:opacity-0">
-              <div className="break-words text-[11px] font-semibold uppercase tracking-[0.14em] text-sidebar-primary-foreground/95">
-                Storage Agent
+          <div className="relative flex min-h-12 items-center">
+            <img
+              src="/brand-mark.png"
+              alt="Storagent"
+              className="pointer-events-none absolute left-0 h-10 w-10 shrink-0 object-contain transition-[left,transform] duration-200 ease-linear md:group-data-[collapsed=true]/sidebar:left-1/2 md:group-data-[collapsed=true]/sidebar:-translate-x-1/2"
+            />
+            <div className="min-w-0 space-y-0.5 pl-12 opacity-100 transition-[width,opacity,padding] duration-150 md:group-data-[collapsed=true]/sidebar:w-0 md:group-data-[collapsed=true]/sidebar:overflow-hidden md:group-data-[collapsed=true]/sidebar:p-0 md:group-data-[collapsed=true]/sidebar:opacity-0">
+              <div className="truncate text-sm font-semibold leading-snug text-sidebar-primary-foreground">
+                Storagent
               </div>
-              <div className="text-sm font-semibold leading-snug text-sidebar-foreground">
+              <div className="truncate text-xs font-medium leading-snug text-sidebar-foreground/70">
                 跨区域存储系统
               </div>
             </div>
-            <img
-              src="/cross2.png"
-              alt="Storage Agent"
-              className="pointer-events-none absolute left-0 h-8 w-8 scale-90 object-contain opacity-0 transition-[opacity,transform] duration-150 md:group-data-[collapsed=true]/sidebar:scale-100 md:group-data-[collapsed=true]/sidebar:opacity-100"
-            />
           </div>
         </SidebarHeader>
 
         <SidebarContent>
           <div className="space-y-6">
             <div>
-              <SidebarSectionTitle>文档中心</SidebarSectionTitle>
+              <SidebarSectionTitle railLabel="DOC">文档中心</SidebarSectionTitle>
               <SidebarMenu>
                 <NavLink to="/docs" onClick={handleNavClick}>
                   {({ isActive }) => (
@@ -218,7 +218,7 @@ function AppShell() {
             </div>
 
             <div>
-              <SidebarSectionTitle>基础数据管理</SidebarSectionTitle>
+              <SidebarSectionTitle railLabel="BASE">基础数据管理</SidebarSectionTitle>
               <SidebarMenu>
                 <NavLink to="/data/basic/region" onClick={handleNavClick}>
                   {({ isActive }) => (
@@ -245,7 +245,7 @@ function AppShell() {
             </div>
 
             <div>
-              <SidebarSectionTitle>存储服务</SidebarSectionTitle>
+              <SidebarSectionTitle railLabel="STOR">存储服务</SidebarSectionTitle>
               <SidebarMenu>
                 <NavLink to="/data/minio" onClick={handleNavClick}>
                   {({ isActive }) => (
@@ -273,7 +273,7 @@ function AppShell() {
 
             {showSystemManagement ? (
               <div>
-                <SidebarSectionTitle>系统管理</SidebarSectionTitle>
+                <SidebarSectionTitle railLabel="SYSTEM">系统管理</SidebarSectionTitle>
                 <SidebarMenu>
                   {canManageUsers ? (
                     <NavLink to="/admin/users" onClick={handleNavClick}>
@@ -326,7 +326,7 @@ function AppShell() {
         <header className="relative z-30 flex min-h-14 flex-wrap items-center gap-2 overflow-visible border-b border-border/70 bg-background/80 px-3 py-2 backdrop-blur sm:min-h-16 sm:flex-nowrap sm:gap-3 sm:px-4 md:px-6">
           <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3 md:hidden">
             <SidebarTrigger />
-            <div className="truncate text-sm font-semibold sm:text-base">Storage Agent</div>
+            <div className="truncate text-sm font-semibold sm:text-base">Storagent</div>
           </div>
           <div className="order-3 flex min-w-0 basis-full items-center sm:order-none sm:basis-auto sm:flex-1">
             <BackendEndpointSwitcher />

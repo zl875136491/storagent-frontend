@@ -164,8 +164,9 @@ export function SidebarContent({
 export function SidebarSectionTitle({
   className,
   children,
+  railLabel,
   ...props
-}: HTMLAttributes<HTMLDivElement>) {
+}: HTMLAttributes<HTMLDivElement> & { railLabel?: string }) {
   const { collapsed } = useSidebar()
   const isMdUp = useMediaQuery("(min-width: 768px)")
   const railMode = isMdUp && collapsed
@@ -173,13 +174,25 @@ export function SidebarSectionTitle({
   return (
     <div
       className={cn(
-        "mb-2 h-4 overflow-hidden text-[11px] font-semibold text-sidebar-foreground/65 transition-[height,opacity] duration-150",
-        railMode && "opacity-0",
+        "relative mb-2 flex h-4 items-center overflow-hidden text-[11px] font-semibold text-sidebar-foreground/65",
         className,
       )}
       {...props}
     >
-      {children}
+      <span className={cn("min-w-0 truncate whitespace-nowrap transition-opacity duration-150", railMode && "opacity-0")}>
+        {children}
+      </span>
+      {railLabel ? (
+        <span
+          className={cn(
+            "pointer-events-none absolute inset-x-0 text-center text-[9px] font-bold leading-none tracking-[0.08em] opacity-0 transition-opacity duration-150",
+            railMode && "opacity-100",
+          )}
+          aria-hidden={!railMode}
+        >
+          {railLabel}
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -259,7 +272,7 @@ export function SidebarTrigger({
   return (
     <button
       type="button"
-      aria-label={isMdUp ? "切换侧边栏折叠" : mobileOpen ? "关闭导航菜单" : "打开导航菜单"}
+      aria-label={isMdUp ? (collapsed ? "展开侧栏" : "收起侧栏") : mobileOpen ? "关闭导航菜单" : "打开导航菜单"}
       aria-expanded={!isMdUp ? mobileOpen : undefined}
       data-collapsed={collapsed ? "true" : "false"}
       onClick={() => {
@@ -270,7 +283,7 @@ export function SidebarTrigger({
         }
       }}
       className={cn(
-        "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-sidebar-border/60 bg-transparent text-sidebar-foreground/85 shadow-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        "inline-flex h-9 w-full shrink-0 items-center gap-2 rounded-lg border border-sidebar-border/60 bg-transparent px-2.5 text-sidebar-foreground/85 shadow-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         className,
       )}
       {...props}
@@ -282,6 +295,11 @@ export function SidebarTrigger({
       ) : (
         <Menu className="h-4 w-4" strokeWidth={2} aria-hidden />
       )}
+      {isMdUp ? (
+        <span className={cn("whitespace-nowrap text-xs font-medium", collapsed && "hidden")}>
+          {collapsed ? "展开侧栏" : "收起侧栏"}
+        </span>
+      ) : null}
     </button>
   )
 }
