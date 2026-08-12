@@ -19,6 +19,7 @@ import { Label } from "../../components/ui/label"
 import { CheckIcon } from "lucide-react"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
 import { formatDateTime } from "../../lib/format"
+import { BrandLoading } from "../../components/BrandLoading"
 
 export default function APIKeyPage() {
   const { accessToken, user } = useAuth()
@@ -158,12 +159,7 @@ export default function APIKeyPage() {
       </div>
 
       {loading ? (
-        <div className="flex min-h-[200px] items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
-            <div>正在加载 APIKey 列表...</div>
-          </div>
-        </div>
+        <BrandLoading label="正在加载 APIKey 列表..." />
       ) : apiKeys.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">
@@ -259,9 +255,8 @@ export default function APIKeyPage() {
               </div>
 
               {applicationsLoading ? (
-                <div className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
-                  正在加载应用列表...
+                <div className="rounded-xl bg-muted/40 px-3">
+                  <BrandLoading label="正在加载应用列表..." compact iconClassName="h-5 w-5" />
                 </div>
               ) : applications.length === 0 ? (
                 <Card className="border-dashed bg-muted/30">

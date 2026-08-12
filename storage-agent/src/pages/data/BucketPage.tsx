@@ -17,6 +17,7 @@ import {
 } from "../../components/storage/BucketFileInventory"
 import { formatBytes, formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
+import { BrandLoading } from "../../components/BrandLoading"
 
 type InventoryView = "treemap" | "files"
 
@@ -353,10 +354,9 @@ export default function BucketPage() {
 
       <div className="mb-4">
         {serversLoading ? (
-          <Card className="flex min-h-[100px] items-center justify-center bg-muted/40">
-            <CardContent className="flex items-center gap-2 pt-0 text-xs text-muted-foreground">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-border/60 border-t-emerald-500" />
-              正在加载 MinIO 服务列表...
+          <Card className="bg-muted/40">
+            <CardContent className="pt-0">
+              <BrandLoading label="正在加载 MinIO 服务列表..." className="min-h-[100px]" compact />
             </CardContent>
           </Card>
         ) : servers.length === 0 ? (
@@ -415,10 +415,7 @@ export default function BucketPage() {
       </div>
       <div>
           {bucketsLoading ? (
-            <div className="flex min-h-[600px] flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
-              <div>正在加载存储桶数据...</div>
-            </div>
+            <BrandLoading label="正在加载存储桶数据..." className="min-h-[600px]" />
           ) : !selectedServerId ? (
             <div className="flex min-h-[360px] items-center justify-center text-xs text-muted-foreground">
               请先在上方选择一个 MinIO 服务。

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { LoaderCircle, ShieldCheck, XCircle } from "lucide-react"
+import { ShieldCheck, XCircle } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 
 import { loginByCodeAcrossBackends } from "../api/client"
 import { useAuth } from "../auth/AuthContext"
 import { AuthShell } from "../components/auth/AuthShell"
 import { Button } from "../components/ui/button"
+import { BrandLoading } from "../components/BrandLoading"
 
 type VerifyState = "waiting" | "verifying" | "success" | "error"
 
@@ -56,8 +57,7 @@ export default function LoginByCodePage() {
       <div className="space-y-4 text-center">
         {state === "waiting" || state === "verifying" ? (
           <>
-            <LoaderCircle className="mx-auto h-9 w-9 animate-spin text-primary" aria-hidden />
-            <p className="text-sm text-muted-foreground">正在验证，请稍候...</p>
+            <BrandLoading label="正在验证，请稍候..." compact iconClassName="h-10 w-10" />
           </>
         ) : state === "success" ? (
           <>

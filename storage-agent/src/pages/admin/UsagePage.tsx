@@ -39,6 +39,7 @@ import {
 } from "../../components/ui/table"
 import { formatBytes, formatDateTime, parseBackendDate } from "../../lib/format"
 import { cn } from "../../lib/utils"
+import { BrandLoading } from "../../components/BrandLoading"
 import {
   RegionUsageChart,
   type RegionUsageRow,
@@ -614,9 +615,7 @@ export default function UsagePage() {
         </div>
         {activePanel === "timeline" ? <div id="usage-timeline-panel" className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
           {loading ? (
-            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">
-              <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden />正在汇总各区域用量...
-            </div>
+            <BrandLoading label="正在汇总各区域用量..." className="min-h-[20rem] flex-1 lg:min-h-0" compact />
           ) : !hasData ? (
             <div className="flex min-h-[20rem] flex-1 flex-col items-center justify-center text-center lg:min-h-0">
               <ChartScatter className="h-8 w-8 text-muted-foreground/55" aria-hidden />
@@ -670,9 +669,7 @@ export default function UsagePage() {
         </div>
         {activePanel === "region" ? <div id="usage-region-panel" className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
           {loading ? (
-            <div className="flex min-h-[20rem] flex-1 items-center justify-center text-xs text-muted-foreground lg:min-h-0">
-              <RefreshCw className="mr-2 h-4 w-4 animate-spin" aria-hidden />正在加载区域数据...
-            </div>
+            <BrandLoading label="正在加载区域数据..." className="min-h-[20rem] flex-1 lg:min-h-0" compact />
           ) : !hasData || regionRows.length === 0 ? (
             <div className="flex min-h-[20rem] flex-1 flex-col items-center justify-center text-center lg:min-h-0">
               <MapPin className="h-8 w-8 text-muted-foreground/55" aria-hidden />

@@ -3,6 +3,7 @@ import { useAuth } from "../../auth/AuthContext"
 import { fetchStorageBucketsApi, type StorageBucketItem } from "../../api/client"
 import { BucketReplicateGraph } from "../../components/storage/BucketReplicateGraph"
 import { Card, CardContent } from "../../components/ui/card"
+import { BrandLoading } from "../../components/BrandLoading"
 
 function getBucketShownName(bucket: StorageBucketItem): string {
   const shownName = bucket.app?.shown_name?.trim()
@@ -60,12 +61,7 @@ export default function StorageBucketManagePage() {
       </div>
 
       {loading ? (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-emerald-500" />
-            <div>正在加载存储桶...</div>
-          </div>
-        </div>
+        <BrandLoading label="正在加载存储桶..." className="flex-1" />
       ) : buckets.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">

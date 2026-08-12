@@ -12,6 +12,7 @@ import { apiBaseForEndpoint, probeBackendEndpointReachable } from "@/api/backend
 import { setStoredApiBase } from "@/api/apiBaseStorage"
 import { showErrorToast } from "@/api/toast"
 import { cn } from "@/lib/utils"
+import { BrandLoading } from "@/components/BrandLoading"
 
 const ACCESS_TOKEN_KEY = "cross_storage_access_token"
 const REFRESH_TOKEN_KEY = "cross_storage_refresh_token"
@@ -136,10 +137,7 @@ export function BackendEndpointSwitcher() {
             后端服务
           </div>
           {loading && items.length === 0 ? (
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              加载中…
-            </div>
+            <BrandLoading label="正在加载..." compact className="mt-0.5 items-start py-0 text-left" iconClassName="h-3.5 w-3.5" />
           ) : loadError ? (
             <div className="mt-0.5 truncate text-xs text-destructive">{loadError}</div>
           ) : selected ? (
@@ -221,10 +219,7 @@ export function BackendEndpointSwitcher() {
           className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,18rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-lg"
         >
           {loading && items.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              加载中…
-            </div>
+            <BrandLoading label="正在加载..." compact className="px-3 py-6" iconClassName="h-5 w-5" />
           ) : items.length === 0 ? (
             <div className="px-3 py-5 text-center text-xs text-muted-foreground">暂无可用后端</div>
           ) : (

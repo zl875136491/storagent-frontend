@@ -11,6 +11,7 @@ import { showErrorToast } from "../../api/toast"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { Input } from "../../components/ui/input"
+import { BrandLoading } from "../../components/BrandLoading"
 
 export default function MinioPage() {
   const { accessToken, user } = useAuth()
@@ -96,12 +97,7 @@ export default function MinioPage() {
       </div>
 
       {loading ? (
-        <div className="flex min-h-[200px] items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-emerald-500" />
-            <div>正在加载 MinIO 服务列表...</div>
-          </div>
-        </div>
+        <BrandLoading label="正在加载 MinIO 服务列表..." />
       ) : servers.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">

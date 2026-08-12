@@ -5,6 +5,7 @@ import { setApiBaseUrl } from "@/api/client"
 import { resolveMasterBackend, type ProbeLine } from "@/api/backendResolver"
 import { CANDIDATE_SERVER_LIST } from "@/config/serverList"
 import { Button } from "@/components/ui/button"
+import { BrandLoading } from "@/components/BrandLoading"
 
 export function BackendGate({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
@@ -55,8 +56,7 @@ export function BackendGate({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-foreground">
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-border/70 border-t-primary" />
-      <div className="text-sm font-medium">正在连接最佳服务</div>
+      <BrandLoading label="正在连接最佳服务" compact iconClassName="h-12 w-12" />
       {probeLines.length > 0 ? (
         <ul className="flex max-w-md flex-col gap-2 text-left text-xs">
           {probeLines.map((line) => (

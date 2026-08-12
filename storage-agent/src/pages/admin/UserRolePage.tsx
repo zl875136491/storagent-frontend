@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "../../components/ui/table"
 import { cn } from "../../lib/utils"
+import { BrandLoading } from "../../components/BrandLoading"
 
 const BASE_ROLE = "用户"
 const ROLE_ORDER = [BASE_ROLE, "应用管理员", "运维管理员", "用户管理员", "管理员"] as const
@@ -161,9 +162,7 @@ export default function UserRolePage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex min-h-[180px] items-center justify-center text-xs text-muted-foreground">
-              正在加载用户...
-            </div>
+            <BrandLoading label="正在加载用户..." className="min-h-[180px]" compact />
           ) : users.length === 0 ? (
             <div className="rounded-md border border-dashed border-border/70 px-4 py-10 text-center text-xs text-muted-foreground">
               暂无可管理用户

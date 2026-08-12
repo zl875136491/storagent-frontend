@@ -53,6 +53,7 @@ import {
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { Progress } from "../../components/ui/progress"
+import { BrandLoading } from "../../components/BrandLoading"
 import {
   Table,
   TableBody,
@@ -292,12 +293,7 @@ function ServerStatusLegend() {
 }
 
 function LoadingState({ label }: { label: string }) {
-  return (
-    <div className="flex min-h-[360px] flex-1 flex-col items-center justify-center gap-3 text-xs text-muted-foreground">
-      <LoaderCircle className="h-7 w-7 animate-spin text-primary" aria-hidden />
-      {label}
-    </div>
-  )
+  return <BrandLoading label={label} className="min-h-[360px] flex-1" />
 }
 
 interface LinkRow {

@@ -26,6 +26,7 @@ import { Label } from "../../components/ui/label"
 import { Progress } from "../../components/ui/progress"
 import { formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
+import { BrandLoading } from "../../components/BrandLoading"
 
 type ApprovalPhase = "confirm" | "streaming" | "finished"
 
@@ -328,12 +329,7 @@ export default function ApplicationPage() {
       </div>
 
       {loading ? (
-        <div className="flex min-h-[200px] items-center justify-center">
-          <div className="flex flex-col items-center gap-3 text-xs text-muted-foreground">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-border/60 border-t-primary" />
-            <div>正在加载应用列表...</div>
-          </div>
-        </div>
+        <BrandLoading label="正在加载应用列表..." />
       ) : applications.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">
