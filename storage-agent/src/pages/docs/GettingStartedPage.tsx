@@ -22,7 +22,7 @@ export default function GettingStartedPage() {
         <h2 className="text-xl font-semibold tracking-tight text-foreground">调用时序总览</h2>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{isV2 ? "上传、下载与删除各自是一张图。连线只保留动作与顺序，点击后在图内右侧查看认证、输入和输出；全屏模式用于查看完整关系。" : "上传与下载各自是一张图。连线只保留动作与顺序，点击后在图内右侧查看认证、输入和输出；全屏模式用于查看完整关系。"}</p>
         <DocNote><strong className="text-foreground">{version} 实现约定：</strong>App 后端使用 Python，负责业务鉴权、控制面调用和能力令牌签发；App 前端使用 TypeScript，携带 token 直连数据面。其他技术栈由开发者按同一边界自行适配。</DocNote>
-        <DocNote><strong className="text-foreground">网关约定：</strong>所有 Storagent 调用都以 <code className="font-mono text-[11px]">/server/{"{region}"}</code> 开头。生产使用 <code className="font-mono text-[11px]">http://stor.1oa.com.cn/server/bj</code> 等区域基址；NUC 测试入口为 <code className="font-mono text-[11px]">http://10.32.12.110</code>，其中 <code className="font-mono text-[11px]">/server/local</code> 与 <code className="font-mono text-[11px]">/server/nuc-a</code> 指向 A，<code className="font-mono text-[11px]">/server/nuc-b</code> 指向 B。</DocNote>
+        <DocNote><strong className="text-foreground">网关约定：</strong>默认且唯一的接入基址是 <code className="font-mono text-[11px]">http://stor.1oa.com.cn/server/local</code>。只有存在明确的区域选择需求时，才将 <code className="font-mono text-[11px]">/server/{"{region}"}</code> 中的 <code className="font-mono text-[11px]">region</code> 替换为指定区域短码；完整规则见“功能接口引导”的生产网关基址说明。</DocNote>
         {isV2 ? <DocNote><strong className="text-foreground">v2 删除约定：</strong>删除会将对象标记为软删除并立即从应用逻辑配额中剔除，MinIO 原始数据在恢复期内保留。恢复时会重新校验配额；超过恢复期后由周期任务归档和清理。</DocNote> : null}
         <ApiWorkflowDiagram version={version} />
       </section>

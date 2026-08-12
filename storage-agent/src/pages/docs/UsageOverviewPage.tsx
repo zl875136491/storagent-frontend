@@ -57,19 +57,16 @@ export default function UsageOverviewPage() {
         <div className="mt-3 overflow-x-auto rounded-md border border-border/60 bg-background">
           <table className="w-full min-w-[34rem] text-left text-xs">
             <thead className="border-b border-border/60 bg-muted/35 text-muted-foreground">
-              <tr><th className="px-3 py-2 font-medium">环境</th><th className="px-3 py-2 font-medium">网关基址</th><th className="px-3 py-2 font-medium">路由结果</th></tr>
+              <tr><th className="px-3 py-2 font-medium">接入方式</th><th className="px-3 py-2 font-medium">网关基址</th><th className="px-3 py-2 font-medium">使用规则</th></tr>
             </thead>
             <tbody>
-              <tr className="border-b border-border/50"><td className="px-3 py-2 text-foreground">生产</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://stor.1oa.com.cn/server/bj</td><td className="px-3 py-2 text-muted-foreground">指定北京后端；其他区域使用各自短码</td></tr>
-              <tr className="border-b border-border/50"><td className="px-3 py-2 text-foreground">NUC 测试默认</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://10.32.12.110/server/local</td><td className="px-3 py-2 text-muted-foreground">宿主入口默认进入 A，local 指向 A</td></tr>
-              <tr className="border-b border-border/50"><td className="px-3 py-2 text-foreground">NUC 测试 A</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://10.32.12.110/server/nuc-a</td><td className="px-3 py-2 text-muted-foreground">显式访问 nuc-docker-a</td></tr>
-              <tr><td className="px-3 py-2 text-foreground">NUC 测试 B</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://10.32.12.110/server/nuc-b</td><td className="px-3 py-2 text-muted-foreground">显式访问 nuc-docker-b</td></tr>
+              <tr><td className="px-3 py-2 text-foreground">默认</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://stor.1oa.com.cn/server/local</td><td className="px-3 py-2 text-muted-foreground">唯一默认基址。local 自动指向当前服务器后端。</td></tr>
             </tbody>
           </table>
         </div>
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
           例如将 <code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">/api/v1/public/endpoints</code> 追加到网关基址。
-          直接访问 <code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">http://10.32.12.110/api/...</code> 不会进入后端。
+          需要跨区域定向时，再使用 <code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">/server/bj</code>、<code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">/server/tj</code>、<code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">/server/ks</code>、<code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">/server/sz</code> 或 <code className="rounded bg-background px-1 font-mono text-[11px] text-foreground">/server/hz</code>。
         </p>
       </section>
 

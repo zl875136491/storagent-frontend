@@ -40,6 +40,9 @@ const REGION_GATEWAY_SEGMENTS: Record<string, string> = {
   shenzhen: "sz",
   hangzhou: "hz",
   local: "local",
+  // Internal test-node aliases are intentionally kept out of all public
+  // documentation. The test backend still returns these names in endpoint
+  // discovery, and translating them here keeps auth and failover same-origin.
   "nuc-docker-a": "nuc-a",
   "nuc-docker-b": "nuc-b",
 }
@@ -54,10 +57,10 @@ export function normalizePublicApiBase(url: string): string {
 }
 
 /**
- * A configured domain remains the canonical public gateway address. Older NUC
- * endpoint records have no domain yet, so known regions fall back to the
- * current entrypoint's same-origin gateway path instead of exposing an IP.
- * Unknown legacy regions still retain their endpoint address for compatibility.
+ * A configured domain remains the canonical public gateway address. Known
+ * regions fall back to the current entrypoint's same-origin gateway path
+ * instead of exposing an endpoint address. Unknown legacy regions retain
+ * their configured endpoint for compatibility.
  */
 export function apiBaseForEndpoint(endpoint: Pick<PublicEndpointItem, "name" | "domain" | "endpoint">): string {
   const domain = endpoint.domain?.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "")

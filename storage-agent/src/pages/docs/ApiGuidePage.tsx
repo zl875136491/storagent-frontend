@@ -112,45 +112,32 @@ export default function ApiGuidePage() {
           提供并列示例，应依据相同的接口、认证和输入输出约束自行适配。
         </DocNote>
         <DocNote>
-          <strong className="text-foreground">生产网关基址：</strong>浏览器使用同源路径而不是区域 IP 直连。
-          当前区域可用 <code className="font-mono text-[11px]">/server/local</code>，指定区域使用
-          <code className="ml-1 font-mono text-[11px]">/server/bj</code>、
-          <code className="ml-1 font-mono text-[11px]">/server/tj</code>、
-          <code className="ml-1 font-mono text-[11px]">/server/ks</code>、
-          <code className="ml-1 font-mono text-[11px]">/server/sz</code> 或
-          <code className="ml-1 font-mono text-[11px]">/server/hz</code>。每台服务器将
-          <code className="ml-1 font-mono text-[11px]">stor.1oa.com.cn</code> 解析到本机 Nginx，因此页面和 API
-          始终保持同源。
+          <strong className="text-foreground">默认网关基址：</strong>所有业务系统默认配置
+          <code className="ml-1 font-mono text-[11px]">http://stor.1oa.com.cn/server/local</code>。
+          <code className="ml-1 font-mono text-[11px]">local</code> 表示当前部署服务器的 Storagent 后端；无需按部署区域分别维护配置。将
+          <code className="ml-1 font-mono text-[11px]">{content.versionPrefix}/...</code> 直接追加到该基址即可。
         </DocNote>
         <DocNote>
-          <strong className="text-foreground">NUC 测试网关基址：</strong>测试控制台位于
-          <code className="ml-1 font-mono text-[11px]">http://10.32.12.110</code>，宿主 Nginx 再转发至测试网关。
-          <code className="ml-1 font-mono text-[11px]">/server/local</code> 与
-          <code className="ml-1 font-mono text-[11px]">/server/nuc-a</code> 指向 A，
-          <code className="ml-1 font-mono text-[11px]">/server/nuc-b</code> 指向 B。根路径
-          <code className="ml-1 font-mono text-[11px]">/</code> 只返回前端，任何 API 都不能省略
-          <code className="ml-1 font-mono text-[11px]">/server/{"{region}"}</code>。
+          <strong className="text-foreground">按需指定区域：</strong>仅在业务有明确的数据驻留、固定区域任务、跨区域调度或区域运维处置需求时，才将
+          <code className="ml-1 font-mono text-[11px]">local</code> 替换为区域短码。始终使用
+          <code className="ml-1 font-mono text-[11px]">stor.1oa.com.cn/server/{"{region}"}</code>，不使用区域 IP 直连。
         </DocNote>
         <div className="mt-4 overflow-x-auto rounded-lg border border-border/70">
           <table className="w-full min-w-[38rem] text-left text-xs">
             <thead className="border-b border-border/70 bg-muted/40 text-muted-foreground">
               <tr>
-                <th className="px-3 py-2 font-medium">目标区域</th>
+                <th className="px-3 py-2 font-medium">指定区域</th>
                 <th className="px-3 py-2 font-medium">STORAGENT_BASE_URL</th>
-                <th className="px-3 py-2 font-medium">说明</th>
+                <th className="px-3 py-2 font-medium">适用场景</th>
               </tr>
             </thead>
             <tbody>
               {[
-                ["当前服务器", "http://stor.1oa.com.cn/server/local", "每台服务器都指向自己的后端"],
-                ["北京", "http://stor.1oa.com.cn/server/bj", "指定北京后端"],
-                ["天津", "http://stor.1oa.com.cn/server/tj", "指定天津后端"],
-                ["昆山", "http://stor.1oa.com.cn/server/ks", "指定昆山后端"],
-                ["深圳", "http://stor.1oa.com.cn/server/sz", "指定深圳后端"],
-                ["杭州", "http://stor.1oa.com.cn/server/hz", "指定杭州后端"],
-                ["NUC 测试默认", "http://10.32.12.110/server/local", "宿主入口的 local 指向后端 A"],
-                ["NUC 测试 A", "http://10.32.12.110/server/nuc-a", "显式访问 nuc-docker-a"],
-                ["NUC 测试 B", "http://10.32.12.110/server/nuc-b", "显式访问 nuc-docker-b"],
+                ["北京", "http://stor.1oa.com.cn/server/bj", "受数据驻留或业务归属约束，必须落到北京区域"],
+                ["天津", "http://stor.1oa.com.cn/server/tj", "固定运行在天津的批处理、集成任务或区域服务"],
+                ["昆山", "http://stor.1oa.com.cn/server/ks", "需要将迁移、补偿或调度任务明确发往昆山"],
+                ["深圳", "http://stor.1oa.com.cn/server/sz", "对象定位或业务策略已明确要求深圳为目标区域"],
+                ["杭州", "http://stor.1oa.com.cn/server/hz", "区域运维、故障处置或受控验收需要访问杭州后端"],
               ].map(([region, baseUrl, description]) => (
                 <tr key={region} className="border-b border-border/50 last:border-b-0">
                   <td className="px-3 py-2 text-foreground">{region}</td>
@@ -165,8 +152,8 @@ export default function ApiGuidePage() {
           className="mt-4"
           language="bash"
           title="App 后端环境变量与完整调用地址"
-          code={`# 选择目标区域；示例为北京。local 表示当前机器的后端。
-export STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/bj
+          code={`# 默认配置：local 表示当前机器的后端。
+export STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local
 
 # 所有接口都将 API 路径直接追加到该基址。
 curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
@@ -185,7 +172,7 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
             <Server className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
             <div className="mt-2 text-xs font-semibold text-foreground">Base URL</div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              App 后端设置完整网关地址，例如 http://stor.1oa.com.cn/server/bj；请求时追加 {content.versionPrefix}/...。
+              App 后端默认设置 http://stor.1oa.com.cn/server/local；请求时追加 {content.versionPrefix}/...。
             </p>
           </div>
           <div className="rounded-lg border border-border/70 p-3">

@@ -210,9 +210,8 @@ from typing import Any
 
 import requests
 
-# 生产示例：http://stor.1oa.com.cn/server/bj。
-# 使用 /server/local 时，Nginx 将请求转发给当前服务器本地后端。
-BASE_URL = os.getenv("STORAGENT_BASE_URL", "").rstrip("/")
+# 默认基址为 http://stor.1oa.com.cn/server/local，local 指向当前服务器后端。
+BASE_URL = os.getenv("STORAGENT_BASE_URL", "http://stor.1oa.com.cn/server/local").rstrip("/")
 API_KEY = os.getenv("STORAGENT_API_KEY")
 
 
@@ -815,7 +814,7 @@ console.table(data.map(({ name, domain, endpoint, master }) => ({ name, domain, 
     notes: ["响应类型为 application/octet-stream，不是 JSON。生产实现应设置超时，并定期重新探测。"],
     examples: {
       browser: `const startedAt = performance.now()
-const response = await fetch("http://stor.1oa.com.cn/server/bj/api/v1/public/endpoints/test")
+const response = await fetch("http://stor.1oa.com.cn/server/local/api/v1/public/endpoints/test")
 const payload = new Uint8Array(await response.arrayBuffer())
 console.log({ bytes: payload.byteLength, elapsedMs: performance.now() - startedAt })`,
     },
@@ -1466,38 +1465,35 @@ export function generateApiGuideMarkdown() {
     "",
     "## 给开发者与 AI 的实施目标",
     "",
-    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。生产服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。将目标区域的完整基址写入 App 后端环境变量 `STORAGENT_BASE_URL`，然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/bj` 时，`POST /api/v1/files/object/stat` 的完整地址就是 `http://stor.1oa.com.cn/server/bj/api/v1/files/object/stat`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工，不要让浏览器前端持有 `x-api-key`。",
+    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。默认将 `STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local` 写入 App 后端环境变量，然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `POST /api/v1/files/object/stat` 的完整地址就是 `http://stor.1oa.com.cn/server/local/api/v1/files/object/stat`。只有明确需要指定区域时，才以区域短码替换 `local`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工，不要让浏览器前端持有 `x-api-key`。",
     "",
-    "## 生产网关基址",
+    "## 默认网关基址",
     "",
-    "每台生产服务器都把 `stor.1oa.com.cn` 解析到自身宿主 Nginx。Nginx 根据 `/server/{region}` 将请求转发到对应的 Storagent 后端；`local` 永远表示发起请求的当前服务器。API 路径中的 `/server/{region}` 前缀会由 Nginx 移除，后端实际收到的仍是 `/api/v1/...`。",
+    "唯一默认基址为 `http://stor.1oa.com.cn/server/local`。每台服务器都把 `stor.1oa.com.cn` 解析到自身宿主 Nginx；`local` 永远表示发起请求的当前服务器。API 路径中的 `/server/{region}` 前缀会由 Nginx 移除，后端实际收到的仍是 `/api/v1/...`。",
     "",
     markdownTable(
-      ["目标区域", "STORAGENT_BASE_URL", "完整接口示例"],
+      ["接入方式", "STORAGENT_BASE_URL", "完整接口示例"],
       [
-        ["当前服务器", "`http://stor.1oa.com.cn/server/local`", "`http://stor.1oa.com.cn/server/local/api/v1/public/endpoints`"],
-        ["北京", "`http://stor.1oa.com.cn/server/bj`", "`http://stor.1oa.com.cn/server/bj/api/v1/public/endpoints`"],
-        ["天津", "`http://stor.1oa.com.cn/server/tj`", "`http://stor.1oa.com.cn/server/tj/api/v1/public/endpoints`"],
-        ["昆山", "`http://stor.1oa.com.cn/server/ks`", "`http://stor.1oa.com.cn/server/ks/api/v1/public/endpoints`"],
-        ["深圳", "`http://stor.1oa.com.cn/server/sz`", "`http://stor.1oa.com.cn/server/sz/api/v1/public/endpoints`"],
-        ["杭州", "`http://stor.1oa.com.cn/server/hz`", "`http://stor.1oa.com.cn/server/hz/api/v1/public/endpoints`"],
+        ["默认", "`http://stor.1oa.com.cn/server/local`", "`http://stor.1oa.com.cn/server/local/api/v1/public/endpoints`"],
       ],
     ),
     "",
-    "## NUC 测试网关基址",
+    "## 按需指定区域",
     "",
-    "NUC 测试环境的宿主入口为 `http://10.32.12.110`。宿主 Nginx 将请求转发到测试网关 A；根路径 `/` 只返回控制台，API 也必须保留 `/server/{region}` 前缀。`local` 和 `nuc-a` 指向后端 A，`nuc-b` 指向后端 B。",
+    "以下情况才需要将默认基址中的 `local` 替换为区域短码：业务或合规要求数据固定留在某区域；批处理、迁移、补偿或调度任务必须在指定区域执行；对象定位结果或业务策略要求选择特定区域；区域运维、故障处置或受控验收需要直达目标后端。普通上传、下载和控制面调用不需要指定区域。",
     "",
     markdownTable(
-      ["目标区域", "STORAGENT_BASE_URL", "完整接口示例"],
+      ["指定区域", "STORAGENT_BASE_URL", "典型使用场景"],
       [
-        ["NUC 默认（A）", "`http://10.32.12.110/server/local`", "`http://10.32.12.110/server/local/api/v1/public/endpoints`"],
-        ["NUC A", "`http://10.32.12.110/server/nuc-a`", "`http://10.32.12.110/server/nuc-a/api/v1/public/endpoints`"],
-        ["NUC B", "`http://10.32.12.110/server/nuc-b`", "`http://10.32.12.110/server/nuc-b/api/v1/public/endpoints`"],
+        ["北京（bj）", "`http://stor.1oa.com.cn/server/bj`", "数据驻留、业务归属或区域策略要求北京"],
+        ["天津（tj）", "`http://stor.1oa.com.cn/server/tj`", "固定在天津运行的区域服务与批处理"],
+        ["昆山（ks）", "`http://stor.1oa.com.cn/server/ks`", "迁移、补偿或调度任务定向到昆山"],
+        ["深圳（sz）", "`http://stor.1oa.com.cn/server/sz`", "对象定位或业务策略指定深圳"],
+        ["杭州（hz）", "`http://stor.1oa.com.cn/server/hz`", "区域运维、故障处置或受控验收"],
       ],
     ),
     "",
-    "App 后端配置示例：`STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/bj`。随后请求 `POST ${BASE_URL}/api/v1/files/object/stat`，并仅在 App 后端附加 `x-api-key` 请求头。浏览器页面位于同一网关时可使用相对路径 `/server/bj/api/v1/...`；浏览器不得持有 `x-api-key`。",
+    "App 后端默认配置：`STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local`。随后请求 `POST ${BASE_URL}/api/v1/files/object/stat`，并仅在 App 后端附加 `x-api-key` 请求头。浏览器页面位于同一网关时可使用相对路径 `/server/local/api/v1/...`；浏览器不得持有 `x-api-key`。",
     "",
     "## 控制面 / 数据面与能力令牌",
     "",
