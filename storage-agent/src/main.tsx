@@ -8,6 +8,10 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import { ThemeProvider } from "./components/theme-provider"
 import { Toaster } from "./components/ui/sonner"
 
+if (import.meta.env.VITE_STORAGENT_ENV === "test") {
+  document.title = "Storagent[Test]"
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>

@@ -132,6 +132,8 @@ export interface Application {
   quota_usage_bytes: number
   quota_usage_ratio: number
   quota_usage_updated_at: string | null
+  provisioning_status?: "pending" | "provisioning" | "ready" | "failed" | "degraded"
+  provisioning_error?: string
   /** 旧字段，新后端不再返回 */
   regions?: Region[]
 }
@@ -148,6 +150,96 @@ export interface ApplicationCreateRequest {
 
 export interface ApplicationQuotaUpdateRequest {
   quota_bytes: number
+}
+
+export interface QuotaAlertRule {
+  low_percent: number
+  medium_percent: number
+  high_percent: number
+  block_percent: number
+  message_template: string
+  updated_at: string
+  updated_by: string
+}
+
+export interface QuotaAlertRuleUpdateRequest {
+  low_percent: number
+  medium_percent: number
+  high_percent: number
+  block_percent: number
+  message_template: string
+}
+
+export interface ExpansionRequest {
+  id: string
+  application_name: string
+  application_shown_name: string
+  applicant_username: string
+  reason: string
+  add_size_bytes: number
+  status: "pending" | "approved" | "rejected"
+  reviewer_username: string
+  review_note: string
+  created_at: string
+  reviewed_at: string | null
+}
+
+export interface ExpansionRequestListResponse {
+  data: ExpansionRequest[]
+}
+
+export interface DiagnosticCheck {
+  name: string
+  status: "passed" | "failed" | "skipped"
+  detail: string
+  latency_ms: number
+}
+
+export interface DiagnosticRun {
+  id: string
+  run_id: string
+  api_version: "v1" | "v2"
+  app_name: string
+  source_host: string
+  network_only: boolean
+  overall_status: "passed" | "failed" | "partial"
+  checks: DiagnosticCheck[]
+  raw_log: string
+  created_at: string
+}
+
+export interface CapacityTrendPoint {
+  captured_at: string
+  raw_capacity_bytes: number
+  raw_used_bytes: number
+  logical_usage_bytes: number
+  object_count: number
+  archive_bytes: number
+}
+
+export interface CapacityRegionItem {
+  region: string
+  shown_name: string
+  raw_capacity_bytes: number
+  raw_used_bytes: number
+  logical_usage_bytes: number
+  object_count: number
+  archive_bytes: number
+  archived_object_count: number
+  expected_replica_count: number
+  actual_replica_count: number
+  waterline_percent: number
+  daily_growth_bytes: number
+  estimated_days_to_70: number | null
+  estimated_days_to_85: number | null
+  estimated_days_to_95: number | null
+  risks: string[]
+  trend: CapacityTrendPoint[]
+}
+
+export interface CapacityPlanningResponse {
+  generated_at: string
+  data: CapacityRegionItem[]
 }
 
 export interface MinioServer {
@@ -1379,6 +1471,61 @@ export async function updateApplicationQuotaApi(
     payload,
     accessToken,
   )
+}
+
+export async function fetchQuotaAlertRuleApi(accessToken?: string): Promise<QuotaAlertRule> {
+  return apiGet<QuotaAlertRule>("/api/v1/public/quota-alert-rule", accessToken)
+}
+
+export async function updateQuotaAlertRuleApi(
+  payload: QuotaAlertRuleUpdateRequest,
+  accessToken?: string,
+): Promise<QuotaAlertRule> {
+  return apiPut<QuotaAlertRuleUpdateRequest, QuotaAlertRule>(
+    "/api/v1/public/quota-alert-rule",
+    payload,
+    accessToken,
+  )
+}
+
+export async function fetchExpansionRequestsApi(accessToken?: string): Promise<ExpansionRequestListResponse> {
+  return apiGet<ExpansionRequestListResponse>("/api/v1/public/application/expansion-requests", accessToken)
+}
+
+export async function createExpansionRequestApi(
+  applicationId: string,
+  payload: { reason: string; add_size_bytes: number },
+  accessToken?: string,
+): Promise<ExpansionRequest> {
+  return apiPost<typeof payload, ExpansionRequest>(
+    "/api/v1/public/application/" + encodeURIComponent(applicationId) + "/expansion-requests",
+    payload,
+    accessToken,
+  )
+}
+
+export async function reviewExpansionRequestApi(
+  requestId: string,
+  payload: { approved: boolean; review_note: string },
+  accessToken?: string,
+): Promise<ExpansionRequest> {
+  return apiPut<typeof payload, ExpansionRequest>(
+    "/api/v1/public/application/expansion-requests/" + encodeURIComponent(requestId) + "/review",
+    payload,
+    accessToken,
+  )
+}
+
+export async function fetchDiagnosticRunsApi(accessToken?: string): Promise<{ data: DiagnosticRun[] }> {
+  return apiGet<{ data: DiagnosticRun[] }>("/api/v1/diagnostics/runs", accessToken)
+}
+
+export function diagnosticScriptUrl(version: "v1" | "v2"): string {
+  return getApiBaseUrl() + "/api/" + version + "/diagnostics/" + version + "/self-diagnosis"
+}
+
+export async function fetchCapacityPlanningApi(accessToken?: string): Promise<CapacityPlanningResponse> {
+  return apiGet<CapacityPlanningResponse>("/api/v1/capacity", accessToken)
 }
 
 /** 授权 SSE 单条事件（与后端 data: JSON 一致） */

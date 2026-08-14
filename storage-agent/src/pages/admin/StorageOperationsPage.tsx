@@ -26,6 +26,7 @@ import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   fetchClusterHealthOperationsApi,
   fetchClusterHealStatusApi,
+  fetchCapacityPlanningApi,
   fetchReplicationOperationsApi,
   fetchStorageOperationsApi,
   reconcileReplicationApi,
@@ -34,6 +35,8 @@ import {
   type ClusterHealthItem,
   type ClusterHealthResponse,
   type ClusterHealStatusResponse,
+  type CapacityPlanningResponse,
+  type CapacityRegionItem,
   type ReplicationOperationsResponse,
   type ReplicationSourceMetric,
   type ReplicationStatusReason,
@@ -124,6 +127,23 @@ function formatDuration(seconds: number): string {
   if (hours) return `${hours} 小时 ${minutes} 分钟`
   if (minutes) return `${minutes} 分钟`
   return `${Math.floor(seconds)} 秒`
+}
+
+function estimatedDays(value: number | null): string {
+  if (value == null) return "暂无趋势"
+  if (value <= 0) return "已达到"
+  return `${value} 天`
+}
+
+function capacityForCluster(cluster: ClusterHealthItem, capacity: CapacityPlanningResponse | null): CapacityRegionItem | null {
+  if (!capacity) return null
+  const values = [cluster.region, cluster.shown_name, cluster.server]
+    .filter(Boolean)
+    .map((value) => value.toLowerCase())
+  return capacity.data.find((item) => {
+    const candidates = [item.region, item.shown_name].filter(Boolean).map((value) => value.toLowerCase())
+    return candidates.some((candidate) => values.some((value) => value === candidate || value.includes(candidate) || candidate.includes(value)))
+  }) ?? null
 }
 
 function ReplicationStatus({
@@ -871,6 +891,7 @@ function operationStatusLabel(status: StorageOperationItem["status"]): string {
 
 function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
   const [data, setData] = useState<ClusterHealthResponse | null>(null)
+  const [capacity, setCapacity] = useState<CapacityPlanningResponse | null>(null)
   const [jobs, setJobs] = useState<StorageOperationItem[]>([])
   const [healStatus, setHealStatus] = useState<ClusterHealStatusResponse | null>(null)
   const [selectedServer, setSelectedServer] = useState<string | null>(null)
@@ -883,12 +904,14 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
     if (!quiet) setLoading(true)
     else setRefreshing(true)
     try {
-      const [health, operations] = await Promise.all([
+      const [health, operations, capacityPlanning] = await Promise.all([
         fetchClusterHealthOperationsApi(accessToken),
         fetchStorageOperationsApi(accessToken),
+        fetchCapacityPlanningApi(accessToken),
       ])
       setData(health)
       setJobs(operations.data)
+      setCapacity(capacityPlanning)
       setSelectedServer((current) => {
         if (current && health.clusters.some((item) => item.server === current)) return current
         return health.clusters[0]?.server ?? null
@@ -969,6 +992,8 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
               : 0
             const clusterJob = latestJobFor(cluster.server, jobs)
             const jobActive = clusterJob?.status === "queued" || clusterJob?.status === "running"
+            const planning = capacityForCluster(cluster, capacity)
+            const redundancyHealthy = planning ? planning.actual_replica_count >= planning.expected_replica_count : true
             return (
               <article key={cluster.server} className="flex h-full flex-col rounded-md border border-border/80 bg-background">
                 <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-3.5 py-3">
@@ -997,7 +1022,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                   </div>
 
                   <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-border/60 pt-3">
-                    <div className="mb-1.5 flex shrink-0 items-center justify-between text-[10px] text-muted-foreground"><span>驱动器</span><span>{cluster.healing_disks > 0 ? `${cluster.healing_disks} 修复中` : `${cluster.drives.length} 个`}</span></div>
+                    <div className="mb-1.5 flex shrink-0 items-center justify-between text-[10px] text-muted-foreground"><span>存储设备</span><span>{cluster.healing_disks > 0 ? `${cluster.healing_disks} 修复中` : `${cluster.drives.length} 个`}</span></div>
                     <div className="docs-scroll min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto">
                       {cluster.drives.map((drive) => (
                         <div key={`${drive.endpoint}:${drive.path}`} className="py-1.5 text-[10px]">
@@ -1005,9 +1030,30 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                           <div className="mt-0.5 flex justify-between text-muted-foreground"><span>{formatBytes(drive.used_bytes)} / {formatBytes(drive.total_bytes)}</span><span>等待 {drive.waiting_operations}</span></div>
                         </div>
                       ))}
-                      {cluster.drives.length === 0 ? <div className="py-2 text-[10px] text-muted-foreground">暂无驱动器明细</div> : null}
+                      {cluster.drives.length === 0 ? <div className="py-2 text-[10px] text-muted-foreground">暂无存储设备明细</div> : null}
                     </div>
                   </div>
+
+                  {planning ? (
+                    <div className="mt-4 shrink-0 border-t border-border/60 pt-3">
+                      <div className="flex items-center justify-between gap-2 text-[10px]">
+                        <span className="font-medium text-foreground">容量规划</span>
+                        <span className={cn("font-medium", redundancyHealthy ? "text-emerald-600" : "text-amber-600")}>复制 {planning.actual_replica_count} / {planning.expected_replica_count}</span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+                        <div><span className="text-muted-foreground">逻辑用量</span><div className="mt-0.5 font-medium text-foreground">{formatBytes(planning.logical_usage_bytes)}</div></div>
+                        <div><span className="text-muted-foreground">归档量</span><div className="mt-0.5 font-medium text-foreground">{formatBytes(planning.archive_bytes)}</div></div>
+                        <div><span className="text-muted-foreground">日均增长</span><div className="mt-0.5 font-medium text-foreground">{formatBytes(planning.daily_growth_bytes)} / 天</div></div>
+                        <div><span className="text-muted-foreground">对象总量</span><div className="mt-0.5 font-medium text-foreground">{planning.object_count.toLocaleString("zh-CN")}</div></div>
+                      </div>
+                      <div className="mt-2.5 grid grid-cols-3 gap-1.5 rounded-md bg-muted/40 px-2 py-1.5 text-[10px]">
+                        <div><span className="text-muted-foreground">70%</span><div className="mt-0.5 font-medium">{estimatedDays(planning.estimated_days_to_70)}</div></div>
+                        <div><span className="text-muted-foreground">85%</span><div className="mt-0.5 font-medium">{estimatedDays(planning.estimated_days_to_85)}</div></div>
+                        <div><span className="text-muted-foreground">95%</span><div className="mt-0.5 font-medium">{estimatedDays(planning.estimated_days_to_95)}</div></div>
+                      </div>
+                      {planning.risks.length > 0 ? <div className="mt-2 text-[10px] leading-4 text-amber-700 dark:text-amber-300">{planning.risks.join("；")}</div> : null}
+                    </div>
+                  ) : null}
                 </div>
 
                 <footer className="flex shrink-0 items-center justify-between gap-2 border-t border-border/60 px-3.5 py-2.5">

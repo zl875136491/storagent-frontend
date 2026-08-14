@@ -62,14 +62,11 @@ function HeaderUserMenu({
   const displayName = user.name || user.username
 
   useEffect(() => {
-    if (!menuOpen) setLogoutInlineConfirm(false)
-  }, [menuOpen])
-
-  useEffect(() => {
     if (!menuOpen) return
     function onPointerDown(e: PointerEvent) {
       if (!rootRef.current?.contains(e.target as Node)) {
         setMenuOpen(false)
+        setLogoutInlineConfirm(false)
       }
     }
     document.addEventListener("pointerdown", onPointerDown, true)
@@ -79,7 +76,10 @@ function HeaderUserMenu({
   useEffect(() => {
     if (!menuOpen) return
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false)
+      if (e.key === "Escape") {
+        setMenuOpen(false)
+        setLogoutInlineConfirm(false)
+      }
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
@@ -88,6 +88,7 @@ function HeaderUserMenu({
   const confirmLogout = useCallback(() => {
     if (!confirmIfBlocking()) return
     setMenuOpen(false)
+    setLogoutInlineConfirm(false)
     void logout()
   }, [confirmIfBlocking, logout])
 

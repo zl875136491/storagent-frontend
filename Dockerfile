@@ -9,6 +9,8 @@ COPY storage-agent/ ./
 
 ARG STORAGENT_API_SERVERS=/server/local,/server/bj,/server/tj,/server/ks,/server/sz,/server/hz
 ENV STORAGENT_API_SERVERS=${STORAGENT_API_SERVERS}
+ARG VITE_STORAGENT_ENV=production
+ENV VITE_STORAGENT_ENV=${VITE_STORAGENT_ENV}
 
 RUN npm run ci
 

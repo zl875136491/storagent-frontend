@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, Circle, Gauge, Loader2, Settings2, XCircle } from "lucide-react"
+import { BellRing, Check, Circle, Expand, Gauge, Loader2, Settings2, XCircle } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
 import { useAuth } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   approveApplicationStream,
   approvalStepLabel,
+  createExpansionRequestApi,
   createApplicationApi,
   fetchApplicationsApi,
+  fetchExpansionRequestsApi,
+  fetchQuotaAlertRuleApi,
+  reviewExpansionRequestApi,
+  updateQuotaAlertRuleApi,
   updateApplicationQuotaApi,
 } from "../../api/client"
 import type {
@@ -14,6 +20,8 @@ import type {
   ApplicationApprovalSseEvent,
   ApplicationApprovalSseStatus,
   ApplicationCreateRequest,
+  ExpansionRequest,
+  QuotaAlertRule,
 } from "../../api/client"
 import { showErrorToast, showSuccessToast } from "../../api/toast"
 import { useNavigationLeaveBlock } from "../../contexts/NavigationLeaveBlockContext"
@@ -107,6 +115,7 @@ export default function ApplicationPage() {
   const canApprove = hasPermission(user, PERMISSIONS.applicationManage)
   const canManageQuota = hasPermission(user, PERMISSIONS.applicationQuotaManage)
   const { beginBlock, endBlock } = useNavigationLeaveBlock()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
@@ -118,6 +127,16 @@ export default function ApplicationPage() {
   const [quotaTarget, setQuotaTarget] = useState<Application | null>(null)
   const [quotaGiB, setQuotaGiB] = useState("100")
   const [savingQuota, setSavingQuota] = useState(false)
+  const [expansionTarget, setExpansionTarget] = useState<Application | null>(null)
+  const [expansionReason, setExpansionReason] = useState("")
+  const [expansionGiB, setExpansionGiB] = useState("10")
+  const [submittingExpansion, setSubmittingExpansion] = useState(false)
+  const [expansionRequests, setExpansionRequests] = useState<ExpansionRequest[]>([])
+  const [loadingRequests, setLoadingRequests] = useState(false)
+  const [quotaRule, setQuotaRule] = useState<QuotaAlertRule | null>(null)
+  const [ruleForm, setRuleForm] = useState({ low_percent: 70, medium_percent: 85, high_percent: 90, block_percent: 100, message_template: "" })
+  const [savingRule, setSavingRule] = useState(false)
+  const [showRuleModal, setShowRuleModal] = useState(false)
 
   const [createForm, setCreateForm] = useState<ApplicationCreateRequest>({
     name: "",
@@ -144,10 +163,51 @@ export default function ApplicationPage() {
     }
   }
 
+  const loadExpansionRequests = async () => {
+    setLoadingRequests(true)
+    try {
+      const response = await fetchExpansionRequestsApi(accessToken ?? undefined)
+      setExpansionRequests(response.data)
+    } catch {
+      // 错误由 API 客户端统一提示。
+    } finally {
+      setLoadingRequests(false)
+    }
+  }
+
+  const loadQuotaRule = async () => {
+    try {
+      const rule = await fetchQuotaAlertRuleApi(accessToken ?? undefined)
+      setQuotaRule(rule)
+      setRuleForm({
+        low_percent: rule.low_percent,
+        medium_percent: rule.medium_percent,
+        high_percent: rule.high_percent,
+        block_percent: rule.block_percent,
+        message_template: rule.message_template,
+      })
+    } catch {
+      // 错误由 API 客户端统一提示。
+    }
+  }
+
   useEffect(() => {
     void loadApplications()
+    void loadExpansionRequests()
+    if (canApprove) void loadQuotaRule()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [canApprove])
+
+  useEffect(() => {
+    const targetId = searchParams.get("expand")
+    if (!targetId || expansionTarget || applications.length === 0) return
+    const target = applications.find((application) => application.id === targetId)
+    if (!target || target.author?.username !== user?.username) return
+    setExpansionTarget(target)
+    setExpansionReason("")
+    setExpansionGiB("10")
+    setSearchParams({}, { replace: true })
+  }, [applications, expansionTarget, searchParams, setSearchParams, user?.username])
 
   useEffect(() => {
     if (!isStreaming) return
@@ -219,6 +279,68 @@ export default function ApplicationPage() {
   const openQuota = (app: Application) => {
     setQuotaTarget(app)
     setQuotaGiB(String(Math.max(1, Math.round(app.quota_bytes / GIB))))
+  }
+
+  const openExpansion = (app: Application) => {
+    setExpansionTarget(app)
+    setExpansionReason("")
+    setExpansionGiB("10")
+  }
+
+  const handleExpansionSubmit = async () => {
+    if (!expansionTarget) return
+    const addGiB = Number(expansionGiB)
+    if (!expansionReason.trim()) {
+      showErrorToast("请填写扩容原因")
+      return
+    }
+    if (!Number.isInteger(addGiB) || addGiB <= 0 || !Number.isSafeInteger(addGiB * GIB)) {
+      showErrorToast("增加配额必须是大于 0 的整数 GiB")
+      return
+    }
+    setSubmittingExpansion(true)
+    try {
+      await createExpansionRequestApi(expansionTarget.id, { reason: expansionReason.trim(), add_size_bytes: addGiB * GIB }, accessToken ?? undefined)
+      setExpansionTarget(null)
+      setExpansionReason("")
+      await loadExpansionRequests()
+      showSuccessToast("扩容申请已提交")
+    } catch {
+      // 错误由 API 客户端统一提示。
+    } finally {
+      setSubmittingExpansion(false)
+    }
+  }
+
+  const handleRuleSave = async () => {
+    if (!ruleForm.message_template.trim()) {
+      showErrorToast("请填写告警内容模板")
+      return
+    }
+    if (!(ruleForm.low_percent < ruleForm.medium_percent && ruleForm.medium_percent < ruleForm.high_percent && ruleForm.high_percent < ruleForm.block_percent)) {
+      showErrorToast("阈值必须按低、中、高、阻断严格递增")
+      return
+    }
+    setSavingRule(true)
+    try {
+      const updated = await updateQuotaAlertRuleApi(ruleForm, accessToken ?? undefined)
+      setQuotaRule(updated)
+      showSuccessToast("全局配额告警规则已保存")
+    } catch {
+      // 错误由 API 客户端统一提示。
+    } finally {
+      setSavingRule(false)
+    }
+  }
+
+  const handleExpansionReview = async (request: ExpansionRequest, approved: boolean) => {
+    try {
+      await reviewExpansionRequestApi(request.id, { approved, review_note: "" }, accessToken ?? undefined)
+      await Promise.all([loadExpansionRequests(), loadApplications()])
+      showSuccessToast(approved ? "扩容申请已同意" : "扩容申请已拒绝")
+    } catch {
+      // 错误由 API 客户端统一提示。
+    }
   }
 
   const handleQuotaSave = async () => {
@@ -321,7 +443,12 @@ export default function ApplicationPage() {
             管理业务应用与授权状态。
           </p>
         </div>
-        <div className="sticky top-3">
+        <div className="sticky top-3 flex items-center gap-2">
+          {canApprove ? (
+            <Button type="button" size="icon" variant="outline" title="配置全局配额告警规则" aria-label="配置全局配额告警规则" onClick={() => setShowRuleModal(true)}>
+              <BellRing className="h-4 w-4" aria-hidden />
+            </Button>
+          ) : null}
           <Button type="button" size="md" onClick={openCreateModal}>
             新建应用
           </Button>
@@ -433,6 +560,19 @@ export default function ApplicationPage() {
                             <span className="text-[11px] tabular-nums text-muted-foreground">
                               {formatBytes(app.quota_usage_bytes)} / {formatBytes(app.quota_bytes)}
                             </span>
+                            {app.author?.username === user?.username ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                title="申请扩容"
+                                aria-label={`为 ${app.shown_name || app.name} 申请扩容`}
+                                onClick={() => openExpansion(app)}
+                              >
+                                <Expand className="h-3.5 w-3.5" aria-hidden />
+                              </Button>
+                            ) : null}
                             {canManageQuota ? (
                               <Button
                                 type="button"
@@ -467,6 +607,26 @@ export default function ApplicationPage() {
           ))}
         </div>
       )}
+
+      {expansionRequests.length > 0 ? (
+        <Card className="mt-4 rounded-lg shadow-none"><CardContent className="p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">扩容申请</h2>{loadingRequests ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-label="正在加载" /> : null}</div><div className="mt-3 space-y-2">{expansionRequests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2.5 text-xs"><div className="min-w-0"><div className="font-medium">{request.application_shown_name} · 增加 {formatBytes(request.add_size_bytes)}</div><div className="mt-1 text-muted-foreground">{request.reason} · {formatDateTime(request.created_at)}</div></div><div className="flex items-center gap-2"><span className={cn("rounded-full px-2 py-1 text-[11px]", request.status === "pending" ? "bg-amber-500/10 text-amber-700" : request.status === "approved" ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground")}>{request.status === "pending" ? "待审批" : request.status === "approved" ? "已同意" : "已拒绝"}</span>{canApprove && request.status === "pending" ? <><Button type="button" size="sm" className="h-7" onClick={() => void handleExpansionReview(request, true)}>同意</Button><Button type="button" size="sm" variant="outline" className="h-7" onClick={() => void handleExpansionReview(request, false)}>拒绝</Button></> : null}</div></div>)}</div></CardContent></Card>
+      ) : null}
+
+      {canApprove && showRuleModal ? (
+        <Modal title="全局配额告警规则" onClose={() => !savingRule && setShowRuleModal(false)}>
+          <div className="space-y-4 p-1 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs leading-relaxed text-muted-foreground">上传前按预计用量触发告警，达到阻断阈值时拒绝上传。阈值默认是低 70%、中 85%、高 90%、阻断 100%。</p>
+              <span className="shrink-0 text-[11px] text-muted-foreground">{quotaRule ? `更新人：${quotaRule.updated_by || "系统默认"}` : ""}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{([
+              ["low_percent", "低"], ["medium_percent", "中"], ["high_percent", "高"], ["block_percent", "阻断"],
+            ] as const).map(([key, label]) => <div key={key}><Label className="mb-1 block text-xs">{label}阈值（%）</Label><Input type="number" min={1} max={100} value={ruleForm[key]} onChange={(event) => setRuleForm((previous) => ({ ...previous, [key]: Number(event.target.value) }))} /></div>)}</div>
+            <div><Label className="mb-1 block text-xs" htmlFor="quota-alert-template">告警内容模板</Label><textarea id="quota-alert-template" className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" value={ruleForm.message_template} onChange={(event) => setRuleForm((previous) => ({ ...previous, message_template: event.target.value }))} /></div>
+            <DialogFooter><Button type="button" size="sm" variant="outline" disabled={savingRule} onClick={() => setShowRuleModal(false)}>取消</Button><Button type="button" size="sm" disabled={savingRule} onClick={() => void handleRuleSave()}>{savingRule ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}保存规则</Button></DialogFooter>
+          </div>
+        </Modal>
+      ) : null}
 
       {showCreateModal && (
         <Modal title="新建应用" onClose={() => setShowCreateModal(false)}>
@@ -581,6 +741,16 @@ export default function ApplicationPage() {
                 保存配额
               </Button>
             </DialogFooter>
+          </div>
+        </Modal>
+      ) : null}
+      {expansionTarget ? (
+        <Modal title="应用配置扩容申请" onClose={() => !submittingExpansion && setExpansionTarget(null)}>
+          <div className="space-y-4 p-1 text-sm">
+            <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"><div className="font-medium text-foreground">{expansionTarget.shown_name || expansionTarget.name}</div><div className="mt-1">当前配额 {formatBytes(expansionTarget.quota_bytes)}，申请会提交给应用管理员审批。</div></div>
+            <div><Label className="mb-1.5 block text-xs" htmlFor="expansion-size">增加配额（GiB）</Label><Input id="expansion-size" type="number" min={1} step={1} value={expansionGiB} disabled={submittingExpansion} onChange={(event) => setExpansionGiB(event.target.value)} /></div>
+            <div><Label className="mb-1.5 block text-xs" htmlFor="expansion-reason">申请原因</Label><textarea id="expansion-reason" className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" value={expansionReason} disabled={submittingExpansion} onChange={(event) => setExpansionReason(event.target.value)} placeholder="说明业务增长或容量使用情况" /></div>
+            <DialogFooter><Button type="button" size="sm" variant="outline" disabled={submittingExpansion} onClick={() => setExpansionTarget(null)}>取消</Button><Button type="button" size="sm" disabled={submittingExpansion} onClick={() => void handleExpansionSubmit()}>{submittingExpansion ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}提交申请</Button></DialogFooter>
           </div>
         </Modal>
       ) : null}
