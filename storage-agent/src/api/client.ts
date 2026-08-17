@@ -450,9 +450,16 @@ export interface ClusterDriveHealth {
   endpoint: string
   path: string
   state: string
+  health: "healthy" | "warning" | "critical" | "offline" | "unknown"
+  health_reasons: string[]
   total_bytes: number
   used_bytes: number
   available_bytes: number
+  usage_percent: number
+  used_inodes: number
+  free_inodes: number
+  inode_usage_percent: number
+  capacity_skew: boolean
   waiting_operations: number
 }
 
@@ -462,7 +469,7 @@ export interface ClusterHealthItem {
   region: string
   shown_name: string
   endpoint: string
-  status: "online" | "degraded" | "offline"
+  status: "online" | "degraded" | "critical" | "offline"
   reachable: boolean
   error: string
   checked_at: string
@@ -479,6 +486,9 @@ export interface ClusterHealthItem {
   online_disks: number
   offline_disks: number
   healing_disks: number
+  warning_disks: number
+  critical_disks: number
+  health_reasons: string[]
   drives: ClusterDriveHealth[]
 }
 
@@ -487,14 +497,17 @@ export interface ClusterHealthResponse {
   auto_heal_enabled: boolean
   auto_heal_authority_region: string
   summary: {
-    status: "online" | "degraded" | "offline"
+    status: "online" | "degraded" | "critical" | "offline"
     cluster_count: number
     online_clusters: number
     degraded_clusters: number
+    critical_clusters: number
     offline_clusters: number
     online_disks: number
     offline_disks: number
     healing_disks: number
+    warning_disks: number
+    critical_disks: number
     raw_capacity_bytes: number
     raw_used_bytes: number
     logical_usage_bytes: number

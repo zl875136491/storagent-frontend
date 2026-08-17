@@ -33,6 +33,7 @@ import {
   startClusterHealApi,
   startReplicationResyncApi,
   type ClusterHealthItem,
+  type ClusterDriveHealth,
   type ClusterHealthResponse,
   type ClusterHealStatusResponse,
   type CapacityPlanningResponse,
@@ -250,7 +251,9 @@ function ClusterStatus({ status }: { status: ClusterHealthItem["status"] }) {
     ? { label: "在线", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", Icon: CheckCircle2 }
     : status === "degraded"
       ? { label: "降级", className: "bg-amber-500/10 text-amber-700 dark:text-amber-300", Icon: CircleAlert }
-      : { label: "离线", className: "bg-rose-500/10 text-rose-700 dark:text-rose-300", Icon: WifiOff }
+      : status === "critical"
+        ? { label: "严重", className: "bg-rose-500/10 text-rose-700 dark:text-rose-300", Icon: CircleX }
+        : { label: "离线", className: "bg-rose-500/10 text-rose-700 dark:text-rose-300", Icon: WifiOff }
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium", meta.className)}>
       <meta.Icon className="h-3.5 w-3.5" aria-hidden />
@@ -268,23 +271,31 @@ function isDriveHealing(state: string): boolean {
   return /heal|repair|recover|修复/i.test(state)
 }
 
+function driveHealthClass(health: ClusterDriveHealth["health"]): string {
+  if (health === "critical" || health === "offline") return "bg-rose-500 shadow-[0_0_8px_theme(colors.rose.500)]"
+  if (health === "warning") return "animate-pulse bg-amber-500 shadow-[0_0_8px_theme(colors.amber.500)]"
+  return "bg-emerald-500 shadow-[0_0_8px_theme(colors.emerald.500)]"
+}
+
 function ServerStatusDiagram({ cluster, compact = false }: { cluster: ClusterHealthItem; compact?: boolean }) {
   const powerOk = cluster.reachable
   const networkOk = cluster.reachable
-  const networkDegraded = cluster.status === "degraded"
-  const stateLabel = !cluster.reachable ? "UNREACHABLE" : cluster.status === "degraded" ? "DEGRADED" : "ONLINE"
+  const networkDegraded = cluster.status === "degraded" || cluster.status === "critical"
+  const networkCritical = cluster.status === "critical"
+  const stateLabel = !cluster.reachable ? "UNREACHABLE" : cluster.status === "critical" ? "CRITICAL" : cluster.status === "degraded" ? "DEGRADED" : "ONLINE"
   return (
     <div className={cn("rounded-md border border-border/80 bg-muted/20", compact ? "p-2" : "p-2.5")} aria-label={`${cluster.shown_name}服务器状态图`}>
       <div className="relative rounded border border-border/80 bg-background/80 px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2"><Server className={cn("shrink-0 text-muted-foreground", compact ? "h-4 w-4" : "h-5 w-5")} aria-hidden /><span className="font-mono text-[9px] tracking-[0.12em] text-muted-foreground">SERVER · {stateLabel}</span></div>
-          <div className="flex items-center gap-2" aria-label="服务器状态指示灯"><i title="电源状态" className={cn("h-2 w-2 rounded-full", powerOk ? "bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]" : "bg-rose-500 shadow-[0_0_7px_theme(colors.rose.500)]")} /><i title="网络状态" className={cn("h-2 w-2 rounded-full", !networkOk ? "bg-rose-500 shadow-[0_0_7px_theme(colors.rose.500)]" : networkDegraded ? "animate-pulse bg-amber-500 shadow-[0_0_7px_theme(colors.amber.500)]" : "animate-pulse bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]")} /></div>
+          <div className="flex items-center gap-2" aria-label="服务器状态指示灯"><i title="电源状态" className={cn("h-2 w-2 rounded-full", powerOk ? "bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]" : "bg-rose-500 shadow-[0_0_7px_theme(colors.rose.500)]")} /><i title="网络状态" className={cn("h-2 w-2 rounded-full", !networkOk || networkCritical ? "bg-rose-500 shadow-[0_0_7px_theme(colors.rose.500)]" : networkDegraded ? "animate-pulse bg-amber-500 shadow-[0_0_7px_theme(colors.amber.500)]" : "animate-pulse bg-emerald-500 shadow-[0_0_7px_theme(colors.emerald.500)]")} /></div>
         </div>
         <div className="mt-3 flex items-center gap-2" aria-label="磁盘状态">
           {cluster.drives.length > 0 ? cluster.drives.map((drive) => {
             const online = isDriveOnline(drive.state)
             const healing = isDriveHealing(drive.state)
-            return <span key={`${drive.endpoint}:${drive.path}`} title={`${drive.path} · ${drive.state}`} className={cn("h-3 flex-1 rounded-sm border border-border/80 bg-muted/40", !online && !healing && "opacity-60")}><i className={cn("block h-full w-full rounded-[inherit]", online ? "bg-emerald-500 shadow-[0_0_8px_theme(colors.emerald.500)]" : healing ? "animate-pulse bg-amber-500 shadow-[0_0_8px_theme(colors.amber.500)]" : "bg-rose-500 shadow-[0_0_8px_theme(colors.rose.500)]")} /></span>
+            const title = [drive.path, drive.state, ...drive.health_reasons].filter(Boolean).join(" · ")
+            return <span key={`${drive.endpoint}:${drive.path}`} title={title} className={cn("h-3 flex-1 rounded-sm border border-border/80 bg-muted/40", !online && !healing && "opacity-60")}><i className={cn("block h-full w-full rounded-[inherit]", drive.health ? driveHealthClass(drive.health) : online ? "bg-emerald-500 shadow-[0_0_8px_theme(colors.emerald.500)]" : healing ? "animate-pulse bg-amber-500 shadow-[0_0_8px_theme(colors.amber.500)]" : "bg-rose-500 shadow-[0_0_8px_theme(colors.rose.500)]")} /></span>
           }) : <span className="text-[10px] text-muted-foreground">暂无磁盘</span>}
         </div>
       </div>
@@ -301,10 +312,10 @@ function ServerStatusLegend() {
       <div className="pointer-events-none absolute right-0 top-full z-30 mt-2 w-[min(560px,calc(100vw-2rem))] origin-top-right rounded-lg border border-border bg-popover p-3 text-popover-foreground opacity-0 shadow-xl transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
         <div className="mb-2 text-xs font-semibold">服务器状态图例</div>
         <div className="grid gap-3 sm:grid-cols-[minmax(220px,0.85fr)_1fr] sm:items-center">
-          <ServerStatusDiagram compact cluster={{ id: "legend", server: "legend", region: "", shown_name: "示例", endpoint: "", status: "online", reachable: true, error: "", checked_at: "", command_latency_ms: 0, version: "", uptime_seconds: 0, bucket_count: 0, object_count: 0, version_count: 0, delete_marker_count: 0, logical_usage_bytes: 0, raw_capacity_bytes: 0, raw_used_bytes: 0, online_disks: 2, offline_disks: 0, healing_disks: 0, drives: [{ endpoint: "", path: "/data-1", state: "online", total_bytes: 0, used_bytes: 0, available_bytes: 0, waiting_operations: 0 }, { endpoint: "", path: "/data-2", state: "healing", total_bytes: 0, used_bytes: 0, available_bytes: 0, waiting_operations: 0 }, { endpoint: "", path: "/data-3", state: "offline", total_bytes: 0, used_bytes: 0, available_bytes: 0, waiting_operations: 0 }] }} />
+          <ServerStatusDiagram compact cluster={{ id: "legend", server: "legend", region: "", shown_name: "示例", endpoint: "", status: "online", reachable: true, error: "", checked_at: "", command_latency_ms: 0, version: "", uptime_seconds: 0, bucket_count: 0, object_count: 0, version_count: 0, delete_marker_count: 0, logical_usage_bytes: 0, raw_capacity_bytes: 0, raw_used_bytes: 0, online_disks: 2, offline_disks: 0, healing_disks: 0, warning_disks: 0, critical_disks: 0, health_reasons: [], drives: [{ endpoint: "", path: "/data-1", state: "online", health: "healthy", health_reasons: [], total_bytes: 0, used_bytes: 0, available_bytes: 0, usage_percent: 0, used_inodes: 0, free_inodes: 0, inode_usage_percent: 0, capacity_skew: false, waiting_operations: 0 }, { endpoint: "", path: "/data-2", state: "healing", health: "warning", health_reasons: [], total_bytes: 0, used_bytes: 0, available_bytes: 0, usage_percent: 0, used_inodes: 0, free_inodes: 0, inode_usage_percent: 0, capacity_skew: false, waiting_operations: 0 }, { endpoint: "", path: "/data-3", state: "offline", health: "offline", health_reasons: [], total_bytes: 0, used_bytes: 0, available_bytes: 0, usage_percent: 0, used_inodes: 0, free_inodes: 0, inode_usage_percent: 0, capacity_skew: false, waiting_operations: 0 }] }} />
           <div className="space-y-2 text-[11px] leading-5 text-muted-foreground">
             <p><strong className="text-foreground">服务器指示灯</strong>：左侧灯绿色常亮表示服务器心跳正常；右侧灯绿色闪烁表示网络连接正常，黄色闪烁表示网络质量需关注，红色表示不可达。</p>
-            <p><strong className="text-foreground">磁盘槽位灯</strong>：绿色常亮为在线，黄色闪烁为修复中，红色为离线或错误。</p>
+            <p><strong className="text-foreground">磁盘槽位灯</strong>：绿色为可写，黄色为预警或修复中，红色为离线、空间或 inode 耗尽等严重异常。</p>
           </div>
         </div>
       </div>
@@ -974,8 +985,8 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground"><span className="inline-flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" aria-hidden />自动跟踪 {data.auto_heal_enabled ? "已启用" : "已停用"}</span><span>权威区域 {data.auto_heal_authority_region}</span><Button variant="ghost" size="icon" className="h-7 w-7" title="刷新集群状态" aria-label="刷新集群状态" disabled={refreshing} onClick={() => void load(true)}><RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden /></Button></div>
         </div>
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />集群在线</div><div className="mt-1 text-lg font-semibold">{summary.online_clusters} <span className="text-xs font-normal text-muted-foreground">/ {summary.cluster_count}</span></div><div className="text-[10px] text-muted-foreground">{summary.degraded_clusters} 降级 · {summary.offline_clusters} 离线</div></div>
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><HardDrive className="h-3.5 w-3.5 text-sky-600" aria-hidden />磁盘在线</div><div className="mt-1 text-lg font-semibold">{summary.online_disks}</div><div className="text-[10px] text-muted-foreground">{summary.offline_disks} 离线 · {summary.healing_disks} 修复中</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />集群在线</div><div className="mt-1 text-lg font-semibold">{summary.online_clusters} <span className="text-xs font-normal text-muted-foreground">/ {summary.cluster_count}</span></div><div className="text-[10px] text-muted-foreground">{summary.critical_clusters} 严重 · {summary.degraded_clusters} 降级 · {summary.offline_clusters} 离线</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><HardDrive className="h-3.5 w-3.5 text-sky-600" aria-hidden />磁盘在线</div><div className="mt-1 text-lg font-semibold">{summary.online_disks}</div><div className="text-[10px] text-muted-foreground">{summary.critical_disks} 严重 · {summary.warning_disks} 预警 · {summary.offline_disks} 离线</div></div>
           <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Gauge className="h-3.5 w-3.5 text-amber-600" aria-hidden />物理容量</div><div className="mt-1 text-lg font-semibold">{summary.raw_capacity_bytes ? (summary.raw_used_bytes / summary.raw_capacity_bytes * 100).toFixed(1) : "0.0"}%</div><Progress className="mt-1.5 h-1.5" value={summary.raw_capacity_bytes ? summary.raw_used_bytes / summary.raw_capacity_bytes * 100 : 0} /><div className="mt-1 text-[10px] text-muted-foreground">{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</div></div>
           <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Box className="h-3.5 w-3.5 text-violet-600" aria-hidden />对象总量</div><div className="mt-1 text-lg font-semibold">{summary.object_count.toLocaleString("zh-CN")}</div><div className="text-[10px] text-muted-foreground">逻辑 {formatBytes(summary.logical_usage_bytes)}</div></div>
           <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Activity className="h-3.5 w-3.5 text-cyan-600" aria-hidden />节点响应</div><div className="mt-1 text-lg font-semibold">{data.clusters.filter((cluster) => cluster.reachable).length} <span className="text-xs font-normal text-muted-foreground">可达</span></div><div className="text-[10px] text-muted-foreground">自动探测与延迟监控</div></div>
@@ -1006,6 +1017,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
 
                 <div className="flex min-h-0 flex-1 flex-col px-3.5 py-3">
                   {cluster.error ? <div className="mb-3 shrink-0 rounded-md bg-rose-500/10 px-2.5 py-2 text-[11px] text-rose-700 dark:text-rose-300">{cluster.error}</div> : null}
+                  {cluster.health_reasons.length > 0 ? <div className={cn("mb-3 shrink-0 rounded-md px-2.5 py-2 text-[11px]", cluster.status === "critical" ? "bg-rose-500/10 text-rose-700 dark:text-rose-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300")}>{cluster.health_reasons.join("；")}</div> : null}
                   <ServerStatusDiagram cluster={cluster} />
 
                   <div className="mt-3 grid shrink-0 grid-cols-1 gap-y-3">
@@ -1026,8 +1038,9 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                     <div className="docs-scroll min-h-0 flex-1 divide-y divide-border/50 overflow-y-auto">
                       {cluster.drives.map((drive) => (
                         <div key={`${drive.endpoint}:${drive.path}`} className="py-1.5 text-[10px]">
-                          <div className="flex items-center justify-between gap-2"><span className="truncate font-mono" title={drive.endpoint}>{drive.endpoint || drive.path}</span><span className={drive.state.toLowerCase() === "ok" || drive.state.toLowerCase() === "online" ? "text-emerald-600" : "text-rose-600"}>{drive.state}</span></div>
-                          <div className="mt-0.5 flex justify-between text-muted-foreground"><span>{formatBytes(drive.used_bytes)} / {formatBytes(drive.total_bytes)}</span><span>等待 {drive.waiting_operations}</span></div>
+                          <div className="flex items-center justify-between gap-2"><span className="truncate font-mono" title={drive.endpoint}>{drive.endpoint || drive.path}</span><span className={drive.health === "critical" || drive.health === "offline" ? "text-rose-600" : drive.health === "warning" ? "text-amber-600" : "text-emerald-600"}>{drive.health === "critical" ? "严重" : drive.health === "warning" ? "预警" : drive.health === "offline" ? "离线" : drive.state}</span></div>
+                          <div className="mt-0.5 flex justify-between text-muted-foreground"><span>{formatBytes(drive.used_bytes)} / {formatBytes(drive.total_bytes)} · {drive.usage_percent.toFixed(1)}%</span><span>等待 {drive.waiting_operations}</span></div>
+                          {drive.health_reasons.length > 0 ? <div className={cn("mt-0.5 truncate", drive.health === "critical" || drive.health === "offline" ? "text-rose-600" : "text-amber-600")} title={drive.health_reasons.join("；")}>{drive.health_reasons.join("；")}</div> : null}
                         </div>
                       ))}
                       {cluster.drives.length === 0 ? <div className="py-2 text-[10px] text-muted-foreground">暂无存储设备明细</div> : null}
