@@ -11,6 +11,7 @@ import {
   Globe2,
   KeyRound,
   LogOut,
+  Network,
   ServerCog,
   UserRound,
   Users,
@@ -325,6 +326,15 @@ function AppShell() {
                       {() => (
                         <SidebarMenuButton active={isInRouteArea("/admin/service-operations")} icon={<ServerCog aria-hidden />}>
                           服务运维
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
+                  {canOperateStorage ? (
+                    <NavLink to="/admin/sync-storage-operations" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<Network aria-hidden />}>
+                          同步存储运维
                         </SidebarMenuButton>
                       )}
                     </NavLink>

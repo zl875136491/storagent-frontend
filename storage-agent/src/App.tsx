@@ -18,6 +18,7 @@ import UsagePage from "./pages/admin/UsagePage"
 import AuditLogPage from "./pages/admin/AuditLogPage"
 import StorageOperationsPage from "./pages/admin/StorageOperationsPage"
 import ServiceOperationsPage from "./pages/admin/ServiceOperationsPage"
+import EtcdOperationsPage from "./pages/admin/EtcdOperationsPage"
 
 const legacyDocsSlugs: Record<string, string> = {
   "usage-overview": "overview",
@@ -92,6 +93,7 @@ export function App() {
                 <Route path="verification" element={<ServiceOperationsPage view="verification" />} />
                 <Route path="diagnostics" element={<ServiceOperationsPage view="diagnostics" />} />
               </Route>
+              <Route path="admin/sync-storage-operations" element={<EtcdOperationsPage />} />
             </Route>
           </Route>
 

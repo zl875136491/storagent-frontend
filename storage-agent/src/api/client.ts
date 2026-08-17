@@ -516,6 +516,54 @@ export interface ClusterHealthResponse {
   clusters: ClusterHealthItem[]
 }
 
+export type EtcdStatus = "healthy" | "warning" | "critical" | "unknown"
+
+export interface EtcdEndpointStatus {
+  name: string
+  endpoint: string
+  status: EtcdStatus
+  reachable: boolean
+  is_leader: boolean
+  latency_ms: number
+  version: string
+  member_id: string
+  leader_id: string
+  raft_term: number
+  raft_index: number
+  raft_applied_index: number
+  raft_lag: number
+  db_size_bytes: number
+  alarms: string[]
+  error: string
+  reasons: string[]
+}
+
+export interface EtcdSyncStatus {
+  watch_status: EtcdStatus
+  watch_reconnects: number
+  reconcile_runs: number
+  reconcile_failures: number
+  last_reconcile_success_at: string | null
+  last_reconcile_failure_at: string | null
+}
+
+export interface EtcdClusterStatusResponse {
+  status: EtcdStatus
+  checked_at: string
+  configured_endpoint_count: number
+  reachable_endpoint_count: number
+  quorum: boolean
+  leader_id: string
+  leader_endpoint: string
+  versions: string[]
+  database_size_bytes: number
+  alarms: string[]
+  members: EtcdEndpointStatus[]
+  sync: EtcdSyncStatus
+  reasons: string[]
+  metadata: Record<string, unknown>
+}
+
 export interface StorageOperationItem {
   id: string
   kind: "cluster_heal"
@@ -1251,6 +1299,16 @@ export async function fetchClusterHealthOperationsApi(
   accessToken?: string,
 ): Promise<ClusterHealthResponse> {
   return apiGet<ClusterHealthResponse>("/api/v1/storage/operations/clusters", accessToken)
+}
+
+export async function fetchEtcdOperationsApi(
+  accessToken?: string,
+  refresh = false,
+): Promise<EtcdClusterStatusResponse> {
+  return apiGet<EtcdClusterStatusResponse>(
+    "/api/v1/storage/operations/etcd" + (refresh ? "?refresh=true" : ""),
+    accessToken,
+  )
 }
 
 export async function fetchClusterHealStatusApi(
