@@ -12,6 +12,7 @@ import { BrandLoading } from "@/components/BrandLoading"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
+import { copyTextToClipboard } from "@/lib/copy-to-clipboard"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
@@ -90,7 +91,7 @@ function DiagnosticRunIdCell({ runId }: { runId: string }) {
   const [copied, setCopied] = useState(false)
 
   const copy = async () => {
-    const copiedSuccessfully = await navigator.clipboard?.writeText(runId).then(() => true).catch(() => false)
+    const copiedSuccessfully = await copyTextToClipboard(runId)
     if (!copiedSuccessfully) return
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1500)
@@ -171,10 +172,12 @@ function DiagnosticWorkspace({ version, accessToken }: { version: "v1" | "v2"; a
   const failedChecks = selected?.checks.filter((check) => check.status === "failed").length ?? 0
   const completedChecks = passedChecks + skippedChecks + failedChecks
   const scriptUrl = diagnosticScriptUrl(version)
-  const executeCommand = "curl -fsSL " + JSON.stringify(scriptUrl) + " | sh"
+  // The page itself may use a same-origin path such as /server/bj. A shell
+  // runs outside this browser, so it must receive the complete host URL.
+  const executeCommand = "curl -fsSL " + JSON.stringify(new URL(scriptUrl, window.location.origin).toString()) + " | sh"
 
   const copyExecuteCommand = async () => {
-    const copied = await navigator.clipboard?.writeText(executeCommand).then(() => true).catch(() => false)
+    const copied = await copyTextToClipboard(executeCommand)
     if (!copied) return
     setCopiedCommand(true)
     window.setTimeout(() => setCopiedCommand(false), 2000)

@@ -170,6 +170,13 @@ function AppShell() {
   const { confirmIfBlocking } = useNavigationLeaveBlock()
   const { closeMobileDrawer } = useSidebar()
   const isDocsRoute = location.pathname === "/docs" || location.pathname.startsWith("/docs/")
+  // Sidebar entries represent a feature area rather than only their default
+  // child route. Keep them active while any route inside that area is open.
+  const isInRouteArea = useCallback(
+    (routePrefix: string) =>
+      location.pathname === routePrefix || location.pathname.startsWith(`${routePrefix}/`),
+    [location.pathname],
+  )
 
   const handleNavClick = useCallback(
     (e: MouseEvent) => {
@@ -210,8 +217,8 @@ function AppShell() {
               <SidebarSectionTitle railLabel="DOC">文档中心</SidebarSectionTitle>
               <SidebarMenu>
                 <NavLink to="/docs/overview" onClick={handleNavClick}>
-                  {({ isActive }) => (
-                    <SidebarMenuButton active={isActive} icon={<BookOpen aria-hidden />}>
+                  {() => (
+                    <SidebarMenuButton active={isInRouteArea("/docs")} icon={<BookOpen aria-hidden />}>
                       使用文档
                     </SidebarMenuButton>
                   )}
@@ -264,8 +271,8 @@ function AppShell() {
                   )}
                 </NavLink>
                 <NavLink to="/data/storage/buckets/treemap" onClick={handleNavClick}>
-                  {({ isActive }) => (
-                    <SidebarMenuButton active={isActive} icon={<FileStack aria-hidden />}>
+                  {() => (
+                    <SidebarMenuButton active={isInRouteArea("/data/storage/buckets")} icon={<FileStack aria-hidden />}>
                       服务器文件详情
                     </SidebarMenuButton>
                   )}
@@ -306,8 +313,8 @@ function AppShell() {
                   ) : null}
                   {canOperateStorage ? (
                     <NavLink to="/admin/storage-operations/replication" onClick={handleNavClick}>
-                      {({ isActive }) => (
-                        <SidebarMenuButton active={isActive} icon={<Wrench aria-hidden />}>
+                      {() => (
+                        <SidebarMenuButton active={isInRouteArea("/admin/storage-operations")} icon={<Wrench aria-hidden />}>
                           存储运维
                         </SidebarMenuButton>
                       )}
@@ -315,8 +322,8 @@ function AppShell() {
                   ) : null}
                   {canOperateService ? (
                     <NavLink to="/admin/service-operations/verification" onClick={handleNavClick}>
-                      {({ isActive }) => (
-                        <SidebarMenuButton active={isActive} icon={<ServerCog aria-hidden />}>
+                      {() => (
+                        <SidebarMenuButton active={isInRouteArea("/admin/service-operations")} icon={<ServerCog aria-hidden />}>
                           服务运维
                         </SidebarMenuButton>
                       )}
