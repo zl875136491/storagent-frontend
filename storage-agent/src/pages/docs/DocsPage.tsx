@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { BookOpen, ChevronRight, Layers, Plug, Rocket } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DocsNavProvider, useGoDoc } from "@/components/docs/nav-context"
@@ -19,30 +19,20 @@ const NAV: { id: DocId; title: string; icon: typeof Rocket; hint: string }[] = [
   { id: "components", title: "功能组件演示", icon: Layers, hint: "在线上传 / 下载" },
 ]
 
-function resolveDocId(raw: string | null): DocId {
-  if (raw === "developer-usage" || raw === "file-components") return raw === "file-components" ? "components" : "usage-overview"
-  if (raw === "getting-started" || raw === "usage-overview" || raw === "api-guide" || raw === "components") {
-    return raw
-  }
-  return "usage-overview"
+
+const docIdsBySlug: Record<string, DocId> = {
+  overview: "usage-overview",
+  "quick-start": "getting-started",
+  "api-guide": "api-guide",
+  components: "components",
 }
 
-function DocsShell() {
-  const [searchParams] = useSearchParams()
+function DocsShell({ section }: { section: string }) {
   const goDoc = useGoDoc()
-  const active = useMemo(() => resolveDocId(searchParams.get("doc")), [searchParams])
+  const active = useMemo(() => docIdsBySlug[section ?? ""] ?? "usage-overview", [section])
   const showVersionSwitcher = active === "getting-started" || active === "api-guide" || active === "components"
   const shellScrollRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const raw = searchParams.get("doc")
-    if (raw === "developer-usage") {
-      goDoc("usage-overview", { replace: true })
-    } else if (raw === "file-components") {
-      goDoc("components", { replace: true })
-    }
-  }, [searchParams, goDoc])
 
   useEffect(() => {
     shellScrollRef.current?.scrollTo({ top: 0 })
@@ -92,7 +82,7 @@ function DocsShell() {
         <div className="shrink-0 border-b border-border/60 bg-background px-4 py-2.5 text-xs text-muted-foreground sm:px-8 lg:px-10">
           <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-1.5">
-              <Link to="/docs" className="hover:text-foreground">
+              <Link to="/docs/overview" className="hover:text-foreground">
                 文档
               </Link>
               <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
@@ -124,11 +114,11 @@ function DocsShell() {
   )
 }
 
-export default function DocsPage() {
+export default function DocsPage({ section }: { section: string }) {
   return (
     <DocsTocProvider>
       <DocsNavProvider>
-        <DocsShell />
+        <DocsShell section={section} />
       </DocsNavProvider>
     </DocsTocProvider>
   )

@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { AuthProvider } from "./auth/AuthContext"
 import { NavigationLeaveBlockProvider } from "./contexts/NavigationLeaveBlockContext"
 import ProtectedRoute from "./auth/ProtectedRoute"
@@ -19,6 +19,26 @@ import AuditLogPage from "./pages/admin/AuditLogPage"
 import StorageOperationsPage from "./pages/admin/StorageOperationsPage"
 import ServiceOperationsPage from "./pages/admin/ServiceOperationsPage"
 
+const legacyDocsSlugs: Record<string, string> = {
+  "usage-overview": "overview",
+  "developer-usage": "overview",
+  "getting-started": "quick-start",
+  "api-guide": "api-guide",
+  components: "components",
+  "file-components": "components",
+}
+
+// Keep links generated before the path-based document navigation available.
+function LegacyDocsRedirect() {
+  const location = useLocation()
+  const searchParams = new URLSearchParams(location.search)
+  const slug = legacyDocsSlugs[searchParams.get("doc") ?? ""] ?? "overview"
+  searchParams.delete("doc")
+  const search = searchParams.toString()
+
+  return <Navigate to={`/docs/${slug}${search ? `?${search}` : ""}`} replace />
+}
+
 // AI configuration and assistant routes are intentionally not registered.
 // Their source remains under pages/admin and features/ai for a later re-enable.
 
@@ -35,7 +55,7 @@ export function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
-              <Route index element={<Navigate to="/docs" replace />} />
+              <Route index element={<Navigate to="/docs/overview" replace />} />
               <Route path="data">
                 <Route path="basic">
                   <Route path="region" element={<RegionPage />} />
@@ -44,20 +64,38 @@ export function App() {
                 </Route>
                 <Route path="minio" element={<MinioPage />} />
                 <Route path="storage">
-                  <Route path="buckets" element={<BucketPage />} />
+                  <Route path="buckets">
+                    <Route index element={<Navigate to="treemap" replace />} />
+                    <Route path="treemap" element={<BucketPage view="treemap" />} />
+                    <Route path="files" element={<BucketPage view="files" />} />
+                  </Route>
                   <Route path="bucket-manage" element={<StorageBucketManagePage />} />
                 </Route>
               </Route>
-              <Route path="docs" element={<DocsPage />} />
+              <Route path="docs">
+                <Route index element={<LegacyDocsRedirect />} />
+                <Route path="overview" element={<DocsPage section="overview" />} />
+                <Route path="quick-start" element={<DocsPage section="quick-start" />} />
+                <Route path="api-guide" element={<DocsPage section="api-guide" />} />
+                <Route path="components" element={<DocsPage section="components" />} />
+              </Route>
               <Route path="admin/users" element={<UserRolePage />} />
               <Route path="admin/usage" element={<UsagePage />} />
               <Route path="admin/audit" element={<AuditLogPage />} />
-              <Route path="admin/storage-operations" element={<StorageOperationsPage />} />
-              <Route path="admin/service-operations" element={<ServiceOperationsPage />} />
+              <Route path="admin/storage-operations">
+                <Route index element={<Navigate to="replication" replace />} />
+                <Route path="replication" element={<StorageOperationsPage view="replication" />} />
+                <Route path="clusters" element={<StorageOperationsPage view="clusters" />} />
+              </Route>
+              <Route path="admin/service-operations">
+                <Route index element={<Navigate to="verification" replace />} />
+                <Route path="verification" element={<ServiceOperationsPage view="verification" />} />
+                <Route path="diagnostics" element={<ServiceOperationsPage view="diagnostics" />} />
+              </Route>
             </Route>
           </Route>
 
-          <Route path="*" element={<Navigate to="/docs" replace />} />
+          <Route path="*" element={<Navigate to="/docs/overview" replace />} />
         </Routes>
         </NavigationLeaveBlockProvider>
       </BrowserRouter>

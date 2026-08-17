@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, type ReactNode } from "react"
-import { useSearchParams } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 
 type GoDocOptions = { replace?: boolean }
 
@@ -9,22 +9,24 @@ type DocsNavContextValue = {
 
 const DocsNavContext = createContext<DocsNavContextValue | null>(null)
 
+const docSlugs: Record<string, string> = {
+  "usage-overview": "overview",
+  "getting-started": "quick-start",
+  "api-guide": "api-guide",
+  components: "components",
+}
+
 export function DocsNavProvider({ children }: { children: ReactNode }) {
-  const [, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const goDoc = useCallback(
     (id: string, options?: GoDocOptions) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev)
-          next.set("doc", id)
-          return next
-        },
-        { replace: options?.replace ?? false },
-      )
+      const slug = docSlugs[id] ?? "overview"
+      navigate(`/docs/${slug}${location.search}`, { replace: options?.replace ?? false })
       window.scrollTo({ top: 0, behavior: "smooth" })
     },
-    [setSearchParams],
+    [location.search, navigate],
   )
 
   return <DocsNavContext.Provider value={{ goDoc }}>{children}</DocsNavContext.Provider>

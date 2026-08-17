@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Navigate } from "react-router-dom"
+import { Navigate, NavLink, useLocation } from "react-router-dom"
 import { Check, CheckCircle2, CircleAlert, Copy, Download, Eye, FileSearch, KeyRound, RefreshCw, Server, ShieldCheck, Terminal } from "lucide-react"
 
 import { diagnosticScriptUrl, fetchDemoApiKeysApi, fetchDiagnosticRunsApi, type DemoAPIKey, type DiagnosticRun } from "@/api/client"
@@ -200,10 +200,10 @@ function DiagnosticWorkspace({ version, accessToken }: { version: "v1" | "v2"; a
   )
 }
 
-function ServiceOperationsWorkspace() {
+function ServiceOperationsWorkspace({ view }: { view: ServiceView }) {
   const { accessToken } = useAuth()
+  const location = useLocation()
   const [version] = useDocVersion()
-  const [view, setView] = useState<ServiceView>("verification")
   const [apiKeyId, setApiKeyId] = useState("")
   const [selectedDetail, setSelectedDetail] = useState<VerificationDetail | null>(null)
   const selectApiKey = useCallback((next: string) => setApiKeyId(next), [])
@@ -213,7 +213,7 @@ function ServiceOperationsWorkspace() {
     <div className="mx-auto flex h-full min-h-[680px] max-w-8xl flex-col pb-10">
       <div className="mb-4 flex shrink-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0"><h1 className="text-lg font-semibold text-foreground">服务运维</h1><p className="mt-1 text-xs text-muted-foreground">受控接口验收与调用方接入诊断共用当前 API 版本上下文。</p></div>
-        <div className="flex flex-col items-end gap-2"><DocVersionSwitcher className="shrink-0" /><div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="tablist" aria-label="服务运维视图"><button type="button" role="tab" aria-selected={view === "verification"} className={cn("inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs", view === "verification" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")} onClick={() => setView("verification")}><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />接口完整验证</button><button type="button" role="tab" aria-selected={view === "diagnostics"} className={cn("inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs", view === "diagnostics" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")} onClick={() => setView("diagnostics")}><Terminal className="h-3.5 w-3.5" aria-hidden />调用方接入诊断</button></div></div>
+        <div className="flex flex-col items-end gap-2"><DocVersionSwitcher className="shrink-0" /><div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="tablist" aria-label="服务运维视图"><NavLink to={{ pathname: "/admin/service-operations/verification", search: location.search }} role="tab" aria-selected={view === "verification"} className={cn("inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs", view === "verification" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}><CheckCircle2 className="h-3.5 w-3.5" aria-hidden />接口完整验证</NavLink><NavLink to={{ pathname: "/admin/service-operations/diagnostics", search: location.search }} role="tab" aria-selected={view === "diagnostics"} className={cn("inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs", view === "diagnostics" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}><Terminal className="h-3.5 w-3.5" aria-hidden />调用方接入诊断</NavLink></div></div>
       </div>
       {view === "diagnostics" ? <DiagnosticWorkspace version={version} accessToken={accessToken ?? undefined} /> : <>
         <Card className="mb-4 shrink-0 rounded-lg shadow-none"><CardContent className="grid gap-4 p-5 xl:grid-cols-[minmax(20rem,0.78fr)_minmax(0,1.22fr)]"><div><div className="mb-3"><h2 className="text-base font-semibold text-foreground">运行配置</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">修改版本、端点或 APIKey 后，将从新的验证上下文开始执行。</p></div><ApiKeyRunSelector value={apiKeyId} onChange={selectApiKey} /></div><div className="rounded-lg border border-border/70 bg-background p-4"><div className="flex items-start gap-3"><Server className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden /><div className="min-w-0"><h2 className="text-sm font-semibold text-foreground">目标服务</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">使用公共探测接口选择可达网关。当前选择会用于本次完整验证的所有请求。</p></div></div><div className="mt-4"><GuideBackendSelector value={base} onChange={setBase} /></div>{listLoading ? <p className="mt-3 text-[11px] text-muted-foreground">正在探测后端健康状态。</p> : null}{listError ? <p className="mt-3 text-[11px] text-destructive">{listError}</p> : null}</div></CardContent></Card>
@@ -223,8 +223,8 @@ function ServiceOperationsWorkspace() {
   )
 }
 
-export default function ServiceOperationsPage() {
+export default function ServiceOperationsPage({ view }: { view: ServiceView }) {
   const { user } = useAuth()
   if (!canOperateService(user)) return <Navigate to="/data/basic/region" replace />
-  return <GuideEndpointsProvider><ServiceOperationsWorkspace /></GuideEndpointsProvider>
+  return <GuideEndpointsProvider><ServiceOperationsWorkspace view={view} /></GuideEndpointsProvider>
 }

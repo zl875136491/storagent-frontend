@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Navigate } from "react-router-dom"
+import { Navigate, NavLink, useLocation } from "react-router-dom"
 import {
   Activity,
   Box,
@@ -1278,9 +1278,9 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
   )
 }
 
-export default function StorageOperationsPage() {
+export default function StorageOperationsPage({ view }: { view: OperationsView }) {
   const { accessToken, user } = useAuth()
-  const [view, setView] = useState<OperationsView>("replication")
+  const location = useLocation()
 
   if (!hasPermission(user, PERMISSIONS.storageOperationsManage)) {
     return <Navigate to="/data/basic/region" replace />
@@ -1294,26 +1294,24 @@ export default function StorageOperationsPage() {
           <p className="mt-1 text-xs text-muted-foreground">复制数据收敛、五地 MinIO 集群健康与原生自愈跟踪。</p>
         </div>
         <div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5" role="tablist" aria-label="存储运维视图">
-          <button
-            type="button"
+          <NavLink
+            to={{ pathname: "/admin/storage-operations/replication", search: location.search }}
             role="tab"
             aria-selected={view === "replication"}
             className={cn("inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs", view === "replication" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
-            onClick={() => setView("replication")}
           >
             <DatabaseZap className="h-3.5 w-3.5" aria-hidden />
             复制运维
-          </button>
-          <button
-            type="button"
+          </NavLink>
+          <NavLink
+            to={{ pathname: "/admin/storage-operations/clusters", search: location.search }}
             role="tab"
             aria-selected={view === "clusters"}
             className={cn("inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs", view === "clusters" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
-            onClick={() => setView("clusters")}
           >
             <ServerCog className="h-3.5 w-3.5" aria-hidden />
             集群健康
-          </button>
+          </NavLink>
         </div>
       </div>
 

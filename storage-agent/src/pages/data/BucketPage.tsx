@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import * as echarts from "echarts"
 import { useAuth } from "../../auth/AuthContext"
+import { NavLink, useLocation } from "react-router-dom"
 import {
   fetchBucketsApi,
   fetchMinioServersApi,
@@ -245,9 +246,9 @@ function BucketTreemap({ buckets, onSelect }: BucketTreemapProps) {
   return <div ref={containerRef} className="h-full w-full" />
 }
 
-export default function BucketPage() {
+export default function BucketPage({ view }: { view: InventoryView }) {
   const { accessToken } = useAuth()
-  const [view, setView] = useState<InventoryView>("treemap")
+  const location = useLocation()
   const [treemapSelection, setTreemapSelection] = useState<TreemapSelection | null>(null)
   const [servers, setServers] = useState<MinioServer[]>([])
   const [serversLoading, setServersLoading] = useState(true)
@@ -438,34 +439,28 @@ export default function BucketPage() {
                   role="group"
                   aria-label="文件详情视图"
                 >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
+                  <NavLink
+                    to={{ pathname: "/data/storage/buckets/treemap", search: location.search }}
                     className={cn(
-                      "h-7 gap-1.5 rounded-sm px-2.5",
+                      "inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
                       view === "treemap" && "bg-background text-foreground shadow-sm hover:bg-background",
                     )}
-                    aria-pressed={view === "treemap"}
-                    onClick={() => setView("treemap")}
+                    aria-current={view === "treemap" ? "page" : undefined}
                   >
                     <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
                     树形图
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
+                  </NavLink>
+                  <NavLink
+                    to={{ pathname: "/data/storage/buckets/files", search: location.search }}
                     className={cn(
-                      "h-7 gap-1.5 rounded-sm px-2.5",
+                      "inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
                       view === "files" && "bg-background text-foreground shadow-sm hover:bg-background",
                     )}
-                    aria-pressed={view === "files"}
-                    onClick={() => setView("files")}
+                    aria-current={view === "files" ? "page" : undefined}
                   >
                     <Table2 className="h-3.5 w-3.5" aria-hidden />
                     文件列表
-                  </Button>
+                  </NavLink>
                 </div>
                 <Button
                   variant="ghost"

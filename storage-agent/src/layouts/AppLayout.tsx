@@ -169,7 +169,7 @@ function AppShell() {
   const location = useLocation()
   const { confirmIfBlocking } = useNavigationLeaveBlock()
   const { closeMobileDrawer } = useSidebar()
-  const isDocsRoute = location.pathname === "/docs"
+  const isDocsRoute = location.pathname === "/docs" || location.pathname.startsWith("/docs/")
 
   const handleNavClick = useCallback(
     (e: MouseEvent) => {
@@ -209,7 +209,7 @@ function AppShell() {
             <div>
               <SidebarSectionTitle railLabel="DOC">文档中心</SidebarSectionTitle>
               <SidebarMenu>
-                <NavLink to="/docs" onClick={handleNavClick}>
+                <NavLink to="/docs/overview" onClick={handleNavClick}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon={<BookOpen aria-hidden />}>
                       使用文档
@@ -263,7 +263,7 @@ function AppShell() {
                     </SidebarMenuButton>
                   )}
                 </NavLink>
-                <NavLink to="/data/storage/buckets" onClick={handleNavClick}>
+                <NavLink to="/data/storage/buckets/treemap" onClick={handleNavClick}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon={<FileStack aria-hidden />}>
                       服务器文件详情
@@ -305,7 +305,7 @@ function AppShell() {
                     </NavLink>
                   ) : null}
                   {canOperateStorage ? (
-                    <NavLink to="/admin/storage-operations" onClick={handleNavClick}>
+                    <NavLink to="/admin/storage-operations/replication" onClick={handleNavClick}>
                       {({ isActive }) => (
                         <SidebarMenuButton active={isActive} icon={<Wrench aria-hidden />}>
                           存储运维
@@ -314,7 +314,7 @@ function AppShell() {
                     </NavLink>
                   ) : null}
                   {canOperateService ? (
-                    <NavLink to="/admin/service-operations" onClick={handleNavClick}>
+                    <NavLink to="/admin/service-operations/verification" onClick={handleNavClick}>
                       {({ isActive }) => (
                         <SidebarMenuButton active={isActive} icon={<ServerCog aria-hidden />}>
                           服务运维
