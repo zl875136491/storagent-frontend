@@ -323,6 +323,143 @@ function ServerStatusLegend() {
   )
 }
 
+function clusterIssueCount(cluster: ClusterHealthItem): number {
+  return cluster.drives.filter((drive) => drive.health !== "healthy").length
+}
+
+function driveHealthLabel(health: ClusterDriveHealth["health"]): string {
+  if (health === "critical") return "严重"
+  if (health === "warning") return "预警"
+  if (health === "offline") return "离线"
+  if (health === "unknown") return "未知"
+  return "正常"
+}
+
+function driveHealthTextClass(health: ClusterDriveHealth["health"]): string {
+  return health === "critical" || health === "offline"
+    ? "text-rose-600 dark:text-rose-300"
+    : health === "warning"
+      ? "text-amber-600 dark:text-amber-300"
+      : "text-emerald-600 dark:text-emerald-300"
+}
+
+function withTestClusterHealthMock(data: ClusterHealthResponse): ClusterHealthResponse {
+  // The NUC environment can expose this flag to review alert presentation
+  // without changing a real MinIO volume or production API response.
+  if (import.meta.env.VITE_CLUSTER_HEALTH_MOCK !== "true" || data.clusters.length === 0) return data
+
+  const target = data.clusters[0]
+  const sourceDrive = target.drives[0]
+  const criticalDrive: ClusterDriveHealth = {
+    endpoint: sourceDrive?.endpoint || "/data/minio3",
+    path: sourceDrive?.path || "/data/minio3",
+    state: "ok",
+    health: "critical",
+    health_reasons: [
+      "容量 100.0% / inode 97.1% 已达到严重阈值（剩余 192KiB，空闲 inode 440）",
+      "容量显著低于同一 Erasure Set 最大盘，存在容量失衡",
+    ],
+    total_bytes: 15_553_527_808,
+    used_bytes: 15_553_331_200,
+    available_bytes: 196_608,
+    usage_percent: 100,
+    used_inodes: 14_536,
+    free_inodes: 440,
+    inode_usage_percent: 97.06,
+    capacity_skew: true,
+    waiting_operations: 0,
+  }
+  const targetDrives = target.drives.length > 0
+    ? [criticalDrive, ...target.drives.slice(1)]
+    : [criticalDrive]
+  const mockedTarget: ClusterHealthItem = {
+    ...target,
+    status: "critical",
+    critical_disks: 1,
+    health_reasons: criticalDrive.health_reasons,
+    drives: targetDrives,
+  }
+  const clusters = [mockedTarget, ...data.clusters.slice(1)]
+  return {
+    ...data,
+    summary: {
+      ...data.summary,
+      status: "critical",
+      online_clusters: clusters.filter((cluster) => cluster.status === "online").length,
+      degraded_clusters: clusters.filter((cluster) => cluster.status === "degraded").length,
+      critical_clusters: clusters.filter((cluster) => cluster.status === "critical").length,
+      offline_clusters: clusters.filter((cluster) => cluster.status === "offline").length,
+      warning_disks: clusters.reduce((total, cluster) => total + cluster.warning_disks, 0),
+      critical_disks: clusters.reduce((total, cluster) => total + cluster.critical_disks, 0),
+    },
+    clusters,
+  }
+}
+
+function ClusterHealthDetail({ cluster, onClose }: { cluster: ClusterHealthItem; onClose: () => void }) {
+  const issueCount = clusterIssueCount(cluster)
+  return (
+    <DialogContent className="max-w-3xl rounded-lg">
+      <DialogHeader>
+        <div className="min-w-0">
+          <DialogTitle>集群问题详情</DialogTitle>
+          <p className="mt-1 truncate text-[11px] text-muted-foreground">{cluster.shown_name}集群 · {cluster.server} · {cluster.endpoint}</p>
+        </div>
+        <ClusterStatus status={cluster.status} />
+      </DialogHeader>
+      <DialogBody className="space-y-3">
+        <div className={cn(
+          "rounded-md border px-3 py-2.5 text-xs",
+          cluster.status === "critical" || cluster.status === "offline"
+            ? "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+            : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        )}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-medium">{issueCount ? `${issueCount} 个存储设备需要关注` : "集群存在状态异常"}</span>
+            <span className="shrink-0 text-[10px]">检查于 {formatDateTime(cluster.checked_at)}</span>
+          </div>
+          {cluster.health_reasons.length > 0 ? <div className="mt-1.5 leading-5">{cluster.health_reasons.join("；")}</div> : null}
+          {cluster.error ? <div className="mt-1.5 leading-5">{cluster.error}</div> : null}
+        </div>
+
+        <div className="rounded-md border border-border/70">
+          <div className="flex items-center justify-between border-b border-border/60 px-3 py-2 text-xs font-medium">
+            <span>存储设备详情</span>
+            <span className="text-[10px] text-muted-foreground">{cluster.drives.length} 个设备 · {cluster.online_disks} 个在线</span>
+          </div>
+          <div className="divide-y divide-border/60">
+            {cluster.drives.map((drive) => (
+              <div key={`${drive.endpoint}:${drive.path}`} className="space-y-2 px-3 py-3 text-[11px]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate font-mono font-medium" title={drive.endpoint}>{drive.endpoint || drive.path}</span>
+                  <span className={cn("shrink-0 font-medium", driveHealthTextClass(drive.health))}>{driveHealthLabel(drive.health)} · {drive.state}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-muted-foreground sm:grid-cols-4">
+                  <div><span>已用容量</span><div className="mt-0.5 text-foreground">{formatBytes(drive.used_bytes)} / {formatBytes(drive.total_bytes)}</div></div>
+                  <div><span>容量使用率</span><div className="mt-0.5 text-foreground">{drive.usage_percent.toFixed(2)}%</div></div>
+                  <div><span>可用空间</span><div className="mt-0.5 text-foreground">{formatBytes(drive.available_bytes)}</div></div>
+                  <div><span>等待操作</span><div className="mt-0.5 text-foreground">{drive.waiting_operations}</div></div>
+                  <div><span>已用 inode</span><div className="mt-0.5 text-foreground">{drive.used_inodes.toLocaleString("zh-CN")}</div></div>
+                  <div><span>空闲 inode</span><div className="mt-0.5 text-foreground">{drive.free_inodes.toLocaleString("zh-CN")}</div></div>
+                  <div><span>inode 使用率</span><div className="mt-0.5 text-foreground">{drive.inode_usage_percent.toFixed(2)}%</div></div>
+                  <div><span>容量失衡</span><div className="mt-0.5 text-foreground">{drive.capacity_skew ? "是" : "否"}</div></div>
+                </div>
+                {drive.health_reasons.length > 0 ? (
+                  <div className={cn("rounded bg-muted/50 px-2 py-1.5 leading-5", driveHealthTextClass(drive.health))}>
+                    {drive.health_reasons.join("；")}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+            {cluster.drives.length === 0 ? <div className="px-3 py-4 text-xs text-muted-foreground">暂无存储设备详情</div> : null}
+          </div>
+        </div>
+      </DialogBody>
+      <DialogFooter><Button variant="outline" onClick={onClose}>关闭</Button></DialogFooter>
+    </DialogContent>
+  )
+}
+
 function LoadingState({ label }: { label: string }) {
   return <BrandLoading label={label} className="min-h-[360px] flex-1" />
 }
@@ -906,6 +1043,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
   const [jobs, setJobs] = useState<StorageOperationItem[]>([])
   const [healStatus, setHealStatus] = useState<ClusterHealStatusResponse | null>(null)
   const [selectedServer, setSelectedServer] = useState<string | null>(null)
+  const [healthDetailServer, setHealthDetailServer] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [healDialog, setHealDialog] = useState(false)
@@ -920,7 +1058,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
         fetchStorageOperationsApi(accessToken),
         fetchCapacityPlanningApi(accessToken),
       ])
-      setData(health)
+      setData(withTestClusterHealthMock(health))
       setJobs(operations.data)
       setCapacity(capacityPlanning)
       setSelectedServer((current) => {
@@ -953,6 +1091,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
   }, [hasActiveJob, load])
 
   const selected = data?.clusters.find((item) => item.server === selectedServer) ?? null
+  const healthDetailCluster = data?.clusters.find((item) => item.server === healthDetailServer) ?? null
   const selectedJob = selected ? latestJobFor(selected.server, jobs) : null
 
   const openHealDialog = (server: string) => {
@@ -1012,12 +1151,24 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                     <h2 className="truncate text-sm font-semibold">{cluster.shown_name}集群</h2>
                     <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground" title={cluster.endpoint}>{cluster.server} · {cluster.endpoint}</p>
                   </div>
-                  <ClusterStatus status={cluster.status} />
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {cluster.status !== "online" || cluster.error || cluster.health_reasons.length > 0 ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 gap-1 px-2 text-[10px]"
+                        aria-label={`${cluster.shown_name}问题详情`}
+                        onClick={() => setHealthDetailServer(cluster.server)}
+                      >
+                        <CircleAlert className="h-3.5 w-3.5" aria-hidden />
+                        问题详情
+                      </Button>
+                    ) : null}
+                    <ClusterStatus status={cluster.status} />
+                  </div>
                 </header>
 
                 <div className="flex min-h-0 flex-1 flex-col px-3.5 py-3">
-                  {cluster.error ? <div className="mb-3 shrink-0 rounded-md bg-rose-500/10 px-2.5 py-2 text-[11px] text-rose-700 dark:text-rose-300">{cluster.error}</div> : null}
-                  {cluster.health_reasons.length > 0 ? <div className={cn("mb-3 shrink-0 rounded-md px-2.5 py-2 text-[11px]", cluster.status === "critical" ? "bg-rose-500/10 text-rose-700 dark:text-rose-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300")}>{cluster.health_reasons.join("；")}</div> : null}
                   <ServerStatusDiagram cluster={cluster} />
 
                   <div className="mt-3 grid shrink-0 grid-cols-1 gap-y-3">
@@ -1040,7 +1191,6 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
                         <div key={`${drive.endpoint}:${drive.path}`} className="py-1.5 text-[10px]">
                           <div className="flex items-center justify-between gap-2"><span className="truncate font-mono" title={drive.endpoint}>{drive.endpoint || drive.path}</span><span className={drive.health === "critical" || drive.health === "offline" ? "text-rose-600" : drive.health === "warning" ? "text-amber-600" : "text-emerald-600"}>{drive.health === "critical" ? "严重" : drive.health === "warning" ? "预警" : drive.health === "offline" ? "离线" : drive.state}</span></div>
                           <div className="mt-0.5 flex justify-between text-muted-foreground"><span>{formatBytes(drive.used_bytes)} / {formatBytes(drive.total_bytes)} · {drive.usage_percent.toFixed(1)}%</span><span>等待 {drive.waiting_operations}</span></div>
-                          {drive.health_reasons.length > 0 ? <div className={cn("mt-0.5 truncate", drive.health === "critical" || drive.health === "offline" ? "text-rose-600" : "text-amber-600")} title={drive.health_reasons.join("；")}>{drive.health_reasons.join("；")}</div> : null}
                         </div>
                       ))}
                       {cluster.drives.length === 0 ? <div className="py-2 text-[10px] text-muted-foreground">暂无存储设备明细</div> : null}
@@ -1090,6 +1240,10 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
           })}
         </div>
       </div>
+
+      <Dialog open={Boolean(healthDetailCluster)} onOpenChange={(open) => !open && setHealthDetailServer(null)}>
+        {healthDetailCluster ? <ClusterHealthDetail cluster={healthDetailCluster} onClose={() => setHealthDetailServer(null)} /> : null}
+      </Dialog>
 
       <Dialog open={healDialog} onOpenChange={setHealDialog}>
         <DialogContent className="max-w-md rounded-lg">
