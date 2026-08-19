@@ -331,10 +331,10 @@ function AppShell() {
                     </NavLink>
                   ) : null}
                   {canOperateStorage ? (
-                    <NavLink to="/admin/sync-storage-operations" onClick={handleNavClick}>
-                      {({ isActive }) => (
-                        <SidebarMenuButton active={isActive} icon={<Network aria-hidden />}>
-                          同步存储运维
+                    <NavLink to="/admin/etcd-operations" onClick={handleNavClick}>
+                      {() => (
+                        <SidebarMenuButton active={isInRouteArea("/admin/etcd-operations")} icon={<Network aria-hidden />}>
+                          Etcd 运维
                         </SidebarMenuButton>
                       )}
                     </NavLink>

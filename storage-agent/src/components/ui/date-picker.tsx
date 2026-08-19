@@ -66,7 +66,7 @@ export function DatePicker({
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-0">
+      <PopoverContent align="start" className="z-[210] w-auto p-0">
         <Calendar
           mode="single"
           selected={selected}
@@ -123,7 +123,7 @@ export function DateTimePicker({
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-0">
+      <PopoverContent align="start" className="z-[210] w-auto p-0">
         <Calendar
           mode="single"
           selected={selected}

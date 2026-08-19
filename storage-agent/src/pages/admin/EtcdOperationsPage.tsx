@@ -1090,12 +1090,6 @@ function PageTabs({ view }: { view: PageView }) {
         <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
         服务状态
       </NavLink>
-      <span
-        className="px-0.5 text-sm leading-none text-muted-foreground/70"
-        aria-hidden
-      >
-        &gt;
-      </span>
       <NavLink
         to="/admin/etcd-operations/maintenance/trend"
         className={cn(
