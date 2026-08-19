@@ -1287,7 +1287,7 @@ export default function StorageOperationsPage({ view }: { view: OperationsView }
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-[680px] max-w-8xl flex-col">
+    <div className="mx-auto flex h-full min-h-0 max-w-8xl flex-col">
       <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">存储运维</h1>

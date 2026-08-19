@@ -343,8 +343,8 @@ export default function BucketPage({ view }: { view: InventoryView }) {
   }
 
   return (
-    <div className="mx-auto max-w-8xl">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="mx-auto flex min-h-0 max-w-8xl flex-col lg:h-full">
+      <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">服务器文件详情</h1>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -353,7 +353,7 @@ export default function BucketPage({ view }: { view: InventoryView }) {
         </div>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 shrink-0">
         {serversLoading ? (
           <Card className="bg-muted/40">
             <CardContent className="pt-0">
@@ -414,20 +414,20 @@ export default function BucketPage({ view }: { view: InventoryView }) {
           </div>
         )}
       </div>
-      <div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {bucketsLoading ? (
-            <BrandLoading label="正在加载存储桶数据..." className="min-h-[600px]" />
+            <BrandLoading label="正在加载存储桶数据..." className="min-h-0 flex-1" />
           ) : !selectedServerId ? (
-            <div className="flex min-h-[360px] items-center justify-center text-xs text-muted-foreground">
+            <div className="flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">
               请先在上方选择一个 MinIO 服务。
             </div>
           ) : buckets.length === 0 ? (
-            <div className="flex min-h-[360px] items-center justify-center text-xs text-muted-foreground">
+            <div className="flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">
               当前 MinIO 服务暂无存储桶数据。
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-border bg-muted/40">
-              <div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/70 bg-background/70 px-3 py-2 text-[11px]">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-muted/40">
+              <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/70 bg-background/70 px-3 py-2 text-[11px]">
                 <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                   <Database className="h-3.5 w-3.5 text-primary" aria-hidden />
                   {cacheInfo?.hit ? "Mongo 缓存" : "MinIO 实时回源"}
@@ -474,7 +474,7 @@ export default function BucketPage({ view }: { view: InventoryView }) {
                   <RefreshCw className={cn("h-3.5 w-3.5", bucketsLoading && "animate-spin")} aria-hidden />
                 </Button>
               </div>
-              <div className="relative h-[calc(100vh-344px)] min-h-[420px]">
+              <div className="relative min-h-0 flex-1">
                 {view === "treemap" ? (
                   <>
                     {treemapSelection ? (

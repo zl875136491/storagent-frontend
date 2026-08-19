@@ -16,6 +16,7 @@ import { Card, CardContent } from "../../components/ui/card"
 import { DialogFooter } from "../../components/ui/dialog"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
+import { DatePicker } from "../../components/ui/date-picker"
 import { CheckIcon } from "lucide-react"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
 import { formatDateTime } from "../../lib/format"
@@ -296,11 +297,12 @@ export default function APIKeyPage() {
               <Label className="mb-1 block text-xs" htmlFor="apikey-expired-at">
                 失效时间（可选）
               </Label>
-              <Input
+              <DatePicker
                 id="apikey-expired-at"
-                type="date"
                 value={expiredAt}
-                onChange={(e) => setExpiredAt(e.target.value)}
+                onChange={setExpiredAt}
+                placeholder="选择失效日期"
+                aria-label="选择 APIKey 失效日期"
               />
               <p className="mt-1 text-[11px] text-muted-foreground">
                 默认为空表示永久有效；选择日期后，APIKey 将在该日期（含）后失效。

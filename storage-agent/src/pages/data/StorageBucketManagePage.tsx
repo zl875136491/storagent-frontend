@@ -50,7 +50,7 @@ export default function StorageBucketManagePage() {
   )
 
   return (
-    <div className="mx-auto flex min-h-full max-w-8xl flex-col lg:h-full">
+    <div className="mx-auto flex min-h-0 max-w-8xl flex-col lg:h-full">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">存储桶管理</h1>
@@ -114,7 +114,7 @@ export default function StorageBucketManagePage() {
             </CardContent>
           </Card>
 
-          <div className="flex flex-col gap-4 lg:min-h-0">
+          <div className="flex min-h-0 flex-col gap-4 lg:min-h-0">
             <Card>
               <CardContent className="pt-4">
                 {!selectedBucket ? (

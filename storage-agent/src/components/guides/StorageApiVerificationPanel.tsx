@@ -340,14 +340,14 @@ export function StorageApiVerificationPanel({ version, baseURL, apiKeyId, access
   }
 
   return (
-    <Card className="rounded-lg shadow-none">
+    <Card className="flex h-full min-h-0 flex-col rounded-lg shadow-none">
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div><CardTitle className="text-base">{version} 存储接口完整验证</CardTitle><p className="mt-1 text-xs font-normal text-muted-foreground">执行真实请求覆盖本版本全部存储接口；失败项保留 HTTP 状态与请求 ID。</p></div>
         <div className="flex shrink-0 gap-2"><Button type="button" variant="outline" size="sm" onClick={reset} disabled={running} aria-label="重置验证结果"><RotateCcw className="h-3.5 w-3.5" /></Button><Button type="button" size="sm" onClick={() => void run()} disabled={!ready || running}><Play className="mr-1.5 h-3.5 w-3.5" />{running ? "验证中" : "开始验证"}</Button></div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>覆盖 {checks.length} 个接口</span><span>{passed}/{checks.length} 已通过</span></div>
-        <div className="overflow-hidden rounded-md border border-border/70">
+        <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border/70">
           <table className="w-full table-fixed text-left text-xs">
             <colgroup>
               <col className="w-9 sm:w-10" />

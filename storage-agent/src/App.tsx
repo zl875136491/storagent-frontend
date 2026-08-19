@@ -1,24 +1,30 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom"
-import { AuthProvider } from "./auth/AuthContext"
-import { NavigationLeaveBlockProvider } from "./contexts/NavigationLeaveBlockContext"
-import ProtectedRoute from "./auth/ProtectedRoute"
-import AppLayout from "./layouts/AppLayout"
-import LoginPage from "./pages/LoginPage"
-import LoginByCodePage from "./pages/LoginByCodePage"
-import OAPasswordRequestPage from "./pages/OAPasswordRequestPage"
-import RegionPage from "./pages/data/RegionPage"
-import MinioPage from "./pages/data/MinioPage"
-import APIKeyPage from "./pages/data/APIKeyPage"
-import ApplicationPage from "./pages/data/ApplicationPage"
-import BucketPage from "./pages/data/BucketPage"
-import StorageBucketManagePage from "./pages/data/StorageBucketManagePage"
-import DocsPage from "./pages/docs/DocsPage"
-import UserRolePage from "./pages/admin/UserRolePage"
-import UsagePage from "./pages/admin/UsagePage"
-import AuditLogPage from "./pages/admin/AuditLogPage"
-import StorageOperationsPage from "./pages/admin/StorageOperationsPage"
-import ServiceOperationsPage from "./pages/admin/ServiceOperationsPage"
-import EtcdOperationsPage from "./pages/admin/EtcdOperationsPage"
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import { AuthProvider } from "./auth/AuthContext";
+import { NavigationLeaveBlockProvider } from "./contexts/NavigationLeaveBlockContext";
+import ProtectedRoute from "./auth/ProtectedRoute";
+import AppLayout from "./layouts/AppLayout";
+import LoginPage from "./pages/LoginPage";
+import LoginByCodePage from "./pages/LoginByCodePage";
+import OAPasswordRequestPage from "./pages/OAPasswordRequestPage";
+import RegionPage from "./pages/data/RegionPage";
+import MinioPage from "./pages/data/MinioPage";
+import APIKeyPage from "./pages/data/APIKeyPage";
+import ApplicationPage from "./pages/data/ApplicationPage";
+import BucketPage from "./pages/data/BucketPage";
+import StorageBucketManagePage from "./pages/data/StorageBucketManagePage";
+import DocsPage from "./pages/docs/DocsPage";
+import UserRolePage from "./pages/admin/UserRolePage";
+import UsagePage from "./pages/admin/UsagePage";
+import AuditLogPage from "./pages/admin/AuditLogPage";
+import StorageOperationsPage from "./pages/admin/StorageOperationsPage";
+import ServiceOperationsPage from "./pages/admin/ServiceOperationsPage";
+import EtcdOperationsPage from "./pages/admin/EtcdOperationsPage";
 
 const legacyDocsSlugs: Record<string, string> = {
   "usage-overview": "overview",
@@ -27,17 +33,17 @@ const legacyDocsSlugs: Record<string, string> = {
   "api-guide": "api-guide",
   components: "components",
   "file-components": "components",
-}
+};
 
 // Keep links generated before the path-based document navigation available.
 function LegacyDocsRedirect() {
-  const location = useLocation()
-  const searchParams = new URLSearchParams(location.search)
-  const slug = legacyDocsSlugs[searchParams.get("doc") ?? ""] ?? "overview"
-  searchParams.delete("doc")
-  const search = searchParams.toString()
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const slug = legacyDocsSlugs[searchParams.get("doc") ?? ""] ?? "overview";
+  searchParams.delete("doc");
+  const search = searchParams.toString();
 
-  return <Navigate to={`/docs/${slug}${search ? `?${search}` : ""}`} replace />
+  return <Navigate to={`/docs/${slug}${search ? `?${search}` : ""}`} replace />;
 }
 
 // AI configuration and assistant routes are intentionally not registered.
@@ -48,61 +54,146 @@ export function App() {
     <AuthProvider>
       <BrowserRouter>
         <NavigationLeaveBlockProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<OAPasswordRequestPage mode="register" />} />
-          <Route path="/forgot-password" element={<OAPasswordRequestPage mode="reset" />} />
-          <Route path="/login_by_code" element={<LoginByCodePage />} />
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/register"
+              element={<OAPasswordRequestPage mode="register" />}
+            />
+            <Route
+              path="/forgot-password"
+              element={<OAPasswordRequestPage mode="reset" />}
+            />
+            <Route path="/login_by_code" element={<LoginByCodePage />} />
 
-          <Route element={<ProtectedRoute />}>
-            <Route element={<AppLayout />}>
-              <Route index element={<Navigate to="/docs/overview" replace />} />
-              <Route path="data">
-                <Route path="basic">
-                  <Route path="region" element={<RegionPage />} />
-                  <Route path="application" element={<ApplicationPage />} />
-                  <Route path="api-key" element={<APIKeyPage />} />
-                </Route>
-                <Route path="minio" element={<MinioPage />} />
-                <Route path="storage">
-                  <Route path="buckets">
-                    <Route index element={<Navigate to="treemap" replace />} />
-                    <Route path="treemap" element={<BucketPage view="treemap" />} />
-                    <Route path="files" element={<BucketPage view="files" />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
+                <Route
+                  index
+                  element={<Navigate to="/docs/overview" replace />}
+                />
+                <Route path="data">
+                  <Route path="basic">
+                    <Route path="region" element={<RegionPage />} />
+                    <Route path="application" element={<ApplicationPage />} />
+                    <Route path="api-key" element={<APIKeyPage />} />
                   </Route>
-                  <Route path="bucket-manage" element={<StorageBucketManagePage />} />
+                  <Route path="minio" element={<MinioPage />} />
+                  <Route path="storage">
+                    <Route path="buckets">
+                      <Route
+                        index
+                        element={<Navigate to="treemap" replace />}
+                      />
+                      <Route
+                        path="treemap"
+                        element={<BucketPage view="treemap" />}
+                      />
+                      <Route
+                        path="files"
+                        element={<BucketPage view="files" />}
+                      />
+                    </Route>
+                    <Route
+                      path="bucket-manage"
+                      element={<StorageBucketManagePage />}
+                    />
+                  </Route>
                 </Route>
+                <Route path="docs">
+                  <Route index element={<LegacyDocsRedirect />} />
+                  <Route
+                    path="overview"
+                    element={<DocsPage section="overview" />}
+                  />
+                  <Route
+                    path="quick-start"
+                    element={<DocsPage section="quick-start" />}
+                  />
+                  <Route
+                    path="api-guide"
+                    element={<DocsPage section="api-guide" />}
+                  />
+                  <Route
+                    path="components"
+                    element={<DocsPage section="components" />}
+                  />
+                </Route>
+                <Route path="admin/users" element={<UserRolePage />} />
+                <Route path="admin/usage" element={<UsagePage />} />
+                <Route path="admin/audit" element={<AuditLogPage />} />
+                <Route path="admin/storage-operations">
+                  <Route
+                    index
+                    element={<Navigate to="replication" replace />}
+                  />
+                  <Route
+                    path="replication"
+                    element={<StorageOperationsPage view="replication" />}
+                  />
+                  <Route
+                    path="clusters"
+                    element={<StorageOperationsPage view="clusters" />}
+                  />
+                </Route>
+                <Route path="admin/service-operations">
+                  <Route
+                    index
+                    element={<Navigate to="verification" replace />}
+                  />
+                  <Route
+                    path="verification"
+                    element={<ServiceOperationsPage view="verification" />}
+                  />
+                  <Route
+                    path="diagnostics"
+                    element={<ServiceOperationsPage view="diagnostics" />}
+                  />
+                </Route>
+                <Route path="admin/etcd-operations">
+                  <Route index element={<Navigate to="status" replace />} />
+                  <Route
+                    path="status"
+                    element={<EtcdOperationsPage view="status" />}
+                  />
+                  <Route path="maintenance">
+                    <Route index element={<Navigate to="trend" replace />} />
+                    <Route
+                      path="trend"
+                      element={<EtcdOperationsPage view="trend" />}
+                    />
+                    <Route
+                      path="operations"
+                      element={<EtcdOperationsPage view="operations" />}
+                    />
+                    <Route
+                      path="tasks"
+                      element={<EtcdOperationsPage view="tasks" />}
+                    />
+                    <Route
+                      path="events"
+                      element={<EtcdOperationsPage view="events" />}
+                    />
+                  </Route>
+                </Route>
+                <Route
+                  path="admin/sync-storage-operations"
+                  element={
+                    <Navigate to="/admin/etcd-operations/status" replace />
+                  }
+                />
               </Route>
-              <Route path="docs">
-                <Route index element={<LegacyDocsRedirect />} />
-                <Route path="overview" element={<DocsPage section="overview" />} />
-                <Route path="quick-start" element={<DocsPage section="quick-start" />} />
-                <Route path="api-guide" element={<DocsPage section="api-guide" />} />
-                <Route path="components" element={<DocsPage section="components" />} />
-              </Route>
-              <Route path="admin/users" element={<UserRolePage />} />
-              <Route path="admin/usage" element={<UsagePage />} />
-              <Route path="admin/audit" element={<AuditLogPage />} />
-              <Route path="admin/storage-operations">
-                <Route index element={<Navigate to="replication" replace />} />
-                <Route path="replication" element={<StorageOperationsPage view="replication" />} />
-                <Route path="clusters" element={<StorageOperationsPage view="clusters" />} />
-              </Route>
-              <Route path="admin/service-operations">
-                <Route index element={<Navigate to="verification" replace />} />
-                <Route path="verification" element={<ServiceOperationsPage view="verification" />} />
-                <Route path="diagnostics" element={<ServiceOperationsPage view="diagnostics" />} />
-              </Route>
-              <Route path="admin/sync-storage-operations" element={<EtcdOperationsPage />} />
             </Route>
-          </Route>
 
-          <Route path="*" element={<Navigate to="/docs/overview" replace />} />
-        </Routes>
+            <Route
+              path="*"
+              element={<Navigate to="/docs/overview" replace />}
+            />
+          </Routes>
         </NavigationLeaveBlockProvider>
       </BrowserRouter>
     </AuthProvider>
-  )
+  );
 }
 
-export default App
+export default App;
