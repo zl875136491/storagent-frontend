@@ -213,7 +213,7 @@ function AppShell() {
         </SidebarHeader>
 
         <SidebarContent>
-          <div className="space-y-6">
+          <div className="docs-scroll min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain">
             <div>
               <SidebarSectionTitle railLabel="DOC">文档中心</SidebarSectionTitle>
               <SidebarMenu>
@@ -344,7 +344,7 @@ function AppShell() {
             ) : null}
           </div>
 
-          <div className="mt-auto border-t border-sidebar-border/60 pt-4">
+          <div className="mt-auto shrink-0 border-t border-sidebar-border/60 pt-4">
             <SidebarTrigger className="hidden w-full justify-start px-2.5 md:flex md:group-data-[collapsed=true]/sidebar:justify-center md:group-data-[collapsed=true]/sidebar:px-0" />
           </div>
         </SidebarContent>

@@ -429,8 +429,8 @@ function StatusPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <ControlPlaneSummary data={data} />
-      <Card className="shrink-0 rounded-lg shadow-none">
-        <CardContent className="p-5">
+      <Card className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg shadow-none">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-5">
           <div className="flex shrink-0 items-start gap-2">
             <Server className="h-5 w-5 text-primary" aria-hidden />
             <div>
@@ -440,21 +440,23 @@ function StatusPage({
               </p>
             </div>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {data.members.map((member) => (
-              <MemberCard
-                key={member.name}
-                member={member}
-                onIssue={() => onIssue(member)}
-              />
-            ))}
-          </div>
-          {data.members.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              <WifiOff className="mx-auto mb-2 h-6 w-6" aria-hidden />
-              没有配置 Etcd 端点
+          <div className="docs-scroll mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            <div className="grid gap-3 md:grid-cols-2">
+              {data.members.map((member) => (
+                <MemberCard
+                  key={member.name}
+                  member={member}
+                  onIssue={() => onIssue(member)}
+                />
+              ))}
             </div>
-          ) : null}
+            {data.members.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                <WifiOff className="mx-auto mb-2 h-6 w-6" aria-hidden />
+                没有配置 Etcd 端点
+              </div>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
     </div>
