@@ -138,6 +138,7 @@ export interface Application {
   quota_usage_bytes: number;
   quota_usage_ratio: number;
   quota_usage_updated_at: string | null;
+  domains: string[];
   provisioning_status?:
     "pending" | "provisioning" | "ready" | "failed" | "degraded";
   provisioning_error?: string;
@@ -153,6 +154,11 @@ export interface ApplicationCreateRequest {
   name: string;
   shown_name: string;
   description: string;
+  domains?: string[];
+}
+
+export interface ApplicationDomainRequest {
+  domain: string;
 }
 
 export interface ApplicationQuotaUpdateRequest {
@@ -1126,12 +1132,18 @@ export async function apiPut<TRequest, TResponse>(
   }
 }
 
-export async function apiDelete<TResponse = { message: string }>(
+export async function apiDelete<TResponse = { message: string }, TBody = unknown>(
   path: string,
   accessToken?: string,
+  body?: TBody,
 ): Promise<TResponse> {
   try {
-    const resp = await authorizedFetch(path, { method: "DELETE" }, accessToken);
+    const init: RequestInit = { method: "DELETE" };
+    if (body !== undefined) {
+      init.headers = { "Content-Type": "application/json" };
+      init.body = JSON.stringify(body);
+    }
+    const resp = await authorizedFetch(path, init, accessToken);
     return await handleResponse<TResponse>(resp);
   } catch (e) {
     if (e instanceof TypeError) {
@@ -1759,6 +1771,40 @@ export async function createApplicationApi(
   return apiPost<ApplicationCreateRequest, Application>(
     "/api/v1/public/application",
     payload,
+    accessToken,
+  );
+}
+
+export async function addApplicationDomainApi(
+  applicationId: string,
+  payload: ApplicationDomainRequest,
+  accessToken?: string,
+): Promise<Application> {
+  return apiPost<ApplicationDomainRequest, Application>(
+    `/api/v1/public/application/${encodeURIComponent(applicationId)}/domains`,
+    payload,
+    accessToken,
+  );
+}
+
+export async function deleteApplicationDomainApi(
+  applicationId: string,
+  payload: ApplicationDomainRequest,
+  accessToken?: string,
+): Promise<Application> {
+  return apiDelete<Application, ApplicationDomainRequest>(
+    `/api/v1/public/application/${encodeURIComponent(applicationId)}/domains`,
+    accessToken,
+    payload,
+  );
+}
+
+export async function deleteApplicationApi(
+  applicationId: string,
+  accessToken?: string,
+): Promise<{ message: string }> {
+  return apiDelete<{ message: string }>(
+    `/api/v1/public/application/${encodeURIComponent(applicationId)}`,
     accessToken,
   );
 }

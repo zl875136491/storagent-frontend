@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BellRing, Check, Circle, Expand, Gauge, Loader2, Settings2, XCircle } from "lucide-react"
+import { BellRing, Check, Circle, Expand, Gauge, Globe, Loader2, Plus, Settings2, Trash2, XCircle } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 import { useAuth } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
+  addApplicationDomainApi,
   approveApplicationStream,
   approvalStepLabel,
   createExpansionRequestApi,
   createApplicationApi,
+  deleteApplicationApi,
+  deleteApplicationDomainApi,
   fetchApplicationsApi,
   fetchExpansionRequestsApi,
   fetchQuotaAlertRuleApi,
@@ -19,7 +22,6 @@ import type {
   Application,
   ApplicationApprovalSseEvent,
   ApplicationApprovalSseStatus,
-  ApplicationCreateRequest,
   ExpansionRequest,
   QuotaAlertRule,
 } from "../../api/client"
@@ -110,10 +112,100 @@ function StatusGlyph({
   return null
 }
 
+function OriginRows({
+  origins,
+  draft,
+  onDraftChange,
+  onAdd,
+  onRemove,
+  disabled = false,
+  readOnly = false,
+}: {
+  origins: string[]
+  draft: string
+  onDraftChange: (value: string) => void
+  onAdd: () => void
+  onRemove: (domain: string) => void
+  disabled?: boolean
+  readOnly?: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      {origins.length === 0 ? (
+        <div className="text-[11px] text-muted-foreground">尚未配置来源，可留空</div>
+      ) : (
+        <div className="space-y-1">
+          {origins.map((domain) => (
+            <div
+              key={domain}
+              className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1"
+            >
+              <span className="min-w-0 truncate font-mono text-[11px] text-foreground/80">{domain}</span>
+              {!readOnly ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                  title="删除来源"
+                  aria-label={`删除来源 ${domain}`}
+                  disabled={disabled}
+                  onClick={() => onRemove(domain)}
+                >
+                  <Trash2 className="h-3 w-3" aria-hidden />
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+      {!readOnly ? (
+        <div className="flex items-center gap-2">
+          <Input
+            type="text"
+            value={draft}
+            disabled={disabled}
+            placeholder="https://app.example.com"
+            className="h-7 text-[11px]"
+            onChange={(event) => onDraftChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                onAdd()
+              }
+            }}
+          />
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-7 w-7 shrink-0"
+            title="添加来源"
+            aria-label="添加来源"
+            disabled={disabled}
+            onClick={onAdd}
+          >
+            {disabled ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <Plus className="h-3.5 w-3.5" aria-hidden />
+            )}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function ApplicationPage() {
   const { accessToken, user } = useAuth()
   const canApprove = hasPermission(user, PERMISSIONS.applicationManage)
   const canManageQuota = hasPermission(user, PERMISSIONS.applicationQuotaManage)
+  const canManageApp = (app: Application) => (
+    canApprove
+    || app.author?.username === user?.username
+    || app.author?.id === user?.id
+  )
   const { beginBlock, endBlock } = useNavigationLeaveBlock()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -138,12 +230,19 @@ export default function ApplicationPage() {
   const [savingRule, setSavingRule] = useState(false)
   const [showRuleModal, setShowRuleModal] = useState(false)
 
-  const [createForm, setCreateForm] = useState<ApplicationCreateRequest>({
+  const [createForm, setCreateForm] = useState({
     name: "",
     shown_name: "",
     description: "",
+    domains: [] as string[],
   })
+  const [createDomainDraft, setCreateDomainDraft] = useState("")
   const [creating, setCreating] = useState(false)
+  const [domainTarget, setDomainTarget] = useState<Application | null>(null)
+  const [domainDraft, setDomainDraft] = useState("")
+  const [savingDomain, setSavingDomain] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Application | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
   const logEndRef = useRef<HTMLDivElement | null>(null)
@@ -239,8 +338,34 @@ export default function ApplicationPage() {
     endBlock()
   }, [endBlock])
 
+  const emptyCreateForm = {
+    name: "",
+    shown_name: "",
+    description: "",
+    domains: [] as string[],
+  }
+
   const openCreateModal = () => {
+    setCreateForm(emptyCreateForm)
+    setCreateDomainDraft("")
     setShowCreateModal(true)
+  }
+
+  const addCreateDomain = () => {
+    const domain = createDomainDraft.trim()
+    if (!domain) {
+      showErrorToast("请填写浏览器来源，例如 https://app.example.com")
+      return
+    }
+    if (createForm.domains.includes(domain)) {
+      showErrorToast("该来源已存在")
+      return
+    }
+    setCreateForm((previous) => ({
+      ...previous,
+      domains: [...previous.domains, domain],
+    }))
+    setCreateDomainDraft("")
   }
 
   const handleCreate = async () => {
@@ -261,13 +386,18 @@ export default function ApplicationPage() {
 
     setCreating(true)
     try {
-      await createApplicationApi(createForm, accessToken ?? undefined)
+      await createApplicationApi(
+        {
+          name: createForm.name,
+          shown_name: createForm.shown_name,
+          description: createForm.description,
+          domains: createForm.domains,
+        },
+        accessToken ?? undefined,
+      )
       setShowCreateModal(false)
-      setCreateForm({
-        name: "",
-        shown_name: "",
-        description: "",
-      })
+      setCreateForm(emptyCreateForm)
+      setCreateDomainDraft("")
       void loadApplications()
     } catch {
       // 错误已由 api client toast 展示
@@ -376,6 +506,72 @@ export default function ApplicationPage() {
     }
   }
 
+  const applyApplicationUpdate = (updated: Application) => {
+    setApplications((previous) => previous.map((app) => app.id === updated.id ? updated : app))
+    setDomainTarget((current) => current?.id === updated.id ? updated : current)
+  }
+
+  const openDomainModal = (app: Application) => {
+    setDomainTarget(app)
+    setDomainDraft("")
+  }
+
+  const handleAddDomain = async (app: Application) => {
+    const domain = domainDraft.trim()
+    if (!domain) {
+      showErrorToast("请填写浏览器来源，例如 https://app.example.com")
+      return
+    }
+    setSavingDomain(true)
+    try {
+      const updated = await addApplicationDomainApi(
+        app.id,
+        { domain },
+        accessToken ?? undefined,
+      )
+      applyApplicationUpdate(updated)
+      setDomainDraft("")
+      showSuccessToast("已添加浏览器来源")
+    } catch {
+      // 错误已由 api client toast 展示
+    } finally {
+      setSavingDomain(false)
+    }
+  }
+
+  const handleDeleteDomain = async (app: Application, domain: string) => {
+    setSavingDomain(true)
+    try {
+      const updated = await deleteApplicationDomainApi(
+        app.id,
+        { domain },
+        accessToken ?? undefined,
+      )
+      applyApplicationUpdate(updated)
+      showSuccessToast("已删除浏览器来源")
+    } catch {
+      // 错误已由 api client toast 展示
+    } finally {
+      setSavingDomain(false)
+    }
+  }
+
+  const handleDeleteApplication = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteApplicationApi(deleteTarget.id, accessToken ?? undefined)
+      setApplications((previous) => previous.filter((app) => app.id !== deleteTarget.id))
+      setDomainTarget((current) => current?.id === deleteTarget.id ? null : current)
+      setDeleteTarget(null)
+      showSuccessToast("应用已删除")
+    } catch {
+      // 错误已由 api client toast 展示
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const openApproval = (app: Application) => {
     setApprovalTarget(app)
     setApprovalPhase("confirm")
@@ -440,7 +636,7 @@ export default function ApplicationPage() {
         <div>
           <h1 className="text-lg font-semibold text-foreground">应用管理</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            管理业务应用与授权状态。
+            管理业务应用、授权状态与浏览器来源白名单。
           </p>
         </div>
         <div className="sticky top-3 flex items-center gap-2">
@@ -492,6 +688,21 @@ export default function ApplicationPage() {
                     <span className="inline-flex max-w-[160px] items-center justify-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                       {app.id}
                     </span>
+                    <div className="flex items-center gap-1">
+                      {canManageApp(app) ? (
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          title="删除应用"
+                          aria-label={`删除 ${app.shown_name || app.name}`}
+                          disabled={streamLocksUi}
+                          onClick={() => setDeleteTarget(app)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        </Button>
+                      ) : null}
                     <span
                       className="inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-medium"
                     >
@@ -516,6 +727,7 @@ export default function ApplicationPage() {
                         </span>
                       )}
                     </span>
+                    </div>
                   </div>
                 </div>
 
@@ -602,6 +814,26 @@ export default function ApplicationPage() {
                     )
                   })()}
                 </div>
+
+                <div className="mt-3 border-t border-dashed border-border/70 pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground/90">
+                      <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                      浏览器来源
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      title="管理浏览器来源"
+                      aria-label={`管理 ${app.shown_name || app.name} 的浏览器来源`}
+                      onClick={() => openDomainModal(app)}
+                    >
+                      <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -680,6 +912,25 @@ export default function ApplicationPage() {
                   placeholder="例如：CPL 的生产环境后端服务器"
                 />
               </div>
+              <div className="md:col-span-2">
+                <Label className="mb-1 block text-xs">
+                  浏览器来源（可选）
+                </Label>
+                <OriginRows
+                  origins={createForm.domains}
+                  draft={createDomainDraft}
+                  onDraftChange={setCreateDomainDraft}
+                  onAdd={addCreateDomain}
+                  onRemove={(domain) => setCreateForm((previous) => ({
+                    ...previous,
+                    domains: previous.domains.filter((item) => item !== domain),
+                  }))}
+                  disabled={creating}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  必须是 http(s)://host[:port]，不含路径。每个应用最多 32 个。
+                </p>
+              </div>
             </div>
 
             <DialogFooter>
@@ -708,6 +959,66 @@ export default function ApplicationPage() {
           </div>
         </Modal>
       )}
+      {deleteTarget ? (
+        <Modal title="删除应用" onClose={() => !deleting && setDeleteTarget(null)}>
+          <div className="space-y-4 p-1 text-sm">
+            <p className="text-[13px] text-muted-foreground">
+              确认删除应用 {deleteTarget.shown_name || deleteTarget.name}？此操作会从各节点移除应用记录和浏览器来源白名单，但不会删除 MinIO 存储桶。
+            </p>
+            <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <div>APPID：{deleteTarget.name}</div>
+            </div>
+            <DialogFooter>
+              <Button type="button" size="sm" variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => void handleDeleteApplication()}
+              >
+                {deleting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                确认删除
+              </Button>
+            </DialogFooter>
+          </div>
+        </Modal>
+      ) : null}
+      {domainTarget ? (
+        <Modal
+          title="浏览器来源"
+          onClose={() => !savingDomain && setDomainTarget(null)}
+        >
+          <div className="space-y-4 p-1 text-sm">
+            <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <div className="font-medium text-foreground">{domainTarget.shown_name || domainTarget.name}</div>
+              <div className="mt-1">完整 Origin，例如 https://app.example.com，不含路径。每个应用最多 32 个。</div>
+            </div>
+            <OriginRows
+              origins={domainTarget.domains || []}
+              draft={domainDraft}
+              onDraftChange={setDomainDraft}
+              onAdd={() => void handleAddDomain(domainTarget)}
+              onRemove={(domain) => void handleDeleteDomain(domainTarget, domain)}
+              disabled={savingDomain}
+              readOnly={!canManageApp(domainTarget)}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={savingDomain}
+                onClick={() => setDomainTarget(null)}
+              >
+                关闭
+              </Button>
+            </DialogFooter>
+          </div>
+        </Modal>
+      ) : null}
       {canManageQuota && quotaTarget ? (
         <Modal title="调整存储配额" onClose={() => !savingQuota && setQuotaTarget(null)}>
           <div className="space-y-4 p-1 text-sm">
