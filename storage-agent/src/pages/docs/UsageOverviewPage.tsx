@@ -73,7 +73,7 @@ export default function UsageOverviewPage() {
       <section id="app" className="scroll-m-24">
         <FeatureWalkthrough
           title="应用与授权"
-          description="业务同学先新建应用；管理员在列表中点击「授权」，系统会在各站点准备应用桶与复制关系。未授权的应用不能签发可用 APIKey。"
+          description="业务同学先新建应用，并在应用管理中登记浏览器来源（前端直连 Storagent 时必填）；管理员在列表中点击「授权」，系统会在各站点准备应用桶与复制关系。未授权的应用不能签发可用 APIKey。"
           to="/data/basic/application"
           cta="打开应用管理"
           mock={

@@ -671,7 +671,7 @@ export async function uploadFile(file: File) {
     form.set("part_number", String(i + 1))
     form.set("file", blob, \`part-\${i + 1}.bin\`)
 
-    // 数据面直连 Storagent；若出现 TypeError: Failed to fetch，检查 CORS 是否放行当前 Origin。
+    // 数据面直连 Storagent，不要经 App 后端中转；若出现 TypeError: Failed to fetch，到应用管理登记当前页面 Origin。
     const url = new URL(init.part_url)
     url.searchParams.set("token", init.part_token)
     const partRes = await fetch(url, { method: "POST", body: form })
@@ -890,7 +890,7 @@ print(upload)`,
     method: "POST",
     path: "/api/v1/files/multipart/part",
     summary: "上传单个分片（数据面）",
-    description: "以 multipart/form-data 上传一个分片。**这是浏览器前端应当直连的接口**：App 后端在 init 之后使用 x-api-key 本地签发一枚绑定当前 upload_id + object_key、action=upload_part、建议 2 小时量级有效期的能力令牌，交给前端；前端始终携带 `?token=...`，永远不持有 x-api-key。part_number 从 1 开始且最多为 10,000；默认分片为 5 MiB，客户端应取配置值与 ceil(文件大小 / 10000) 的较大值并向上对齐到 MiB；除最后一片外至少 5 MiB，单片不得超过服务端默认上限 64 MiB；因此默认策略最多支持 625 GiB。同一 part_number 可在网络或校验失败后重传，最后一次成功上传的 ETag 和分片大小生效。",
+    description: "以 multipart/form-data 上传一个分片。**这是浏览器前端应当直连的接口，不要经 App 后端中转文件字节**：App 后端在 init 之后使用 x-api-key 本地签发一枚绑定当前 upload_id + object_key、action=upload_part、建议 2 小时量级有效期的能力令牌，交给前端；前端始终携带 `?token=...`，永远不持有 x-api-key。直连前须在控制台「应用管理 → 浏览器来源」登记当前页面 Origin。part_number 从 1 开始且最多为 10,000；默认分片为 5 MiB，客户端应取配置值与 ceil(文件大小 / 10000) 的较大值并向上对齐到 MiB；除最后一片外至少 5 MiB，单片不得超过服务端默认上限 64 MiB；因此默认策略最多支持 625 GiB。同一 part_number 可在网络或校验失败后重传，最后一次成功上传的 ETag 和分片大小生效。",
     plane: "data",
     authentication: "api-key-or-token",
     params: [
@@ -918,6 +918,7 @@ print(upload)`,
       "每次重传成功后覆盖业务侧保存的 ETag；parts 查询中该 part_number 的 ETag 和 size 也以最后一次成功上传为准。",
       "业务码 413050 表示当前分片超过 64 MiB；不要重试相同负载，应使用合规大小重新切分。",
       "业务码 401051/401052/403053 分别表示令牌无效 / 已过期 / 作用域不匹配；这些情况都应回到 App 后端重新申请令牌，而不是原样重试。",
+      "浏览器直连前，把页面 Origin 加到该应用的「浏览器来源」；未登记时表现为 TypeError: Failed to fetch，而不是业务错误码。",
     ],
     examples: {
       "server-ts": `// App 后端：init 成功后立即为整个上传会话签发一枚分片上传令牌
@@ -1173,7 +1174,7 @@ print(response.json())`,
     method: "GET",
     path: "/api/v1/files/object/download",
     summary: "下载对象或字节区间（数据面）",
-    description: "流式读取整个对象，或通过 offset/length 获取固定字节区间。**这是浏览器前端应当直连的接口**：前端先向 App 后端的业务接口申请下载，App 后端校验权限后用 x-api-key 本地签发一枚 action=download、绑定 object_key、建议 5-15 分钟极短有效期的能力令牌，拼成最终下载 URL 返回给前端；前端直接对该 URL 发起 GET，永远不持有 x-api-key。",
+    description: "流式读取整个对象，或通过 offset/length 获取固定字节区间。**这是浏览器前端应当直连的接口，不要经 App 后端中转文件字节**：前端先向 App 后端的业务接口申请下载，App 后端校验权限后用 x-api-key 本地签发一枚 action=download、绑定 object_key、建议 5-15 分钟极短有效期的能力令牌，拼成最终下载 URL 返回给前端；前端直接对该 URL 发起 GET，永远不持有 x-api-key。直连前须在控制台「应用管理 → 浏览器来源」登记当前页面 Origin。",
     plane: "data",
     authentication: "api-key-or-token",
     params: [
@@ -1191,6 +1192,7 @@ print(response.json())`,
       "响应为二进制；length > 0 时可能返回 206。大文件不要一次性读入内存，应将响应流直接传给文件或下游响应。",
       "能力令牌中的 act/key 必须与本次请求的 object_key 完全一致，否则返回 403053。",
       "下载令牌建议只给 5-15 分钟有效期：即使前端把最终 URL 分享出去，链接也会很快失效。",
+      "浏览器直连前，把页面 Origin 加到该应用的「浏览器来源」；未登记时表现为 TypeError: Failed to fetch。",
     ],
     examples: {
       "server-ts": `// App 后端：业务鉴权通过后，签发一枚极短期下载令牌并拼出最终 URL
@@ -1465,7 +1467,7 @@ export function generateApiGuideMarkdown() {
     "",
     "## 给开发者与 AI 的实施目标",
     "",
-    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。默认将 `STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local` 写入 App 后端环境变量，然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `POST /api/v1/files/object/stat` 的完整地址就是 `http://stor.1oa.com.cn/server/local/api/v1/files/object/stat`。只有明确需要指定区域时，才以区域短码替换 `local`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工，不要让浏览器前端持有 `x-api-key`。",
+    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。默认将 `STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local` 写入 App 后端环境变量，然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `POST /api/v1/files/object/stat` 的完整地址就是 `http://stor.1oa.com.cn/server/local/api/v1/files/object/stat`。只有明确需要指定区域时，才以区域短码替换 `local`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工：App 后端只做会话与鉴权，**上传和下载的文件字节由浏览器直连 Storagent**，不要经 App 后端中转；不要让浏览器前端持有 `x-api-key`。",
     "",
     "## 默认网关基址",
     "",
@@ -1497,9 +1499,9 @@ export function generateApiGuideMarkdown() {
     "",
     "## 控制面 / 数据面与能力令牌",
     "",
-    "- **控制面**（`multipart/init`、`multipart/complete`、`multipart/abort`、`multipart/parts`、`object/stat`、`object/locate`）：只允许 App 后端使用 `x-api-key` 调用，浏览器前端永远不直接访问。",
-    "- **数据面**（`multipart/part` 分片上传、`object/download` 下载）：浏览器前端应当直连 Storagent，但改用 App 后端签发的**能力令牌**（`token` 查询参数），不使用 `x-api-key`。",
-    "- **CORS**：浏览器直连数据面时，Storagent 的 `BACKEND_CORS_ORIGINS` / `FRONT_URL` 必须包含页面 Origin。生产环境禁止 `BACKEND_CORS_ORIGINS=[\"*\"]`；若未放行，预检返回 `Disallowed CORS origin`，浏览器表现为 `TypeError: Failed to fetch`（控制面 init 可能已成功，失败发生在随后的 part/download）。",
+    "- **控制面**（`multipart/init`、`multipart/complete`、`multipart/abort`、`multipart/parts`、`object/stat`、`object/locate`）：只允许 App 后端使用 `x-api-key` 调用，浏览器前端永远不直接访问。控制面只交换会话与元数据，不传输文件字节。",
+    "- **数据面**（`multipart/part` 分片上传、`object/download` 下载）：**推荐实现时上传和下载都由浏览器直连 Storagent**，携带 App 后端签发的**能力令牌**（`token` 查询参数），不使用 `x-api-key`。不要把分片或对象内容经 App 后端中转，以免占用业务带宽、拉长时延并扩大密钥暴露面。",
+    "- **浏览器来源（CORS）**：前端直连 Storagent 时，必须把页面 Origin 登记到该应用的浏览器来源白名单。Origin 形如 `http(s)://host[:port]`，不含路径，例如 `https://app.example.com` 或 `http://10.32.12.33:3001`。在 Storagent 控制台 **应用管理** 打开对应应用，用「浏览器来源」逐条添加。未登记时预检返回 `Disallowed CORS origin`，浏览器表现为 `TypeError: Failed to fetch`（控制面 init 可能已成功，失败发生在随后的 part/download）。",
     "- 能力令牌由 App 后端使用共享的 `x-api-key` 明文作为 HMAC-SHA256 密钥，在本地对一份只读的能力描述签名，无需请求 Storagent（类似 S3 预签名 URL）：",
     "",
     markdownTable(
@@ -1523,6 +1525,8 @@ export function generateApiGuideMarkdown() {
     "",
     "- `x-api-key` 只能由 App 后端持有，并通过请求头发送；浏览器前端、移动端包、日志和异常信息中都不能出现它。",
     "- 浏览器前端调用数据面接口时，必须使用能力令牌（`token` 查询参数），不得使用 `x-api-key`。",
+    "- 上传分片与下载对象必须由浏览器直连 Storagent 数据面，禁止经 App 后端转发文件字节。",
+    "- 业务前端页面的 Origin 必须在 Storagent 控制台「应用管理 → 浏览器来源」中登记，否则浏览器无法直连数据面。",
     "- Base URL 与 APIKey 通过环境变量注入，不写死真实凭据。",
     "- `object_key` 应视作不透明字符串，必须使用标准 URL 编码或 JSON 序列化。",
     "- 上传失败或用户取消时调用 multipart abort；下载大文件时使用流式处理。",
@@ -1539,15 +1543,15 @@ export function generateApiGuideMarkdown() {
     "",
     "1. 前端从 `/api/v1/public/endpoints` 获取候选 Storagent 地址，并调用 `/api/v1/public/endpoints/test` 选择可达、低时延节点（公共接口，无需任何凭据）。",
     "2. 前端向 App 后端发起上传请求；App 后端拒绝空文件后，用完整文件的 `size_bytes` 调用控制面 `multipart/init`，保存 `upload_id`/`object_key`，并签发分片上传能力令牌一并下发给前端。",
-    "3. 前端携带令牌直连数据面 `multipart/part` 上传分片（不经过 App 后端转发数据）；以 5 MiB 为默认值，取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB，单片不超过 64 MiB、总片数不超过 10,000。",
+    "3. 前端携带令牌**直连**数据面 `multipart/part` 上传分片，文件字节不经过 App 后端；以 5 MiB 为默认值，取配置分片与 `ceil(file_size / 10000)` 的较大值并向上对齐到 MiB，单片不超过 64 MiB、总片数不超过 10,000。直连前须已在应用管理中登记当前页面 Origin。",
     "4. 前端把全部分片的 `part_number`/`etag` 提交给 App 后端；App 后端调用控制面 `multipart/complete` 完成上传（失败且不可恢复时改为 `multipart/abort`），两者都会释放会话预留容量。",
     "5. 下载时前端向 App 后端申请下载凭据；App 后端校验业务权限后（可选调用控制面 `object/locate` 选定最佳节点），签发下载能力令牌并拼出最终 URL 返回给前端。",
-    "6. 前端携带该 URL 直连数据面 `object/download` 流式下载，全程不接触 `x-api-key`。",
+    "6. 前端携带该 URL **直连**数据面 `object/download` 流式下载，文件字节不经过 App 后端，全程不接触 `x-api-key`。",
     "",
     "## 最小可运行上传/下载 Demo",
     "",
     "下面把推荐流程收成一份可直接照抄的最小 Demo（App 后端持有 `x-api-key` 并签发令牌；浏览器只拿 `part_token` / `download_url` 直连数据面）。",
-    "实现前请先准备好上文的「能力令牌签发」与「App 后端公共请求封装」。若浏览器直连 part/download 出现 `TypeError: Failed to fetch`，先确认 Storagent 已把页面 Origin 加入 `BACKEND_CORS_ORIGINS` / `FRONT_URL`。",
+    "实现前请先准备好上文的「能力令牌签发」与「App 后端公共请求封装」，并在 Storagent 控制台「应用管理 → 浏览器来源」登记当前页面 Origin。若浏览器直连 part/download 出现 `TypeError: Failed to fetch`，先确认 Origin 已添加到该应用，而不是去改 Storagent 环境变量。",
     "",
     "### App 后端业务接口 · Python",
     "",
@@ -1640,9 +1644,9 @@ export function generateApiGuideMarkdown() {
     "## 接入验收清单",
     "",
     "- [ ] `x-api-key` 只存在于 App 后端环境变量和 `x-api-key` 请求头中，浏览器前端从未持有过它。",
-    "- [ ] 数据面接口（`multipart/part`、`object/download`）由浏览器前端直连，携带能力令牌 `token`，而不是 `x-api-key`。",
+    "- [ ] 数据面接口（`multipart/part`、`object/download`）由浏览器前端直连 Storagent，携带能力令牌 `token`，而不是 `x-api-key`；上传和下载的文件字节均未经过 App 后端中转。",
     "- [ ] 已按「最小可运行上传/下载 Demo」跑通：App init → 浏览器 part(token) → App complete → App 签发 download_url → 浏览器下载，内容校验一致。",
-    "- [ ] 浏览器直连数据面时，页面 Origin 已加入 Storagent `BACKEND_CORS_ORIGINS` / `FRONT_URL`；未放行时不会把 CORS 失败误判为业务错误。",
+    "- [ ] 浏览器直连数据面时，页面 Origin 已在 Storagent 控制台「应用管理 → 浏览器来源」中登记；未放行时不会把 CORS 失败误判为业务错误。",
     "- [ ] 分片上传令牌绑定 upload_id + object_key，建议 2 小时量级有效期；下载令牌绑定 object_key，建议 5-15 分钟量级有效期。",
     "- [ ] Base URL 会从候选节点中探测选择，并设置连接与读取超时。",
     "- [ ] 空文件在 init 前被拒绝；分片按 MiB 对齐，非末片至少 5 MiB、单片不超过 64 MiB、总片数不超过 10,000。",
@@ -1686,6 +1690,8 @@ export function generateV2ApiGuideMarkdown() {
     "",
     "软删除会立即释放应用逻辑配额，MinIO 原始数据保留至恢复期结束。恢复时会重新校验配额。分享 token 位于 URL hash，不会进入 Web 服务器访问日志；首次成功兑换后立即失效。",
     "",
+    "v2 的上传、下载数据面规则与上文相同：浏览器直连 Storagent，不要经 App 后端中转文件字节。前端 Origin 在控制台「应用管理 → 浏览器来源」登记。",
+    "",
   ]
   const planeLabel: Record<ApiGuidePlane, string> = { public: "公共接口，无需 x-api-key", control: "控制面，仅 App 后端使用 x-api-key", data: "数据面，浏览器使用 token" }
   for (const endpoint of V2_OBJECT_ENDPOINTS) {
@@ -1700,7 +1706,7 @@ export function generateV2ApiGuideMarkdown() {
     }
     if (endpoint.response) lines.push("#### 成功响应示例", "", codeFence("json", endpoint.response), "")
   }
-  lines.push("## v2 错误码分类", "", markdownTable(["错误码", "含义", "建议处理"], API_GUIDE_V2_ERROR_CODES.map((row) => [...row])), "", "## v2 接入验收补充", "", "- [ ] 成功和失败日志都保存 request_id，失败按 error.code 分类。", "- [ ] 使用 objects 列表获得 object_id；删除后展示 restore_until，恢复失败处理 quota.restore_exceeded。", "- [ ] 分享只对 active 对象创建；download_url 的 hash token 不进入日志、埋点或 referrer。", "- [ ] 已验证一次性地址首次兑换成功、第二次兑换返回 410，且公开兑换不附加 x-api-key。", "")
+  lines.push("## v2 错误码分类", "", markdownTable(["错误码", "含义", "建议处理"], API_GUIDE_V2_ERROR_CODES.map((row) => [...row])), "", "## v2 接入验收补充", "", "- [ ] 成功和失败日志都保存 request_id，失败按 error.code 分类。", "- [ ] 使用 objects 列表获得 object_id；删除后展示 restore_until，恢复失败处理 quota.restore_exceeded。", "- [ ] 分享只对 active 对象创建；download_url 的 hash token 不进入日志、埋点或 referrer。", "- [ ] 已验证一次性地址首次兑换成功、第二次兑换返回 410，且公开兑换不附加 x-api-key。", "- [ ] 上传分片与下载对象由浏览器直连 Storagent 数据面，文件字节不经 App 后端中转。", "- [ ] 业务前端 Origin 已在控制台「应用管理 → 浏览器来源」登记；未登记时不会把 CORS 失败误判为业务错误。", "")
   return lines.join("\n")
 }
 

@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { Link } from "react-router-dom"
 import { Download, KeyRound, Lock, Server } from "lucide-react"
 import { ApiEndpoint, ApiParamTable } from "@/components/docs/api"
 import { DocCodeBlock, DocCodeTabs } from "@/components/docs/code"
@@ -186,8 +187,8 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
             <Lock className="h-4 w-4 text-rose-600 dark:text-rose-300" />
             <div className="mt-2 text-xs font-semibold text-foreground">数据面</div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              multipart/part 与 object/download 由浏览器前端直连，携带 App 后端签发的能力令牌（token），
-              绝不使用 x-api-key。
+              multipart/part 与 object/download 由浏览器前端直连 Storagent，携带能力令牌（token），
+              绝不使用 x-api-key，也不经 App 后端中转文件。
             </p>
           </div>
         </div>
@@ -195,13 +196,18 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
           本页固定了前后端各自的职责，不再由业务方“自由选择前后端实现”。App 后端与 Storagent 之间使用{" "}
           <code className="font-mono text-[11px]">x-api-key</code>；App 后端与浏览器前端之间约定的“能力令牌”
           由 App 后端用 x-api-key 本地签发（HMAC-SHA256），无需额外请求 Storagent。
-          浏览器要直连数据面时，Storagent 的{" "}
-          <code className="font-mono text-[11px]">BACKEND_CORS_ORIGINS</code> /{" "}
-          <code className="font-mono text-[11px]">FRONT_URL</code>{" "}
-          必须包含页面 Origin；否则预检会返回{" "}
-          <code className="font-mono text-[11px]">Disallowed CORS origin</code>，浏览器表现为{" "}
+          <strong className="text-foreground">推荐实现时，上传和下载的文件字节都由浏览器直连 Storagent</strong>
+          ，不要经 App 后端中转。          前端直连前，必须在控制台{" "}
+          <Link className="text-primary underline-offset-2 hover:underline" to="/data/basic/application">
+            应用管理
+          </Link>{" "}
+          为该应用登记页面 Origin（形如{" "}
+          <code className="font-mono text-[11px]">https://app.example.com</code>
+          ，不含路径）。未登记时预检会返回{" "}
+          <code className="font-mono text-[11px]">Disallowed CORS origin</code>
+          ，浏览器表现为{" "}
           <code className="font-mono text-[11px]">TypeError: Failed to fetch</code>
-          （生产环境禁止使用通配符 <code className="font-mono text-[11px]">*</code>）。
+          。
         </DocNote>
         <div className="mt-4 space-y-3">
           <DocCodeTabs
@@ -218,9 +224,9 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
           items={[
             { title: "发现并探测端点", body: "前端直接调用公共 endpoints/test 获取候选 Storagent 地址，并在服务启动或网络变化后重新选择低时延节点。" },
             { title: "初始化上传（App 后端）", body: "App 后端先拒绝空文件，再用完整文件的 size_bytes 调用控制面 multipart/init 跨区域预留声明容量，并签发分片上传能力令牌一并下发给前端。" },
-            { title: "直连上传分片（前端）", body: "前端携带令牌直连数据面 multipart/part，默认 5 MiB 分片并按 MiB 对齐；单片不超过 64 MiB，总数不超过 10,000。同一 part_number 可顺序重传，以最后一次成功上传的 ETag 和大小为准。" },
+            { title: "直连上传分片（前端）", body: "前端携带令牌直连数据面 multipart/part，文件字节不经过 App 后端。默认 5 MiB 分片并按 MiB 对齐；单片不超过 64 MiB，总数不超过 10,000。同一 part_number 可顺序重传，以最后一次成功上传的 ETag 和大小为准。直连前须在应用管理中登记当前页面 Origin。" },
             { title: "完成或中止（App 后端）", body: "前端把分片列表交回 App 后端，由 App 后端调用控制面 complete 完成上传；取消或不可恢复失败时改为 abort。两者都会释放会话预留容量。" },
-            { title: "申请并直连下载（App 后端签发 + 前端直连）", body: "App 后端校验业务权限后签发极短期下载令牌并拼出最终 URL；前端直接对该 URL 发起流式下载。" },
+            { title: "申请并直连下载（App 后端签发 + 前端直连）", body: "App 后端校验业务权限后签发极短期下载令牌并拼出最终 URL；前端直接对该 URL 发起流式下载，文件字节不经过 App 后端。" },
           ]}
         />
       </section>
@@ -234,11 +240,13 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
           <code className="font-mono text-[11px]">x-api-key</code> 并签发令牌；浏览器只拿{" "}
           <code className="font-mono text-[11px]">part_token</code> /{" "}
           <code className="font-mono text-[11px]">download_url</code> 直连数据面。
-          下载本页 Markdown 时也会包含这一节。若浏览器直连出现{" "}
+          下载本页 Markdown 时也会包含这一节。直连前请先在{" "}
+          <Link className="text-primary underline-offset-2 hover:underline" to="/data/basic/application">
+            应用管理
+          </Link>{" "}
+          登记当前页面 Origin。若浏览器直连出现{" "}
           <code className="font-mono text-[11px]">TypeError: Failed to fetch</code>
-          ，先确认 Storagent 已把页面 Origin 加入{" "}
-          <code className="font-mono text-[11px]">BACKEND_CORS_ORIGINS</code> /{" "}
-          <code className="font-mono text-[11px]">FRONT_URL</code>。
+          ，先确认该应用的「浏览器来源」已包含页面 Origin，而不是去改 Storagent 环境变量。
         </p>
         <div className="mt-4">
           <DocCodeTabs
