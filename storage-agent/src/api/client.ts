@@ -446,6 +446,33 @@ export interface ReplicationOperationsResponse {
   buckets: ReplicationBucketMetric[];
 }
 
+export type OrphanBucketKind =
+  | "orphan"
+  | "disabled_application"
+  | "system";
+
+export interface OrphanBucketItem {
+  name: string;
+  kind: OrphanBucketKind;
+  app_name: string;
+  app_shown_name: string;
+  servers: string[];
+  missing_servers: string[];
+}
+
+export interface OrphanBucketOperationsResponse {
+  generated_at: string;
+  servers: string[];
+  summary: {
+    orphan_count: number;
+    disabled_application_count: number;
+    system_bucket_count: number;
+    unavailable_server_count: number;
+  };
+  buckets: OrphanBucketItem[];
+  errors: Record<string, string>;
+}
+
 export interface ClusterDriveHealth {
   endpoint: string;
   path: string;
@@ -637,10 +664,11 @@ export interface EtcdTaskListResponse {
 
 export interface StorageOperationItem {
   id: string;
-  kind: "cluster_heal";
+  kind: "cluster_heal" | "replication_reconcile" | "replication_resync";
   status: "queued" | "running" | "succeeded" | "failed";
   server: string;
   bucket: string;
+  target: string;
   actor: string;
   message: string;
   result: Record<string, unknown>;
@@ -1386,6 +1414,15 @@ export async function fetchReplicationOperationsApi(
   const query = bucket ? `?bucket=${encodeURIComponent(bucket)}` : "";
   return apiGet<ReplicationOperationsResponse>(
     `/api/v1/storage/operations/replication${query}`,
+    accessToken,
+  );
+}
+
+export async function fetchOrphanBucketOperationsApi(
+  accessToken?: string,
+): Promise<OrphanBucketOperationsResponse> {
+  return apiGet<OrphanBucketOperationsResponse>(
+    "/api/v1/storage/operations/orphan-buckets",
     accessToken,
   );
 }

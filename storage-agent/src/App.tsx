@@ -156,6 +156,10 @@ export function App() {
                     path="clusters"
                     element={lazyElement(<StorageOperationsPage view="clusters" />)}
                   />
+                  <Route
+                    path="orphan-buckets"
+                    element={lazyElement(<StorageOperationsPage view="orphan_buckets" />)}
+                  />
                 </Route>
                 <Route path="admin/service-operations">
                   <Route

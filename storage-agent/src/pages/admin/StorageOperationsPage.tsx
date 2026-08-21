@@ -27,6 +27,7 @@ import {
   fetchClusterHealthOperationsApi,
   fetchClusterHealStatusApi,
   fetchCapacityPlanningApi,
+  fetchOrphanBucketOperationsApi,
   fetchReplicationOperationsApi,
   fetchStorageOperationsApi,
   reconcileReplicationApi,
@@ -38,6 +39,8 @@ import {
   type ClusterHealStatusResponse,
   type CapacityPlanningResponse,
   type CapacityRegionItem,
+  type OrphanBucketItem,
+  type OrphanBucketOperationsResponse,
   type ReplicationOperationsResponse,
   type ReplicationSourceMetric,
   type ReplicationStatusReason,
@@ -69,7 +72,7 @@ import {
 import { cn } from "../../lib/utils"
 import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
-type OperationsView = "replication" | "clusters"
+type OperationsView = "replication" | "clusters" | "orphan_buckets"
 
 const sourceAggregateReasonCodes = new Set([
   "critical_target_links",
@@ -558,6 +561,7 @@ function resyncOperationTitle(target: ReplicationTargetMetric): string {
 
 function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   const [data, setData] = useState<ReplicationOperationsResponse | null>(null)
+  const [jobs, setJobs] = useState<StorageOperationItem[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
@@ -579,7 +583,11 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       if (!quiet) setLoading(true)
       else if (showRefreshing) setRefreshing(true)
       try {
-        const response = await fetchReplicationOperationsApi(bucketFilter, accessToken)
+        const [response, operations] = await Promise.all([
+          fetchReplicationOperationsApi(bucketFilter, accessToken),
+          fetchStorageOperationsApi(accessToken),
+        ])
+        setJobs(operations.data)
         setData((current) => {
           if (!bucketFilter || !current) return response
           const refreshedBucket = response.buckets[0]
@@ -633,6 +641,13 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
     )) ?? false,
     [data],
   )
+  const hasActiveTask = useMemo(
+    () => jobs.some((job) => (
+      (job.kind === "replication_reconcile" || job.kind === "replication_resync")
+      && (job.status === "queued" || job.status === "running")
+    )),
+    [jobs],
+  )
   const bucketSummary = useMemo(() => {
     const sources = bucket?.sources ?? []
     return {
@@ -644,6 +659,27 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       recentFailed: sources.reduce((sum, item) => sum + (item.recent_failed_count ?? 0), 0),
     }
   }, [bucket])
+  const reconcileJob = useMemo(
+    () => jobs.find((job) => job.kind === "replication_reconcile" && job.bucket === bucket?.bucket) ?? null,
+    [bucket?.bucket, jobs],
+  )
+  const resyncJob = useMemo(
+    () => jobs.find((job) => (
+      job.kind === "replication_resync"
+      && job.bucket === bucket?.bucket
+      && job.server === inspectedResync?.source.server
+      && job.target === inspectedResync?.target.target
+      && (job.status === "queued" || job.status === "running")
+    )) ?? null,
+    [bucket?.bucket, inspectedResync?.source.server, inspectedResync?.target.target, jobs],
+  )
+
+  useEffect(() => {
+    if (!hasActiveTask) return
+    const timer = window.setInterval(() => void load(true, false), 5000)
+    return () => window.clearInterval(timer)
+  }, [hasActiveTask, load])
+
   const bucketStatusReasons = useMemo<ReplicationStatusReason[]>(() => {
     if (!bucket) return []
     const details: ReplicationStatusReason[] = []
@@ -672,7 +708,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       setActionNotice({
         kind: "success",
         title: response.message,
-        description: `${bucket.bucket} 的全连接规则已重新校准，请结合链路状态确认目标均在线。`,
+        description: `${bucket.bucket} 的校准任务已进入队列，完成后会自动刷新链路状态。`,
       })
       await load(true)
     } catch (error) {
@@ -705,7 +741,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
         title: response.message,
         description: alreadyRunning
           ? "系统已接管现有任务并继续轮询，无需再次操作。"
-          : "系统将每 10 秒读取 MinIO 原生状态；补传结束后会保留完成或失败结果。",
+          : "对象补传启动任务已进入队列；MinIO 原生状态会自动刷新。",
       })
       setResyncTarget(null)
       setOlderThan("")
@@ -760,7 +796,8 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
     inspectedTarget?.arn
     && inspectedTarget.online
     && inspectedTarget.resync_status !== "running"
-    && inspectedTarget.resync_status !== "unknown",
+    && inspectedTarget.resync_status !== "unknown"
+    && !resyncJob,
   )
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -867,11 +904,17 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
                 链路 {bucketSummary.actual}/{bucketSummary.expected} · 等待 {bucketSummary.queued}（{formatBytes(bucketSummary.queuedBytes)}）· 近 1 小时失败 {bucketSummary.recentFailed} · <span title="MinIO MRF 指标可能在故障恢复后继续粘滞，仅用于诊断，不代表当前仍在漏复制">MRF 诊断 {bucketSummary.mrf}（可能粘滞）</span> · {formatDateTime(data.generated_at)}
               </div>
             </div>
-            <Button variant="outline" size="sm" disabled={!bucket || reconciling} onClick={() => void reconcile()}>
+            <Button variant="outline" size="sm" disabled={!bucket || reconciling || (reconcileJob?.status === "queued" || reconcileJob?.status === "running")} onClick={() => void reconcile()}>
               <RotateCcw className={cn("mr-1.5 h-3.5 w-3.5", reconciling && "animate-spin")} aria-hidden />
-              校准规则
+              {reconcileJob?.status === "queued" || reconcileJob?.status === "running" ? "校准中" : "校准规则"}
             </Button>
           </div>
+          {reconcileJob ? (
+            <div className="border-b border-border/60 bg-muted/15 px-3 py-2 text-[11px]">
+              <span className="font-medium text-foreground">校准任务：</span>
+              <span className="text-muted-foreground">{operationStatusLabel(reconcileJob.status)} · {reconcileJob.message || "正在更新"}</span>
+            </div>
+          ) : null}
           {bucket ? (
             <StatusReasonSummary
               status={bucket.status}
@@ -962,6 +1005,12 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
               ) : null}
             </div>
 
+            {resyncJob ? (
+              <div className="flex items-center gap-2 rounded-md bg-sky-500/10 px-3 py-2 text-[11px] text-sky-800 dark:text-sky-200" role="status">
+                <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                <span>{operationStatusLabel(resyncJob.status)} · {resyncJob.message || "正在提交 MinIO 补传"}</span>
+              </div>
+            ) : null}
             {inspectedTarget?.resync_status === "running" ? (
               <div className="flex items-center gap-2 rounded-md bg-sky-500/10 px-3 py-2 text-[11px] text-sky-800 dark:text-sky-200" role="status">
                 <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
@@ -1023,6 +1072,99 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function orphanBucketMeta(kind: OrphanBucketItem["kind"]) {
+  if (kind === "disabled_application") {
+    return { label: "停用应用桶", className: "text-amber-700 bg-amber-500/10 dark:text-amber-300" }
+  }
+  if (kind === "system") {
+    return { label: "系统归档桶", className: "text-sky-700 bg-sky-500/10 dark:text-sky-300" }
+  }
+  return { label: "孤儿桶", className: "text-rose-700 bg-rose-500/10 dark:text-rose-300" }
+}
+
+function OrphanBucketWorkspace({ accessToken }: { accessToken?: string }) {
+  const [data, setData] = useState<OrphanBucketOperationsResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
+    else setRefreshing(true)
+    try {
+      setData(await fetchOrphanBucketOperationsApi(accessToken))
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  if (loading) return <LoadingState label="正在盘点非应用存储桶..." />
+  if (!data) return <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">孤儿桶盘点暂不可用</div>
+
+  const { summary } = data
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-border/70 bg-muted/10 px-4 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">孤儿桶盘点</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">MinIO 实际桶与应用目录比对；不自动删除任何数据。</p>
+          </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="刷新孤儿桶盘点" aria-label="刷新孤儿桶盘点" disabled={refreshing} onClick={() => void load(true)}>
+            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden />
+          </Button>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">孤儿桶</div><div className="mt-1 text-lg font-semibold text-rose-600">{summary.orphan_count}</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">停用应用桶</div><div className="mt-1 text-lg font-semibold text-amber-600">{summary.disabled_application_count}</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">系统归档桶</div><div className="mt-1 text-lg font-semibold text-sky-600">{summary.system_bucket_count}</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">不可达节点</div><div className="mt-1 text-lg font-semibold">{summary.unavailable_server_count}</div></div>
+        </div>
+        <div className="mt-2 text-[10px] text-muted-foreground">巡检节点：{data.servers.length ? data.servers.join("、") : "暂无"} · {formatDateTime(data.generated_at)}</div>
+      </div>
+
+      <div className="docs-scroll min-h-0 flex-1 overflow-auto">
+        {Object.keys(data.errors).length > 0 ? (
+          <div className="m-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>{Object.entries(data.errors).map(([server, error]) => server + "：" + error).join("；")}</span>
+          </div>
+        ) : null}
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableRow>
+              <TableHead>存储桶</TableHead>
+              <TableHead>分类</TableHead>
+              <TableHead>关联应用</TableHead>
+              <TableHead>所在节点</TableHead>
+              <TableHead>缺失节点</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.buckets.map((item) => {
+              const meta = orphanBucketMeta(item.kind)
+              return (
+                <TableRow key={item.name}>
+                  <TableCell className="font-mono text-xs font-medium">{item.name}</TableCell>
+                  <TableCell><span className={cn("inline-flex rounded-full px-2 py-1 text-[11px] font-medium", meta.className)}>{meta.label}</span></TableCell>
+                  <TableCell>{item.app_name ? <div><div className="text-xs">{item.app_shown_name || item.app_name}</div><div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{item.app_name}</div></div> : "—"}</TableCell>
+                  <TableCell className="text-xs">{item.servers.length ? item.servers.join("、") : "—"}</TableCell>
+                  <TableCell className={cn("text-xs", item.missing_servers.length > 0 && "text-amber-700 dark:text-amber-300")}>{item.missing_servers.length ? item.missing_servers.join("、") : "—"}</TableCell>
+                </TableRow>
+              )
+            })}
+            {data.buckets.length === 0 ? <TableRow><TableCell colSpan={5} className="h-52 text-center text-xs text-muted-foreground">未发现非应用存储桶。</TableCell></TableRow> : null}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   )
 }
@@ -1314,16 +1456,27 @@ export default function StorageOperationsPage({ view }: { view: OperationsView }
             <ServerCog className="h-3.5 w-3.5" aria-hidden />
             集群健康
           </NavLink>
+          <NavLink
+            to={{ pathname: "/admin/storage-operations/orphan-buckets", search: location.search }}
+            role="tab"
+            aria-selected={view === "orphan_buckets"}
+            className={cn("inline-flex h-8 items-center gap-1.5 rounded px-3 text-xs", view === "orphan_buckets" ? "bg-background font-medium shadow-sm" : "text-muted-foreground")}
+          >
+            <Box className="h-3.5 w-3.5" aria-hidden />
+            孤儿桶
+          </NavLink>
         </div>
       </div>
 
       <div className={cn(
         "flex min-h-0 flex-1 flex-col overflow-hidden",
-        view === "replication" && "rounded-lg border border-border/80 bg-background",
+        (view === "replication" || view === "orphan_buckets") && "rounded-lg border border-border/80 bg-background",
       )}>
         {view === "replication"
           ? <ReplicationWorkspace accessToken={accessToken ?? undefined} />
-          : <ClusterWorkspace accessToken={accessToken ?? undefined} />}
+          : view === "clusters"
+            ? <ClusterWorkspace accessToken={accessToken ?? undefined} />
+            : <OrphanBucketWorkspace accessToken={accessToken ?? undefined} />}
       </div>
     </div>
   )
