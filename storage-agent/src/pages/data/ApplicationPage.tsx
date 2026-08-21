@@ -28,6 +28,7 @@ import type {
 import { showErrorToast, showSuccessToast } from "../../api/toast"
 import { useNavigationLeaveBlock } from "../../contexts/NavigationLeaveBlockContext"
 import { Modal } from "../../components/Modal"
+import { ListErrorState } from "../../components/ListErrorState"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { DialogFooter } from "../../components/ui/dialog"
@@ -37,6 +38,7 @@ import { Progress } from "../../components/ui/progress"
 import { formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
 import { BrandLoading } from "../../components/BrandLoading"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 type ApprovalPhase = "confirm" | "streaming" | "finished"
 
@@ -198,6 +200,7 @@ function OriginRows({
 }
 
 export default function ApplicationPage() {
+  useDocumentTitle("应用管理")
   const { accessToken, user } = useAuth()
   const canApprove = hasPermission(user, PERMISSIONS.applicationManage)
   const canManageQuota = hasPermission(user, PERMISSIONS.applicationQuotaManage)
@@ -211,6 +214,7 @@ export default function ApplicationPage() {
 
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [approvalTarget, setApprovalTarget] = useState<Application | null>(null)
   const [approvalPhase, setApprovalPhase] = useState<ApprovalPhase>("confirm")
   const [approvalEvents, setApprovalEvents] = useState<ApplicationApprovalSseEvent[]>([])
@@ -252,11 +256,13 @@ export default function ApplicationPage() {
 
   const loadApplications = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const resp = await fetchApplicationsApi(accessToken ?? undefined)
       setApplications(resp.data)
     } catch {
       // 错误已由 api client toast 展示
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -653,6 +659,12 @@ export default function ApplicationPage() {
 
       {loading ? (
         <BrandLoading label="正在加载应用列表..." />
+      ) : loadError ? (
+        <ListErrorState
+          message="应用列表加载失败"
+          onRetry={() => void loadApplications()}
+          retrying={loading}
+        />
       ) : applications.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">

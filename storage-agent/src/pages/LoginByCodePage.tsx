@@ -7,10 +7,12 @@ import { useAuth } from "../auth/AuthContext"
 import { AuthShell } from "../components/auth/AuthShell"
 import { Button } from "../components/ui/button"
 import { BrandLoading } from "../components/BrandLoading"
+import { useDocumentTitle } from "../lib/useDocumentTitle"
 
 type VerifyState = "waiting" | "verifying" | "success" | "error"
 
 export default function LoginByCodePage() {
+  useDocumentTitle("OA 登录")
   const navigate = useNavigate()
   const { initializing, loginWithTokens } = useAuth()
   const paramsRef = useRef(new URLSearchParams(window.location.search))
@@ -34,7 +36,7 @@ export default function LoginByCodePage() {
       const tokens = await loginByCodeAcrossBackends({ username, code })
       await loginWithTokens(tokens)
       setState("success")
-      navigate("/data/basic/application", { replace: true })
+      navigate("/docs/overview", { replace: true })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法完成 OA 认证")
       setState("error")

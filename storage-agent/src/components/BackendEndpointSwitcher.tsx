@@ -114,25 +114,37 @@ export function BackendEndpointSwitcher() {
   }
 
   return (
-    <div ref={rootRef} className="relative min-w-0 flex-1 sm:max-w-[min(100%,48rem)]">
+    <div ref={rootRef} className="relative min-w-0 sm:flex-1 sm:max-w-[min(100%,48rem)]">
       <button
         type="button"
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listId : undefined}
+        aria-label="选择后端服务"
+        title={selected ? `后端服务：${selected.shown_name}` : "选择后端服务"}
         disabled={(loading && items.length === 0) || switching}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex w-full min-w-0 items-center gap-1.5 rounded-xl border border-border/80 bg-muted/30 px-2 py-1 text-left transition-colors sm:gap-2 sm:px-2.5 sm:py-1.5",
+          "flex min-w-0 items-center gap-1.5 rounded-xl border border-border/80 bg-muted/30 px-2 py-1 text-left transition-colors sm:w-full sm:gap-2 sm:px-2.5 sm:py-1.5",
           "hover:border-primary/40 hover:bg-muted/50",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           ((loading && items.length === 0) || switching) && "pointer-events-none opacity-60",
         )}
       >
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-7 sm:w-7">
+        <span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-7 sm:w-7">
           <Server className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden />
+          {/* 移动端仅显示图标，用状态点提示连接结果 */}
+          <span
+            className={cn(
+              "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-1 ring-background sm:hidden",
+              loadError ? "bg-destructive" : "bg-emerald-500",
+              (loading && items.length === 0) && "animate-pulse bg-muted-foreground/50",
+            )}
+            aria-hidden
+          />
         </span>
-        <div className="min-w-0 flex-1">
+        {/* 移动端折叠为图标按钮，详细文字仅在 sm+ 显示 */}
+        <div className="hidden min-w-0 flex-1 sm:block">
           <div className="text-[8px] font-medium uppercase tracking-wider text-muted-foreground sm:text-[9px]">
             后端服务
           </div>
@@ -203,7 +215,7 @@ export function BackendEndpointSwitcher() {
         ) : (
           <ChevronDown
             className={cn(
-              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              "hidden h-4 w-4 shrink-0 text-muted-foreground transition-transform sm:block",
               open && "rotate-180",
             )}
             aria-hidden
@@ -216,7 +228,7 @@ export function BackendEndpointSwitcher() {
           id={listId}
           role="listbox"
           aria-label="选择后端服务"
-          className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,18rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-lg"
+          className="absolute left-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,18rem)] w-[min(calc(100vw-1.5rem),20rem)] min-w-0 overflow-y-auto overflow-x-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-lg sm:left-0 sm:right-0 sm:w-full"
         >
           {loading && items.length === 0 ? (
             <BrandLoading label="正在加载..." compact className="px-3 py-6" iconClassName="h-5 w-5" />

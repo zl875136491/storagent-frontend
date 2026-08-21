@@ -67,6 +67,7 @@ import {
   TableRow,
 } from "../../components/ui/table"
 import { cn } from "../../lib/utils"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 type OperationsView = "replication" | "clusters"
 
@@ -1279,6 +1280,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
 }
 
 export default function StorageOperationsPage({ view }: { view: OperationsView }) {
+  useDocumentTitle("存储运维")
   const { accessToken, user } = useAuth()
   const location = useLocation()
 

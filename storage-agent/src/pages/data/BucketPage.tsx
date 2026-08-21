@@ -19,6 +19,8 @@ import {
 import { formatBytes, formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
 import { BrandLoading } from "../../components/BrandLoading"
+import { ListErrorState } from "../../components/ListErrorState"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 type InventoryView = "treemap" | "files"
 
@@ -247,16 +249,19 @@ function BucketTreemap({ buckets, onSelect }: BucketTreemapProps) {
 }
 
 export default function BucketPage({ view }: { view: InventoryView }) {
+  useDocumentTitle("服务器文件详情")
   const { accessToken } = useAuth()
   const location = useLocation()
   const [treemapSelection, setTreemapSelection] = useState<TreemapSelection | null>(null)
   const [servers, setServers] = useState<MinioServer[]>([])
   const [serversLoading, setServersLoading] = useState(true)
+  const [serversLoadError, setServersLoadError] = useState(false)
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null)
   const bucketRequestSeq = useRef(0)
 
   const [buckets, setBuckets] = useState<BucketInfo[]>([])
   const [bucketsLoading, setBucketsLoading] = useState(false)
+  const [bucketsLoadError, setBucketsLoadError] = useState(false)
   const [cacheInfo, setCacheInfo] = useState<{
     hit: boolean
     cachedAt: string
@@ -264,25 +269,26 @@ export default function BucketPage({ view }: { view: InventoryView }) {
     ttlSeconds: number
   } | null>(null)
 
-  useEffect(() => {
-    const loadServers = async () => {
-      setServersLoading(true)
-      try {
-        const resp = await fetchMinioServersApi(accessToken ?? undefined)
-        setServers(resp.data)
-        if (resp.data.length > 0) {
-          setSelectedServerId(resp.data[0].id)
-        }
-      } catch {
-        // 错误已由 api client toast 展示
-      } finally {
-        setServersLoading(false)
+  const loadServers = useCallback(async () => {
+    setServersLoading(true)
+    setServersLoadError(false)
+    try {
+      const resp = await fetchMinioServersApi(accessToken ?? undefined)
+      setServers(resp.data)
+      if (resp.data.length > 0) {
+        setSelectedServerId(resp.data[0].id)
       }
+    } catch {
+      // 错误已由 api client toast 展示
+      setServersLoadError(true)
+    } finally {
+      setServersLoading(false)
     }
+  }, [accessToken])
 
+  useEffect(() => {
     void loadServers()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [loadServers])
 
   const loadBuckets = useCallback(async (refresh = false) => {
     const requestSeq = ++bucketRequestSeq.current
@@ -295,6 +301,7 @@ export default function BucketPage({ view }: { view: InventoryView }) {
     }
     if (refresh) setTreemapSelection(null)
     setBucketsLoading(true)
+    setBucketsLoadError(false)
     try {
       const resp = await fetchBucketsApi(
         serverId,
@@ -311,6 +318,7 @@ export default function BucketPage({ view }: { view: InventoryView }) {
       })
     } catch {
       // 错误已由 api client toast 展示
+      if (requestSeq === bucketRequestSeq.current) setBucketsLoadError(true)
     } finally {
       if (requestSeq === bucketRequestSeq.current) {
         setBucketsLoading(false)
@@ -360,6 +368,12 @@ export default function BucketPage({ view }: { view: InventoryView }) {
               <BrandLoading label="正在加载 MinIO 服务列表..." className="min-h-[100px]" compact />
             </CardContent>
           </Card>
+        ) : serversLoadError ? (
+          <ListErrorState
+            message="MinIO 服务列表加载失败"
+            onRetry={() => void loadServers()}
+            retrying={serversLoading}
+          />
         ) : servers.length === 0 ? (
           <Card className="border-dashed bg-muted/40">
             <CardContent className="flex flex-col gap-1 pt-4 text-xs text-muted-foreground">
@@ -417,6 +431,14 @@ export default function BucketPage({ view }: { view: InventoryView }) {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {bucketsLoading ? (
             <BrandLoading label="正在加载存储桶数据..." className="min-h-0 flex-1" />
+          ) : bucketsLoadError ? (
+            <ListErrorState
+              variant="plain"
+              className="min-h-0 flex-1"
+              message="存储桶数据加载失败"
+              onRetry={() => void loadBuckets(true)}
+              retrying={bucketsLoading}
+            />
           ) : !selectedServerId ? (
             <div className="flex min-h-0 flex-1 items-center justify-center text-xs text-muted-foreground">
               请先在上方选择一个 MinIO 服务。

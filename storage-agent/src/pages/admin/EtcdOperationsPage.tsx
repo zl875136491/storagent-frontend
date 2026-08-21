@@ -49,6 +49,7 @@ import {
 } from "../../components/ui/dialog";
 import { cn } from "../../lib/utils";
 import { formatDateTime } from "../../lib/format";
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 type PageView = "status" | "trend" | "operations" | "tasks" | "events";
 type TaskKind = "keyspace" | "compact" | "defrag" | "alarm-disarm";
@@ -1142,6 +1143,7 @@ export default function EtcdOperationsPage({
 }: {
   view?: PageView;
 }) {
+  useDocumentTitle("Etcd 运维")
   const { accessToken, user } = useAuth();
   const [data, setData] = useState<EtcdClusterStatusResponse | null>(null);
   const [trend, setTrend] = useState<EtcdTrendResponse | null>(null);

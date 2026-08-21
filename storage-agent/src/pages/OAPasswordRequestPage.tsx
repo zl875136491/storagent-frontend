@@ -12,12 +12,14 @@ import { AuthShell } from "../components/auth/AuthShell"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
+import { useDocumentTitle } from "../lib/useDocumentTitle"
 
 interface OAPasswordRequestPageProps {
   mode: "register" | "reset"
 }
 
 export default function OAPasswordRequestPage({ mode }: OAPasswordRequestPageProps) {
+  useDocumentTitle(mode === "register" ? "注册账号" : "重置密码")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")

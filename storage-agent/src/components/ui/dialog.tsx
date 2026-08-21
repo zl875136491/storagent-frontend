@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from "react"
+import { useEffect, type HTMLAttributes, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "../../lib/utils"
 
@@ -9,6 +9,15 @@ export interface DialogProps {
 }
 
 export function Dialog({ open, onOpenChange, children }: DialogProps) {
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onOpenChange?.(false)
+    }
+    document.addEventListener("keydown", onKeyDown)
+    return () => document.removeEventListener("keydown", onKeyDown)
+  }, [open, onOpenChange])
+
   if (!open || typeof document === "undefined") return null
 
   /* 挂到 body：避免祖先的 backdrop-filter / transform 把 fixed 变成「相对局部容器」 */

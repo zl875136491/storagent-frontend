@@ -85,4 +85,24 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // 将仅被懒加载页面引用的重库拆为独立 chunk，便于长期缓存与按需加载。
+        // 这些包没有被首屏/登录页引用，因此不会被迫提前加载。
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return
+          if (id.includes("echarts") || id.includes("zrender")) return "vendor-echarts"
+          if (
+            id.includes("highlight.js") ||
+            id.includes("rehype-highlight") ||
+            id.includes("lowlight")
+          ) {
+            return "vendor-highlight"
+          }
+          if (id.includes("@visx")) return "vendor-visx"
+        },
+      },
+    },
+  },
 })

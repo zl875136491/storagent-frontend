@@ -11,6 +11,7 @@ import {
 } from "../../api/client"
 import { showErrorToast, showSuccessToast } from "../../api/toast"
 import { Modal } from "../../components/Modal"
+import { ListErrorState } from "../../components/ListErrorState"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { DialogFooter } from "../../components/ui/dialog"
@@ -21,13 +22,16 @@ import { CheckIcon } from "lucide-react"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
 import { formatDateTime } from "../../lib/format"
 import { BrandLoading } from "../../components/BrandLoading"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 export default function APIKeyPage() {
+  useDocumentTitle("APIKey 管理")
   const { accessToken, user } = useAuth()
   const isAdmin = user?.is_admin === true
 
   const [apiKeys, setApiKeys] = useState<APIKey[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [applications, setApplications] = useState<SimpleApplication[]>([])
@@ -43,11 +47,13 @@ export default function APIKeyPage() {
 
   const loadApiKeys = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const resp = await fetchApiKeysApi(accessToken ?? undefined)
       setApiKeys(resp.data)
     } catch {
       // 错误已由 api client toast 展示
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -161,6 +167,12 @@ export default function APIKeyPage() {
 
       {loading ? (
         <BrandLoading label="正在加载 APIKey 列表..." />
+      ) : loadError ? (
+        <ListErrorState
+          message="APIKey 列表加载失败"
+          onRetry={() => void loadApiKeys()}
+          retrying={loading}
+        />
       ) : apiKeys.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">

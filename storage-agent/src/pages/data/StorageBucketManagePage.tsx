@@ -4,6 +4,7 @@ import { fetchStorageBucketsApi, type StorageBucketItem } from "../../api/client
 import { BucketReplicateGraph } from "../../components/storage/BucketReplicateGraph"
 import { Card, CardContent } from "../../components/ui/card"
 import { BrandLoading } from "../../components/BrandLoading"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 function getBucketShownName(bucket: StorageBucketItem): string {
   const shownName = bucket.app?.shown_name?.trim()
@@ -16,6 +17,7 @@ function getBucketDescription(bucket: StorageBucketItem): string {
 }
 
 export default function StorageBucketManagePage() {
+  useDocumentTitle("存储桶管理")
   const { accessToken } = useAuth()
   const [loading, setLoading] = useState(true)
   const [buckets, setBuckets] = useState<StorageBucketItem[]>([])

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
 import { BookOpen, ChevronRight, Layers, Plug, Rocket } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useDocumentTitle } from "@/lib/useDocumentTitle"
 import { DocsNavProvider, useGoDoc } from "@/components/docs/nav-context"
 import { DocsOnThisPage, DocsTocProvider } from "@/components/docs/primitives"
 import { DocVersionSwitcher } from "@/components/docs/version-switcher"
@@ -30,6 +31,8 @@ const docIdsBySlug: Record<string, DocId> = {
 function DocsShell({ section }: { section: string }) {
   const goDoc = useGoDoc()
   const active = useMemo(() => docIdsBySlug[section ?? ""] ?? "usage-overview", [section])
+  const activeTitle = NAV.find((n) => n.id === active)?.title
+  useDocumentTitle(activeTitle ? `${activeTitle} - 文档` : "使用文档")
   const showVersionSwitcher = active === "getting-started" || active === "api-guide" || active === "components"
   const shellScrollRef = useRef<HTMLDivElement>(null)
   const contentScrollRef = useRef<HTMLDivElement>(null)

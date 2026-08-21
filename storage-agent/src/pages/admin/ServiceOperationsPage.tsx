@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { copyTextToClipboard } from "@/lib/copy-to-clipboard"
 import { formatDateTime } from "@/lib/format"
 import { cn } from "@/lib/utils"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 type ServiceView = "verification" | "diagnostics"
 
@@ -234,6 +235,7 @@ function ServiceOperationsWorkspace({ view }: { view: ServiceView }) {
 }
 
 export default function ServiceOperationsPage({ view }: { view: ServiceView }) {
+  useDocumentTitle("服务运维")
   const { user } = useAuth()
   if (!canOperateService(user)) return <Navigate to="/data/basic/region" replace />
   return <GuideEndpointsProvider><ServiceOperationsWorkspace view={view} /></GuideEndpointsProvider>

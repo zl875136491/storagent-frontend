@@ -356,7 +356,7 @@ function AppShell() {
             <SidebarTrigger />
             <div className="truncate text-sm font-semibold sm:text-base">Storagent</div>
           </div>
-          <div className="order-3 flex min-w-0 basis-full items-center sm:order-none sm:basis-auto sm:flex-1">
+          <div className="flex min-w-0 items-center sm:flex-1">
             <BackendEndpointSwitcher />
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">

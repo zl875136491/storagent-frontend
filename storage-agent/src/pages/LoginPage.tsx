@@ -8,8 +8,10 @@ import { AuthShell } from "../components/auth/AuthShell"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Button } from "../components/ui/button"
+import { useDocumentTitle } from "../lib/useDocumentTitle"
 
 export default function LoginPage() {
+  useDocumentTitle("登录")
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation() as { state?: { from?: Location } }
@@ -37,7 +39,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await login({ username, password })
-      const redirectTo = location.state?.from?.pathname || "/data/basic/region"
+      const redirectTo = location.state?.from?.pathname || "/docs/overview"
       navigate(redirectTo, { replace: true })
     } catch {
       // 接口错误已由 api client 通过 toast 展示

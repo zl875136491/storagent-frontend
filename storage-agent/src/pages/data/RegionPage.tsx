@@ -9,17 +9,21 @@ import {
 } from "../../api/client"
 import { showErrorToast } from "../../api/toast"
 import { Modal } from "../../components/Modal"
+import { ListErrorState } from "../../components/ListErrorState"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { Input } from "../../components/ui/input"
 import { Label } from "../../components/ui/label"
 import { BrandLoading } from "../../components/BrandLoading"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 export default function RegionPage() {
+  useDocumentTitle("区域管理")
   const { accessToken, user } = useAuth()
   const isAdmin = hasPermission(user, PERMISSIONS.regionManage)
   const [regions, setRegions] = useState<Region[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createForm, setCreateForm] = useState<RegionCreateRequest>({
@@ -30,11 +34,13 @@ export default function RegionPage() {
 
   const loadRegions = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const resp = await fetchRegionsApi(accessToken ?? undefined)
       setRegions(resp.data)
     } catch {
       // 错误已由 api client toast 展示
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -82,6 +88,12 @@ export default function RegionPage() {
 
       {loading ? (
         <BrandLoading label="正在加载区域列表..." />
+      ) : loadError ? (
+        <ListErrorState
+          message="区域列表加载失败"
+          onRetry={() => void loadRegions()}
+          retrying={loading}
+        />
       ) : regions.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">

@@ -20,6 +20,7 @@ import { Label } from "../../components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table"
 import { formatDateTime } from "../../lib/format"
 import { cn } from "../../lib/utils"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 const PAGE_SIZE = 50
 const SELECT_CLASS = "h-9 min-w-0 rounded-md border border-input bg-background px-3 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -64,6 +65,7 @@ function AuditDetail({ event }: { event: AuditEventItem | null }) {
 }
 
 export default function AuditLogPage() {
+  useDocumentTitle("审计日志")
   const { user, accessToken } = useAuth()
   const [filters, setFilters] = useState<FilterState>(initialFilters)
   const [options, setOptions] = useState<AuditEventOptionsResponse>({ actions: [], actors: [], regions: [] })

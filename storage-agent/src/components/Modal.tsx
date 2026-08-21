@@ -29,7 +29,12 @@ export function Modal({
   bodyClassName,
 }: ModalProps) {
   return (
-    <Dialog open>
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !disableClose) onClose()
+      }}
+    >
       <DialogContent className={contentClassName}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

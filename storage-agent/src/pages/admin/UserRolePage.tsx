@@ -11,6 +11,7 @@ import { showSuccessToast } from "../../api/toast"
 import { useAuth } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import { Modal } from "../../components/Modal"
+import { ListErrorState } from "../../components/ListErrorState"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 import { DialogFooter } from "../../components/ui/dialog"
@@ -24,6 +25,7 @@ import {
 } from "../../components/ui/table"
 import { cn } from "../../lib/utils"
 import { BrandLoading } from "../../components/BrandLoading"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 const BASE_ROLE = "用户"
 const ROLE_ORDER = [BASE_ROLE, "应用管理员", "运维管理员", "用户管理员", "管理员"] as const
@@ -69,10 +71,12 @@ function roleBadge(name: string) {
 }
 
 export default function UserRolePage() {
+  useDocumentTitle("角色管理")
   const { accessToken, user, refreshSession } = useAuth()
   const canManageUsers = hasPermission(user, PERMISSIONS.userManage)
   const [users, setUsers] = useState<AdminUserItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [editing, setEditing] = useState<AdminUserItem | null>(null)
   const [selectedRoles, setSelectedRoles] = useState<string[]>([BASE_ROLE])
@@ -84,11 +88,13 @@ export default function UserRolePage() {
 
   const loadUsers = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const resp = await fetchAdminUsersApi(accessToken ?? undefined)
       setUsers(resp.data)
     } catch {
       // toast 已由 client 处理
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -163,6 +169,12 @@ export default function UserRolePage() {
         <CardContent>
           {loading ? (
             <BrandLoading label="正在加载用户..." className="min-h-[180px]" compact />
+          ) : loadError ? (
+            <ListErrorState
+              message="用户列表加载失败"
+              onRetry={() => void loadUsers()}
+              retrying={loading}
+            />
           ) : users.length === 0 ? (
             <div className="rounded-md border border-dashed border-border/70 px-4 py-10 text-center text-xs text-muted-foreground">
               暂无可管理用户

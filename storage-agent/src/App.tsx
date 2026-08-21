@@ -1,3 +1,4 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -9,22 +10,42 @@ import { AuthProvider } from "./auth/AuthContext";
 import { NavigationLeaveBlockProvider } from "./contexts/NavigationLeaveBlockContext";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import AppLayout from "./layouts/AppLayout";
+import { BrandLoading } from "./components/BrandLoading";
 import LoginPage from "./pages/LoginPage";
 import LoginByCodePage from "./pages/LoginByCodePage";
 import OAPasswordRequestPage from "./pages/OAPasswordRequestPage";
-import RegionPage from "./pages/data/RegionPage";
-import MinioPage from "./pages/data/MinioPage";
-import APIKeyPage from "./pages/data/APIKeyPage";
-import ApplicationPage from "./pages/data/ApplicationPage";
-import BucketPage from "./pages/data/BucketPage";
-import StorageBucketManagePage from "./pages/data/StorageBucketManagePage";
-import DocsPage from "./pages/docs/DocsPage";
-import UserRolePage from "./pages/admin/UserRolePage";
-import UsagePage from "./pages/admin/UsagePage";
-import AuditLogPage from "./pages/admin/AuditLogPage";
-import StorageOperationsPage from "./pages/admin/StorageOperationsPage";
-import ServiceOperationsPage from "./pages/admin/ServiceOperationsPage";
-import EtcdOperationsPage from "./pages/admin/EtcdOperationsPage";
+import NotFoundPage from "./pages/NotFoundPage";
+
+// 数据/管理/文档页体积较大（含 echarts、代码高亮、图表库），按路由懒加载，
+// 避免登录页与首屏一次性下载全部代码。
+const RegionPage = lazy(() => import("./pages/data/RegionPage"));
+const MinioPage = lazy(() => import("./pages/data/MinioPage"));
+const APIKeyPage = lazy(() => import("./pages/data/APIKeyPage"));
+const ApplicationPage = lazy(() => import("./pages/data/ApplicationPage"));
+const BucketPage = lazy(() => import("./pages/data/BucketPage"));
+const StorageBucketManagePage = lazy(() => import("./pages/data/StorageBucketManagePage"));
+const DocsPage = lazy(() => import("./pages/docs/DocsPage"));
+const UserRolePage = lazy(() => import("./pages/admin/UserRolePage"));
+const UsagePage = lazy(() => import("./pages/admin/UsagePage"));
+const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage"));
+const StorageOperationsPage = lazy(() => import("./pages/admin/StorageOperationsPage"));
+const ServiceOperationsPage = lazy(() => import("./pages/admin/ServiceOperationsPage"));
+const EtcdOperationsPage = lazy(() => import("./pages/admin/EtcdOperationsPage"));
+
+/** 懒加载页面的统一加载占位；AppLayout 保持挂载，仅内容区显示加载态 */
+function lazyElement(node: ReactNode): ReactNode {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center p-6">
+          <BrandLoading compact label="正在加载页面..." />
+        </div>
+      }
+    >
+      {node}
+    </Suspense>
+  );
+}
 
 const legacyDocsSlugs: Record<string, string> = {
   "usage-overview": "overview",
@@ -74,11 +95,11 @@ export function App() {
                 />
                 <Route path="data">
                   <Route path="basic">
-                    <Route path="region" element={<RegionPage />} />
-                    <Route path="application" element={<ApplicationPage />} />
-                    <Route path="api-key" element={<APIKeyPage />} />
+                    <Route path="region" element={lazyElement(<RegionPage />)} />
+                    <Route path="application" element={lazyElement(<ApplicationPage />)} />
+                    <Route path="api-key" element={lazyElement(<APIKeyPage />)} />
                   </Route>
-                  <Route path="minio" element={<MinioPage />} />
+                  <Route path="minio" element={lazyElement(<MinioPage />)} />
                   <Route path="storage">
                     <Route path="buckets">
                       <Route
@@ -87,16 +108,16 @@ export function App() {
                       />
                       <Route
                         path="treemap"
-                        element={<BucketPage view="treemap" />}
+                        element={lazyElement(<BucketPage view="treemap" />)}
                       />
                       <Route
                         path="files"
-                        element={<BucketPage view="files" />}
+                        element={lazyElement(<BucketPage view="files" />)}
                       />
                     </Route>
                     <Route
                       path="bucket-manage"
-                      element={<StorageBucketManagePage />}
+                      element={lazyElement(<StorageBucketManagePage />)}
                     />
                   </Route>
                 </Route>
@@ -104,24 +125,24 @@ export function App() {
                   <Route index element={<LegacyDocsRedirect />} />
                   <Route
                     path="overview"
-                    element={<DocsPage section="overview" />}
+                    element={lazyElement(<DocsPage section="overview" />)}
                   />
                   <Route
                     path="quick-start"
-                    element={<DocsPage section="quick-start" />}
+                    element={lazyElement(<DocsPage section="quick-start" />)}
                   />
                   <Route
                     path="api-guide"
-                    element={<DocsPage section="api-guide" />}
+                    element={lazyElement(<DocsPage section="api-guide" />)}
                   />
                   <Route
                     path="components"
-                    element={<DocsPage section="components" />}
+                    element={lazyElement(<DocsPage section="components" />)}
                   />
                 </Route>
-                <Route path="admin/users" element={<UserRolePage />} />
-                <Route path="admin/usage" element={<UsagePage />} />
-                <Route path="admin/audit" element={<AuditLogPage />} />
+                <Route path="admin/users" element={lazyElement(<UserRolePage />)} />
+                <Route path="admin/usage" element={lazyElement(<UsagePage />)} />
+                <Route path="admin/audit" element={lazyElement(<AuditLogPage />)} />
                 <Route path="admin/storage-operations">
                   <Route
                     index
@@ -129,11 +150,11 @@ export function App() {
                   />
                   <Route
                     path="replication"
-                    element={<StorageOperationsPage view="replication" />}
+                    element={lazyElement(<StorageOperationsPage view="replication" />)}
                   />
                   <Route
                     path="clusters"
-                    element={<StorageOperationsPage view="clusters" />}
+                    element={lazyElement(<StorageOperationsPage view="clusters" />)}
                   />
                 </Route>
                 <Route path="admin/service-operations">
@@ -143,36 +164,36 @@ export function App() {
                   />
                   <Route
                     path="verification"
-                    element={<ServiceOperationsPage view="verification" />}
+                    element={lazyElement(<ServiceOperationsPage view="verification" />)}
                   />
                   <Route
                     path="diagnostics"
-                    element={<ServiceOperationsPage view="diagnostics" />}
+                    element={lazyElement(<ServiceOperationsPage view="diagnostics" />)}
                   />
                 </Route>
                 <Route path="admin/etcd-operations">
                   <Route index element={<Navigate to="status" replace />} />
                   <Route
                     path="status"
-                    element={<EtcdOperationsPage view="status" />}
+                    element={lazyElement(<EtcdOperationsPage view="status" />)}
                   />
                   <Route path="maintenance">
                     <Route index element={<Navigate to="trend" replace />} />
                     <Route
                       path="trend"
-                      element={<EtcdOperationsPage view="trend" />}
+                      element={lazyElement(<EtcdOperationsPage view="trend" />)}
                     />
                     <Route
                       path="operations"
-                      element={<EtcdOperationsPage view="operations" />}
+                      element={lazyElement(<EtcdOperationsPage view="operations" />)}
                     />
                     <Route
                       path="tasks"
-                      element={<EtcdOperationsPage view="tasks" />}
+                      element={lazyElement(<EtcdOperationsPage view="tasks" />)}
                     />
                     <Route
                       path="events"
-                      element={<EtcdOperationsPage view="events" />}
+                      element={lazyElement(<EtcdOperationsPage view="events" />)}
                     />
                   </Route>
                 </Route>
@@ -185,10 +206,7 @@ export function App() {
               </Route>
             </Route>
 
-            <Route
-              path="*"
-              element={<Navigate to="/docs/overview" replace />}
-            />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </NavigationLeaveBlockProvider>
       </BrowserRouter>

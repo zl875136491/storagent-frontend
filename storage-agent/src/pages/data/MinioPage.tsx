@@ -12,12 +12,16 @@ import { Button } from "../../components/ui/button"
 import { Card, CardContent } from "../../components/ui/card"
 import { Input } from "../../components/ui/input"
 import { BrandLoading } from "../../components/BrandLoading"
+import { ListErrorState } from "../../components/ListErrorState"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 export default function MinioPage() {
+  useDocumentTitle("MinIO 服务管理")
   const { accessToken, user } = useAuth()
   const isAdmin = hasPermission(user, PERMISSIONS.regionManage)
   const [servers, setServers] = useState<MinioServer[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftWeight, setDraftWeight] = useState("")
@@ -25,11 +29,13 @@ export default function MinioPage() {
 
   const loadServers = async () => {
     setLoading(true)
+    setLoadError(false)
     try {
       const resp = await fetchMinioServersApi(accessToken ?? undefined)
       setServers(resp.data)
     } catch {
       // 错误已由 api client toast 展示
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -98,6 +104,12 @@ export default function MinioPage() {
 
       {loading ? (
         <BrandLoading label="正在加载 MinIO 服务列表..." />
+      ) : loadError ? (
+        <ListErrorState
+          message="MinIO 服务列表加载失败"
+          onRetry={() => void loadServers()}
+          retrying={loading}
+        />
       ) : servers.length === 0 ? (
         <Card className="flex min-h-[160px] flex-col items-center justify-center border-dashed bg-muted/40">
           <CardContent className="flex flex-col items-center gap-2 pt-0">

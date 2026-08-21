@@ -40,11 +40,13 @@ import {
 import { formatBytes, formatDateTime, parseBackendDate } from "../../lib/format"
 import { cn } from "../../lib/utils"
 import { BrandLoading } from "../../components/BrandLoading"
+import { ListErrorState } from "../../components/ListErrorState"
 import {
   RegionUsageChart,
   type RegionUsageRow,
   UsageScatterChart,
 } from "./UsageCharts"
+import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
 type Dimension = "app" | "api_key"
 type ViewMode = "chart" | "table"
@@ -396,6 +398,7 @@ function UsageEventTable({
 }
 
 export default function UsagePage() {
+  useDocumentTitle("用量统计")
   const { accessToken, user } = useAuth()
   const initialEnd = useMemo(() => new Date(), [])
   const [startInput, setStartInput] = useState(() => toShanghaiInput(new Date(initialEnd.getTime() - 7 * DAY_MS)))
@@ -412,6 +415,7 @@ export default function UsagePage() {
   const [failures, setFailures] = useState<UsageRegionFailure[]>([])
   const [loading, setLoading] = useState(true)
   const [optionsLoading, setOptionsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   const loadUsage = useCallback(async () => {
     const startAt = shanghaiInputToIso(startInput)
@@ -425,6 +429,7 @@ export default function UsagePage() {
       return
     }
     setLoading(true)
+    setLoadError(false)
     try {
       const result = await fetchUsageAcrossRegionsApi(
         {
@@ -442,6 +447,7 @@ export default function UsagePage() {
     } catch {
       setResponses([])
       setFailures([])
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -616,6 +622,8 @@ export default function UsagePage() {
         {activePanel === "timeline" ? <div id="usage-timeline-panel" className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
           {loading ? (
             <BrandLoading label="正在汇总各区域用量..." className="min-h-[20rem] flex-1 lg:min-h-0" compact />
+          ) : loadError ? (
+            <ListErrorState variant="plain" className="min-h-[20rem] lg:min-h-0" message="用量数据加载失败" onRetry={() => void loadUsage()} retrying={loading} />
           ) : !hasData ? (
             <div className="flex min-h-[20rem] flex-1 flex-col items-center justify-center text-center lg:min-h-0">
               <ChartScatter className="h-8 w-8 text-muted-foreground/55" aria-hidden />
@@ -670,6 +678,8 @@ export default function UsagePage() {
         {activePanel === "region" ? <div id="usage-region-panel" className="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
           {loading ? (
             <BrandLoading label="正在加载区域数据..." className="min-h-[20rem] flex-1 lg:min-h-0" compact />
+          ) : loadError ? (
+            <ListErrorState variant="plain" className="min-h-[20rem] lg:min-h-0" message="区域用量加载失败" onRetry={() => void loadUsage()} retrying={loading} />
           ) : !hasData || regionRows.length === 0 ? (
             <div className="flex min-h-[20rem] flex-1 flex-col items-center justify-center text-center lg:min-h-0">
               <MapPin className="h-8 w-8 text-muted-foreground/55" aria-hidden />
