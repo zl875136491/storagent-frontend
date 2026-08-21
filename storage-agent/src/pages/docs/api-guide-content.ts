@@ -33,8 +33,23 @@ export type ApiGuidePlane = "public" | "control" | "data"
 /** 代码示例的“角色”维度：App 后端可选 TS/Python 任一实现；浏览器前端只能是 TS/JS。 */
 export type ApiGuideCodeVariant = "server-ts" | "server-py" | "browser"
 
+/** 文档中的业务模块。模块是开发者与 AI Agent 按需引入能力的最小目录单元。 */
+export type ApiGuideModuleId =
+  | "endpoint-discovery"
+  | "multipart-upload"
+  | "object-access"
+  | "object-lifecycle"
+  | "one-time-share"
+
+export type ApiGuideModule = {
+  id: ApiGuideModuleId
+  title: string
+  description: string
+}
+
 export type ApiGuideEndpoint = {
   id: string
+  module: ApiGuideModuleId
   method: "GET" | "POST" | "DELETE"
   path: string
   summary: string
@@ -45,6 +60,50 @@ export type ApiGuideEndpoint = {
   notes?: string[]
   examples: Partial<Record<ApiGuideCodeVariant, string>>
   response?: string
+}
+
+export type ApiGuideModuleGroup = ApiGuideModule & {
+  endpoints: ApiGuideEndpoint[]
+}
+
+/**
+ * 模块定义是页面目录与 Markdown 导出的唯一分组来源。
+ * 新增接口时必须声明 module，避免接口重新回到无层级的平铺目录。
+ */
+export const API_GUIDE_MODULES: readonly ApiGuideModule[] = [
+  {
+    id: "endpoint-discovery",
+    title: "服务发现与选点",
+    description: "获取区域网关，并选择可达、低时延的 Storagent 节点。",
+  },
+  {
+    id: "multipart-upload",
+    title: "分片上传",
+    description: "创建上传会话、浏览器直传分片、断点续传，以及完成或清理会话。",
+  },
+  {
+    id: "object-access",
+    title: "对象查询与下载",
+    description: "读取对象元信息、选择可用区域，并为浏览器签发下载能力。",
+  },
+  {
+    id: "object-lifecycle",
+    title: "对象生命周期",
+    description: "查询对象和回收站，以及执行软删除和恢复。",
+  },
+  {
+    id: "one-time-share",
+    title: "一次性分享下载",
+    description: "创建一次性分享地址，并由公开引导页安全兑换。",
+  },
+]
+
+export function getApiGuideModules(endpoints: readonly ApiGuideEndpoint[]): ApiGuideModuleGroup[] {
+  return API_GUIDE_MODULES.reduce<ApiGuideModuleGroup[]>((groups, module) => {
+    const moduleEndpoints = endpoints.filter((endpoint) => endpoint.module === module.id)
+    if (moduleEndpoints.length > 0) groups.push({ ...module, endpoints: moduleEndpoints })
+    return groups
+  }, [])
 }
 
 export const API_VERSION = "v1"
@@ -748,6 +807,7 @@ export async function downloadFile(
 export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
   {
     id: "endpoints-list",
+    module: "endpoint-discovery",
     method: "GET",
     path: "/api/v1/public/endpoints",
     summary: "列出服务端点",
@@ -804,6 +864,7 @@ console.table(data.map(({ name, domain, endpoint, master }) => ({ name, domain, 
   },
   {
     id: "endpoints-test",
+    module: "endpoint-discovery",
     method: "GET",
     path: "/api/v1/public/endpoints/test",
     summary: "探测端点延迟",
@@ -821,6 +882,7 @@ console.log({ bytes: payload.byteLength, elapsedMs: performance.now() - startedA
   },
   {
     id: "multipart-init",
+    module: "multipart-upload",
     method: "POST",
     path: "/api/v1/files/multipart/init",
     summary: "初始化分片上传（控制面）",
@@ -887,6 +949,7 @@ print(upload)`,
   },
   {
     id: "multipart-part",
+    module: "multipart-upload",
     method: "POST",
     path: "/api/v1/files/multipart/part",
     summary: "上传单个分片（数据面）",
@@ -966,6 +1029,7 @@ async function uploadPart(baseURL: string, blob: Blob, partNumber: number) {
   },
   {
     id: "multipart-parts",
+    module: "multipart-upload",
     method: "GET",
     path: "/api/v1/files/multipart/parts",
     summary: "查询已上传分片（控制面）",
@@ -1020,6 +1084,7 @@ print(response.json()["parts"])`,
   },
   {
     id: "multipart-complete",
+    module: "multipart-upload",
     method: "POST",
     path: "/api/v1/files/multipart/complete",
     summary: "完成分片上传（控制面）",
@@ -1071,6 +1136,7 @@ print(response.json())`,
   },
   {
     id: "multipart-abort",
+    module: "multipart-upload",
     method: "POST",
     path: "/api/v1/files/multipart/abort",
     summary: "中止分片上传（控制面）",
@@ -1117,6 +1183,7 @@ print(response.json())`,
   },
   {
     id: "object-stat",
+    module: "object-access",
     method: "POST",
     path: "/api/v1/files/object/stat",
     summary: "获取对象元信息（控制面）",
@@ -1171,6 +1238,7 @@ print(response.json())`,
   },
   {
     id: "object-download",
+    module: "object-access",
     method: "GET",
     path: "/api/v1/files/object/download",
     summary: "下载对象或字节区间（数据面）",
@@ -1229,6 +1297,7 @@ URL.revokeObjectURL(a.href)`,
   },
   {
     id: "object-locate",
+    module: "object-access",
     method: "GET",
     path: "/api/v1/files/object/locate",
     summary: "定位对象所在节点（控制面）",
@@ -1319,6 +1388,7 @@ const replaceApiVersion = (value: string) => value.replaceAll("/api/v1", "/api/v
 // every inherited description, note and example so the rendered page and its
 // Markdown export never describe two incompatible error models.
 const upgradeV2Text = (value: string) => replaceApiVersion(value)
+  .replaceAll("**v1**", "**v2**")
   .replaceAll("413049", "quota.exceeded")
   .replaceAll("413050", "upload.part_too_large")
   .replaceAll("404032", "object.not_found")
@@ -1342,7 +1412,7 @@ const inheritedV2Endpoints: ApiGuideEndpoint[] = API_GUIDE_ENDPOINTS.map((endpoi
 
 const V2_OBJECT_ENDPOINTS: ApiGuideEndpoint[] = [
   {
-    id: "objects-list", method: "GET", path: "/api/v2/files/objects", summary: "列出对象与回收站",
+    id: "objects-list", module: "object-lifecycle", method: "GET", path: "/api/v2/files/objects", summary: "列出对象与回收站",
     description: "返回当前 App 的对象生命周期列表。v2 的删除、恢复和分享均以 object_id 为目标，不以 object_key 作为路径参数。",
     plane: "control", authentication: "api-key",
     params: [apiKeyHeaders(), { title: "Query", rows: [
@@ -1361,7 +1431,7 @@ const V2_OBJECT_ENDPOINTS: ApiGuideEndpoint[] = [
     response: "{\n  \"data\": {\n    \"items\": [{\"object_id\": \"obj-...\", \"object_key\": \"...\", \"size_bytes\": 1048576, \"state\": \"soft_deleted\", \"restore_until\": \"2026-09-09T08:00:00Z\"}],\n    \"next_cursor\": null, \"has_more\": false\n  }, \"request_id\": \"req-...\"\n}",
   },
   {
-    id: "objects-delete", method: "DELETE", path: "/api/v2/files/objects/{object_id}", summary: "软删除对象",
+    id: "objects-delete", module: "object-lifecycle", method: "DELETE", path: "/api/v2/files/objects/{object_id}", summary: "软删除对象",
     description: "将 active 对象标记为 soft_deleted。对象在 MinIO 中仍保留至恢复期结束，但应用逻辑配额会立即扣除该对象大小。",
     plane: "control", authentication: "api-key",
     params: [apiKeyHeaders(), { title: "Path", rows: [{ name: "object_id", type: "string", required: true, description: "objects 列表返回的不可变对象标识" }] }, { title: "Returns", rows: [{ name: "data.state", type: "soft_deleted", required: true, description: "删除后的状态" }, { name: "data.restore_until", type: "datetime", required: true, description: "恢复截止时间" }, { name: "request_id", type: "string", required: true, description: "请求追踪标识" }] }],
@@ -1370,7 +1440,7 @@ const V2_OBJECT_ENDPOINTS: ApiGuideEndpoint[] = [
     response: "{\n  \"data\": {\"object_id\": \"obj-...\", \"state\": \"soft_deleted\", \"restore_until\": \"2026-09-09T08:00:00Z\"},\n  \"request_id\": \"req-...\"\n}",
   },
   {
-    id: "objects-restore", method: "POST", path: "/api/v2/files/objects/{object_id}/restore", summary: "恢复软删除对象",
+    id: "objects-restore", module: "object-lifecycle", method: "POST", path: "/api/v2/files/objects/{object_id}/restore", summary: "恢复软删除对象",
     description: "在 restore_until 前将 soft_deleted 对象恢复为 active。恢复会重新校验当前 App 的逻辑配额。",
     plane: "control", authentication: "api-key",
     params: [apiKeyHeaders(), { title: "Path", rows: [{ name: "object_id", type: "string", required: true, description: "回收站列表返回的对象标识" }] }],
@@ -1379,7 +1449,7 @@ const V2_OBJECT_ENDPOINTS: ApiGuideEndpoint[] = [
     response: "{\n  \"data\": {\"object_id\": \"obj-...\", \"state\": \"active\"},\n  \"request_id\": \"req-...\"\n}",
   },
   {
-    id: "objects-share", method: "POST", path: "/api/v2/files/objects/{object_id}/share", summary: "创建一次性分享下载地址",
+    id: "objects-share", module: "one-time-share", method: "POST", path: "/api/v2/files/objects/{object_id}/share", summary: "创建一次性分享下载地址",
     description: "仅为 active 对象创建一次性下载地址。分享 token 位于 URL hash 中，浏览器不会将其发送到 Web 服务器访问日志。",
     plane: "control", authentication: "api-key",
     params: [apiKeyHeaders("application/json"), { title: "Path", rows: [{ name: "object_id", type: "string", required: true, description: "active 对象标识" }] }, { title: "Body", rows: [{ name: "expires_in_seconds", type: "integer", required: true, description: "60-900 秒" }, { name: "download_name", type: "string", description: "可选下载文件名" }] }],
@@ -1388,14 +1458,14 @@ const V2_OBJECT_ENDPOINTS: ApiGuideEndpoint[] = [
     response: "{\n  \"data\": {\"share_id\": \"share-...\", \"download_url\": \"https://.../api/v2/storage/objects/one-time-download#token=...\", \"single_use\": true, \"expires_in_seconds\": 300},\n  \"request_id\": \"req-...\"\n}",
   },
   {
-    id: "one-time-bootstrap", method: "GET", path: "/api/v2/storage/objects/one-time-download", summary: "一次性下载引导页",
+    id: "one-time-bootstrap", module: "one-time-share", method: "GET", path: "/api/v2/storage/objects/one-time-download", summary: "一次性下载引导页",
     description: "公开 HTML 引导页。从 hash 读取 token 后立即移除 hash，并以表单 POST 到同一路径。该请求不使用 x-api-key。",
     plane: "public", authentication: "public", params: [],
     notes: ["响应设置 no-store 与 no-referrer。客户端通常只需导航到 share 返回的 download_url，不应自行拼接 token。"],
     examples: { browser: "// 直接导航即可：引导页会从 hash 取 token，再 POST 兑换。\nwindow.location.assign(downloadUrl)" },
   },
   {
-    id: "one-time-redeem", method: "POST", path: "/api/v2/storage/objects/one-time-download", summary: "兑换一次性下载",
+    id: "one-time-redeem", module: "one-time-share", method: "POST", path: "/api/v2/storage/objects/one-time-download", summary: "兑换一次性下载",
     description: "接收引导页表单提交的 token，首次成功后返回对象二进制流并立即使 token 失效。该接口公开且不使用 x-api-key。",
     plane: "public", authentication: "public", params: [{ title: "Form", rows: [{ name: "token", type: "string", required: true, description: "仅由引导页从 URL hash 提交" }] }],
     notes: ["重复兑换、过期、已撤销的 token 返回 HTTP 410 与 error.code=share.invalid 或 share.consumed。"],
@@ -1448,6 +1518,77 @@ function codeFence(language: string, code: string) {
   return `\`\`\`${language}\n${code.trim()}\n\`\`\``
 }
 
+function apiGuideModulesMarkdown(endpoints: readonly ApiGuideEndpoint[]) {
+  return markdownTable(
+    ["模块", "能力范围", "包含接口"],
+    getApiGuideModules(endpoints).map((module) => [
+      module.title,
+      module.description,
+      module.endpoints.map((endpoint) => `\`${endpoint.method} ${endpoint.path}\``).join("<br>"),
+    ]),
+  )
+}
+
+function appendEndpointMarkdown(
+  lines: string[],
+  endpoint: ApiGuideEndpoint,
+  planeLabel: Record<ApiGuidePlane, string>,
+) {
+  lines.push(
+    `### ${endpoint.method} ${endpoint.path} - ${endpoint.summary}`,
+    "",
+    endpoint.description,
+    "",
+    `鉴权：${planeLabel[endpoint.plane]}`,
+    "",
+  )
+
+  for (const section of endpoint.params) {
+    lines.push(
+      `#### ${section.title}`,
+      "",
+      markdownTable(
+        ["字段", "类型", "必填", "说明"],
+        section.rows.map((row) => [
+          `\`${row.name}\``,
+          row.type ? `\`${row.type}\`` : "-",
+          row.required ? "是" : "否",
+          row.description,
+        ]),
+      ),
+      "",
+    )
+  }
+
+  if (endpoint.notes?.length) {
+    lines.push("#### 实现注意", "", ...endpoint.notes.map((note) => `- ${note}`), "")
+  }
+
+  // 文档默认约定：App 后端为 Python，浏览器前端为 TypeScript。
+  const variantOrder: ApiGuideCodeVariant[] = ["server-py", "browser"]
+  for (const variant of variantOrder) {
+    const code = endpoint.examples[variant]
+    if (!code) continue
+    const meta = API_GUIDE_CODE_VARIANTS[variant]
+    lines.push(`#### ${meta.label} 示例`, "", codeFence(meta.fence, code), "")
+  }
+
+  if (endpoint.response) {
+    lines.push("#### 成功响应示例", "", codeFence("json", endpoint.response), "")
+  }
+}
+
+function appendEndpointModulesMarkdown(
+  lines: string[],
+  endpoints: readonly ApiGuideEndpoint[],
+  planeLabel: Record<ApiGuidePlane, string>,
+) {
+  for (const module of getApiGuideModules(endpoints)) {
+    lines.push(`## ${module.title}`, "", module.description, "")
+    for (const endpoint of module.endpoints) appendEndpointMarkdown(lines, endpoint, planeLabel)
+  }
+}
+
 /**
  * 生成唯一一份「功能接口引导」Markdown（v1）。
  * 不再按语言拆分成两份独立文档；App 后端相关代码同时给出 TypeScript 与 Python，
@@ -1459,17 +1600,24 @@ export function generateApiGuideMarkdown() {
     "",
     "> 本文由 Storagent 控制台的结构化接口定义生成，是「功能接口引导」唯一维护的一份文档。",
     "",
-    "## 版本说明",
+    "## 接入基础",
+    "",
+    "### 版本说明",
     "",
     `- 当前业务接口版本为 **${API_VERSION}**，统一挂载在 \`${API_VERSION_PREFIX}\` 前缀下。`,
     "- 历史未带版本号的 `/api/*` 接口已经**完全下线，不再兼容**：其鉴权模型允许前端直接持有 `x-api-key`，一旦经浏览器网络面板泄露即可被冒用发起任意上传/下载，视为不安全设计，已被本页描述的能力令牌机制完全取代。",
     "- 本页固定使用 Python 编写 App 后端示例，使用 TypeScript 编写浏览器前端示例；其他技术栈请按相同接口边界自行适配。",
     "",
-    "## 给开发者与 AI 的实施目标",
+    "### 给开发者与 AI 的实施目标",
     "",
     "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。默认将 `STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local` 写入 App 后端环境变量，然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `POST /api/v1/files/object/stat` 的完整地址就是 `http://stor.1oa.com.cn/server/local/api/v1/files/object/stat`。只有明确需要指定区域时，才以区域短码替换 `local`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工：App 后端只做会话与鉴权，**上传和下载的文件字节由浏览器直连 Storagent**，不要经 App 后端中转；不要让浏览器前端持有 `x-api-key`。",
+    "本文从 API 模块开始使用 `## 模块名`、`### 接口` 的稳定层级。开发者或 AI Agent 可以按需读取一个模块及其全部子接口，而不必扫描无关能力。",
     "",
-    "## 默认网关基址",
+    "### 可按需加载的 API 模块",
+    "",
+    apiGuideModulesMarkdown(API_GUIDE_ENDPOINTS),
+    "",
+    "### 默认网关基址",
     "",
     "唯一默认基址为 `http://stor.1oa.com.cn/server/local`。每台服务器都把 `stor.1oa.com.cn` 解析到自身宿主 Nginx；`local` 永远表示发起请求的当前服务器。API 路径中的 `/server/{region}` 前缀会由 Nginx 移除，后端实际收到的仍是 `/api/v1/...`。",
     "",
@@ -1480,7 +1628,7 @@ export function generateApiGuideMarkdown() {
       ],
     ),
     "",
-    "## 按需指定区域",
+    "### 按需指定区域",
     "",
     "以下情况才需要将默认基址中的 `local` 替换为区域短码：业务或合规要求数据固定留在某区域；批处理、迁移、补偿或调度任务必须在指定区域执行；对象定位结果或业务策略要求选择特定区域；区域运维、故障处置或受控验收需要直达目标后端。普通上传、下载和控制面调用不需要指定区域。",
     "",
@@ -1497,7 +1645,7 @@ export function generateApiGuideMarkdown() {
     "",
     "App 后端默认配置：`STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local`。随后请求 `POST ${BASE_URL}/api/v1/files/object/stat`，并仅在 App 后端附加 `x-api-key` 请求头。浏览器页面位于同一网关时可使用相对路径 `/server/local/api/v1/...`；浏览器不得持有 `x-api-key`。",
     "",
-    "## 控制面 / 数据面与能力令牌",
+    "### 控制面 / 数据面与能力令牌",
     "",
     "- **控制面**（`multipart/init`、`multipart/complete`、`multipart/abort`、`multipart/parts`、`object/stat`、`object/locate`）：只允许 App 后端使用 `x-api-key` 调用，浏览器前端永远不直接访问。控制面只交换会话与元数据，不传输文件字节。",
     "- **数据面**（`multipart/part` 分片上传、`object/download` 下载）：**推荐实现时上传和下载都由浏览器直连 Storagent**，携带 App 后端签发的**能力令牌**（`token` 查询参数），不使用 `x-api-key`。不要把分片或对象内容经 App 后端中转，以免占用业务带宽、拉长时延并扩大密钥暴露面。",
@@ -1521,7 +1669,7 @@ export function generateApiGuideMarkdown() {
     "",
     codeFence("python", API_GUIDE_CAPABILITY_TOKEN_CODE.python),
     "",
-    "### 不可违反的安全约束",
+    "#### 不可违反的安全约束",
     "",
     "- `x-api-key` 只能由 App 后端持有，并通过请求头发送；浏览器前端、移动端包、日志和异常信息中都不能出现它。",
     "- 浏览器前端调用数据面接口时，必须使用能力令牌（`token` 查询参数），不得使用 `x-api-key`。",
@@ -1539,7 +1687,7 @@ export function generateApiGuideMarkdown() {
     "- 收到业务码 `413050` 后不要原样重试；使用不超过 64 MiB 的分片重新切分。",
     "- 收到业务码 `401051`/`401052`/`403053` 后回到 App 后端重新签发能力令牌，不要重试原令牌。",
     "",
-    "## 推荐流程",
+    "### 推荐流程",
     "",
     "1. 前端从 `/api/v1/public/endpoints` 获取候选 Storagent 地址，并调用 `/api/v1/public/endpoints/test` 选择可达、低时延节点（公共接口，无需任何凭据）。",
     "2. 前端向 App 后端发起上传请求；App 后端拒绝空文件后，用完整文件的 `size_bytes` 调用控制面 `multipart/init`，保存 `upload_id`/`object_key`，并签发分片上传能力令牌一并下发给前端。",
@@ -1548,20 +1696,20 @@ export function generateApiGuideMarkdown() {
     "5. 下载时前端向 App 后端申请下载凭据；App 后端校验业务权限后（可选调用控制面 `object/locate` 选定最佳节点），签发下载能力令牌并拼出最终 URL 返回给前端。",
     "6. 前端携带该 URL **直连**数据面 `object/download` 流式下载，文件字节不经过 App 后端，全程不接触 `x-api-key`。",
     "",
-    "## 最小可运行上传/下载 Demo",
+    "### 最小可运行上传/下载 Demo",
     "",
     "下面把推荐流程收成一份可直接照抄的最小 Demo（App 后端持有 `x-api-key` 并签发令牌；浏览器只拿 `part_token` / `download_url` 直连数据面）。",
     "实现前请先准备好上文的「能力令牌签发」与「App 后端公共请求封装」，并在 Storagent 控制台「应用管理 → 浏览器来源」登记当前页面 Origin。若浏览器直连 part/download 出现 `TypeError: Failed to fetch`，先确认 Origin 已添加到该应用，而不是去改 Storagent 环境变量。",
     "",
-    "### App 后端业务接口 · Python",
+    "#### App 后端业务接口 · Python",
     "",
     codeFence("python", API_GUIDE_MINIMAL_DEMO["app-py"]),
     "",
-    "### 浏览器前端 · 完整上传 + 下载",
+    "#### 浏览器前端 · 完整上传 + 下载",
     "",
     codeFence("typescript", API_GUIDE_MINIMAL_DEMO.browser),
     "",
-    "### Demo 自检",
+    "#### Demo 自检",
     "",
     "1. `POST /app/upload/init` 返回 `upload_id` / `object_key`（服务端生成）/ `part_token` / `part_url`，响应中**没有** `x-api-key`。",
     "2. 浏览器 Network 里 `multipart/part` 请求只有 `?token=`，没有 `x-api-key` 请求头。",
@@ -1569,13 +1717,11 @@ export function generateApiGuideMarkdown() {
     "4. `POST /app/download/url` 返回的 URL 含 `token=`；浏览器直连下载内容与上传文件一致。",
     "5. 空文件在 App 后端被 400 拒绝；超额 `size_bytes` 在控制面 init 返回 `413049`。",
     "",
-    "## App 后端公共请求封装",
+    "### App 后端公共请求封装",
     "",
     "#### App 后端 · Python",
     "",
     codeFence("python", API_GUIDE_SERVER_SETUP.python),
-    "",
-    "## API 参考",
     "",
   ]
 
@@ -1585,53 +1731,12 @@ export function generateApiGuideMarkdown() {
     data: "数据面 · 浏览器前端应直连（`x-api-key` 或能力令牌 `token` 二选一）",
   }
 
-  for (const endpoint of API_GUIDE_ENDPOINTS) {
-    lines.push(
-      `### ${endpoint.method} ${endpoint.path} - ${endpoint.summary}`,
-      "",
-      endpoint.description,
-      "",
-      `鉴权：${planeLabel[endpoint.plane]}`,
-      "",
-    )
-
-    for (const section of endpoint.params) {
-      lines.push(
-        `#### ${section.title}`,
-        "",
-        markdownTable(
-          ["字段", "类型", "必填", "说明"],
-          section.rows.map((row) => [
-            `\`${row.name}\``,
-            row.type ? `\`${row.type}\`` : "-",
-            row.required ? "是" : "否",
-            row.description,
-          ]),
-        ),
-        "",
-      )
-    }
-
-    if (endpoint.notes?.length) {
-      lines.push("#### 实现注意", "", ...endpoint.notes.map((note) => `- ${note}`), "")
-    }
-
-    // 文档默认约定：App 后端为 Python，浏览器前端为 TypeScript。
-    const variantOrder: ApiGuideCodeVariant[] = ["server-py", "browser"]
-    for (const variant of variantOrder) {
-      const code = endpoint.examples[variant]
-      if (!code) continue
-      const meta = API_GUIDE_CODE_VARIANTS[variant]
-      lines.push(`#### ${meta.label} 示例`, "", codeFence(meta.fence, code), "")
-    }
-
-    if (endpoint.response) {
-      lines.push("#### 成功响应示例", "", codeFence("json", endpoint.response), "")
-    }
-  }
+  appendEndpointModulesMarkdown(lines, API_GUIDE_ENDPOINTS, planeLabel)
 
   lines.push(
-    "## 错误处理与跨区域回退",
+    "## 可靠性与错误处理",
+    "",
+    "### 错误处理与跨区域回退",
     "",
     "Storagent 的失败响应通常包含 `msg`、`data` 和稳定的业务 `code`。实现时同时检查 HTTP 状态与业务码。",
     "",
@@ -1641,7 +1746,7 @@ export function generateApiGuideMarkdown() {
     "",
     codeFence("python", API_GUIDE_ERROR_EXAMPLES.python),
     "",
-    "## 接入验收清单",
+    "### 接入验收清单",
     "",
     "- [ ] `x-api-key` 只存在于 App 后端环境变量和 `x-api-key` 请求头中，浏览器前端从未持有过它。",
     "- [ ] 数据面接口（`multipart/part`、`object/download`）由浏览器前端直连 Storagent，携带能力令牌 `token`，而不是 `x-api-key`；上传和下载的文件字节均未经过 App 后端中转。",
@@ -1673,12 +1778,27 @@ export function generateApiGuideMarkdown() {
 export function generateV2ApiGuideMarkdown() {
   // The v1 generator already owns the shared upload/download material. Its
   // numeric-error appendix must not leak into v2, which uses string codes.
-  const inherited = upgradeV2Text(generateApiGuideMarkdown()).replaceAll("（v1）", "（v2）")
-  const withoutV1ErrorAppendix = inherited.slice(0, inherited.indexOf("## 错误处理与跨区域回退"))
-  const lines = [
-    withoutV1ErrorAppendix,
+  const inherited = upgradeV2Text(generateApiGuideMarkdown())
+    .replaceAll("（v1）", "（v2）")
+    .replace(
+      upgradeV2Text(apiGuideModulesMarkdown(API_GUIDE_ENDPOINTS)),
+      apiGuideModulesMarkdown(API_GUIDE_V2_ENDPOINTS),
+    )
+  const reliabilityIndex = inherited.indexOf("## 可靠性与错误处理")
+  const withoutV1ErrorAppendix = reliabilityIndex >= 0 ? inherited.slice(0, reliabilityIndex) : inherited
+  const lines: string[] = [withoutV1ErrorAppendix, ""]
+  const planeLabel: Record<ApiGuidePlane, string> = {
+    public: "公共接口，无需 x-api-key",
+    control: "控制面，仅 App 后端使用 x-api-key",
+    data: "数据面，浏览器使用 token",
+  }
+
+  appendEndpointModulesMarkdown(lines, V2_OBJECT_ENDPOINTS, planeLabel)
+
+  lines.push(
+    "## 可靠性与错误处理",
     "",
-    "## v2 响应与错误契约",
+    "### v2 响应与错误契约",
     "",
     "成功 JSON 响应固定为 { data, request_id }。失败 JSON 响应固定为 { error: { code, message, retryable, details }, request_id }。error.code 是稳定字符串；记录 request_id，并只在 retryable=true 时退避重试。",
     "",
@@ -1686,27 +1806,20 @@ export function generateV2ApiGuideMarkdown() {
     "{\n  \"error\": {\n    \"code\": \"quota.restore_exceeded\",\n    \"message\": \"恢复对象将超过存储限额\",\n    \"retryable\": false,\n    \"details\": {}\n  },\n  \"request_id\": \"req-...\"\n}",
     "```",
     "",
-    "## v2 对象生命周期与一次性分享",
+    "### v2 错误码分类",
     "",
-    "软删除会立即释放应用逻辑配额，MinIO 原始数据保留至恢复期结束。恢复时会重新校验配额。分享 token 位于 URL hash，不会进入 Web 服务器访问日志；首次成功兑换后立即失效。",
+    markdownTable(["错误码", "含义", "建议处理"], API_GUIDE_V2_ERROR_CODES.map((row) => [...row])),
     "",
-    "v2 的上传、下载数据面规则与上文相同：浏览器直连 Storagent，不要经 App 后端中转文件字节。前端 Origin 在控制台「应用管理 → 浏览器来源」登记。",
+    "### v2 接入验收补充",
     "",
-  ]
-  const planeLabel: Record<ApiGuidePlane, string> = { public: "公共接口，无需 x-api-key", control: "控制面，仅 App 后端使用 x-api-key", data: "数据面，浏览器使用 token" }
-  for (const endpoint of V2_OBJECT_ENDPOINTS) {
-    lines.push("### " + endpoint.method + " " + endpoint.path + " - " + endpoint.summary, "", endpoint.description, "", "鉴权：" + planeLabel[endpoint.plane], "")
-    for (const section of endpoint.params) {
-      lines.push("#### " + section.title, "", markdownTable(["字段", "类型", "必填", "说明"], section.rows.map((row) => ["`" + row.name + "`", row.type ? "`" + row.type + "`" : "-", row.required ? "是" : "否", row.description])), "")
-    }
-    if (endpoint.notes?.length) lines.push("#### 实现注意", "", ...endpoint.notes.map((note) => "- " + note), "")
-    for (const variant of ["server-py", "browser"] as const) {
-      const example = endpoint.examples[variant]
-      if (example) lines.push("#### " + API_GUIDE_CODE_VARIANTS[variant].label + " 示例", "", codeFence(API_GUIDE_CODE_VARIANTS[variant].fence, example), "")
-    }
-    if (endpoint.response) lines.push("#### 成功响应示例", "", codeFence("json", endpoint.response), "")
-  }
-  lines.push("## v2 错误码分类", "", markdownTable(["错误码", "含义", "建议处理"], API_GUIDE_V2_ERROR_CODES.map((row) => [...row])), "", "## v2 接入验收补充", "", "- [ ] 成功和失败日志都保存 request_id，失败按 error.code 分类。", "- [ ] 使用 objects 列表获得 object_id；删除后展示 restore_until，恢复失败处理 quota.restore_exceeded。", "- [ ] 分享只对 active 对象创建；download_url 的 hash token 不进入日志、埋点或 referrer。", "- [ ] 已验证一次性地址首次兑换成功、第二次兑换返回 410，且公开兑换不附加 x-api-key。", "- [ ] 上传分片与下载对象由浏览器直连 Storagent 数据面，文件字节不经 App 后端中转。", "- [ ] 业务前端 Origin 已在控制台「应用管理 → 浏览器来源」登记；未登记时不会把 CORS 失败误判为业务错误。", "")
+    "- [ ] 成功和失败日志都保存 request_id，失败按 error.code 分类。",
+    "- [ ] 使用 objects 列表获得 object_id；删除后展示 restore_until，恢复失败处理 quota.restore_exceeded。",
+    "- [ ] 分享只对 active 对象创建；download_url 的 hash token 不进入日志、埋点或 referrer。",
+    "- [ ] 已验证一次性地址首次兑换成功、第二次兑换返回 410，且公开兑换不附加 x-api-key。",
+    "- [ ] 上传分片与下载对象由浏览器直连 Storagent 数据面，文件字节不经 App 后端中转。",
+    "- [ ] 业务前端 Origin 已在控制台「应用管理 → 浏览器来源」登记；未登记时不会把 CORS 失败误判为业务错误。",
+    "",
+  )
   return lines.join("\n")
 }
 

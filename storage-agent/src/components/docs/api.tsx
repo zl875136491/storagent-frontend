@@ -31,17 +31,24 @@ export function ApiEndpoint({
   method,
   path,
   summary,
+  headingLevel = 2,
   children,
 }: {
   id: string
   method: HttpMethod
   path: string
   summary: string
+  headingLevel?: 2 | 3
   children?: ReactNode
 }) {
   return (
-    <section className="mt-10 scroll-m-24 border-t border-border/70 pt-8 first:mt-0 first:border-t-0 first:pt-0">
-      <DocHeading id={id} level={2}>
+    <section
+      className={cn(
+        "scroll-m-24 border-t border-border/70",
+        headingLevel === 2 ? "mt-10 pt-8 first:mt-0 first:border-t-0 first:pt-0" : "mt-7 pt-6",
+      )}
+    >
+      <DocHeading id={id} level={headingLevel} className="mt-0">
         {summary}
       </DocHeading>
       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-muted/30 px-3 py-2.5">
@@ -56,6 +63,7 @@ export function ApiEndpoint({
 export function ApiParamTable({
   title,
   rows,
+  headingLevel = 3,
 }: {
   title: string
   rows: Array<{
@@ -64,10 +72,12 @@ export function ApiParamTable({
     required?: boolean
     description: ReactNode
   }>
+  headingLevel?: 3 | 4
 }) {
+  const Heading = headingLevel === 4 ? "h4" : "h3"
   return (
     <div className="mt-5">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+      <Heading className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</Heading>
       <div className="mt-2 overflow-hidden rounded-xl border border-border/70">
         <table className="w-full text-left text-xs">
           <tbody>

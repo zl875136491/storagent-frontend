@@ -77,7 +77,9 @@ export function DocsOnThisPage({ className }: { className?: string }) {
           href={`#${item.id}`}
           className={cn(
             "block rounded-md px-2 py-1 transition-colors",
-            item.level === 3 && "pl-4",
+            item.level === 2
+              ? "mt-2 border-l-2 border-border/80 pl-2 font-semibold text-foreground first:mt-0"
+              : "pl-5 text-[11px]",
             activeId === item.id
               ? "bg-accent/80 font-medium text-accent-foreground"
               : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",

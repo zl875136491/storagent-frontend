@@ -15,6 +15,7 @@ import { DocComingSoon } from "@/components/docs/coming-soon"
 import { useDocVersion } from "@/components/docs/version-switcher"
 import {
   API_GUIDE_CODE_VARIANTS,
+  getApiGuideModules,
   getApiGuideContent,
   type ApiGuideCodeVariant,
   type ApiGuidePlane,
@@ -33,24 +34,33 @@ const VARIANT_ORDER: ApiGuideCodeVariant[] = ["server-py", "browser"]
 export default function ApiGuidePage() {
   const [version] = useDocVersion()
   const content = useMemo(() => getApiGuideContent(version), [version])
+  const modules = useMemo(
+    () => (content.status === "released" ? getApiGuideModules(content.endpoints) : []),
+    [content],
+  )
   const toc = useMemo(() => {
     if (content.status !== "released") {
       return [{ id: "coming-soon", title: "版本预告", level: 2 as const }]
     }
     return [
-      { id: "versioning", title: "版本说明", level: 2 as const },
-      { id: "planes", title: "控制面 / 数据面", level: 2 as const },
-      { id: "workflow", title: "推荐流程", level: 2 as const },
-      { id: "minimal-demo", title: "最小可运行 Demo", level: 2 as const },
-      { id: "client-setup", title: "公共请求封装", level: 2 as const },
-      ...content.endpoints.map((endpoint) => ({
-        id: endpoint.id,
-        title: endpoint.summary,
-        level: 2 as const,
-      })),
-      { id: "errors", title: "错误与跨区域回退", level: 2 as const },
+      { id: "integration", title: "接入基础", level: 2 as const },
+      { id: "versioning", title: "版本说明", level: 3 as const },
+      { id: "planes", title: "控制面 / 数据面", level: 3 as const },
+      { id: "workflow", title: "推荐流程", level: 3 as const },
+      { id: "minimal-demo", title: "最小可运行 Demo", level: 3 as const },
+      { id: "client-setup", title: "公共请求封装", level: 3 as const },
+      ...modules.flatMap((module) => [
+        { id: `module-${module.id}`, title: module.title, level: 2 as const },
+        ...module.endpoints.map((endpoint) => ({
+          id: endpoint.id,
+          title: endpoint.summary,
+          level: 3 as const,
+        })),
+      ]),
+      { id: "reliability", title: "可靠性与错误处理", level: 2 as const },
+      { id: "errors", title: "错误与跨区域回退", level: 3 as const },
     ]
-  }, [content])
+  }, [content, modules])
   useRegisterToc(toc)
 
   if (content.status !== "released") {
@@ -61,6 +71,52 @@ export default function ApiGuidePage() {
         summary={content.summary}
         highlights={content.highlights}
       />
+    )
+  }
+
+  const renderEndpoint = (endpoint: (typeof content.endpoints)[number]) => {
+    const variants = VARIANT_ORDER
+      .filter((variant) => endpoint.examples[variant])
+      .map((variant) => ({
+        id: variant,
+        label: API_GUIDE_CODE_VARIANTS[variant].label,
+        language: API_GUIDE_CODE_VARIANTS[variant].fence,
+        code: endpoint.examples[variant]!,
+      }))
+
+    return (
+      <ApiEndpoint
+        key={endpoint.id}
+        id={endpoint.id}
+        method={endpoint.method}
+        path={endpoint.path}
+        summary={endpoint.summary}
+        headingLevel={3}
+      >
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{endpoint.description}</p>
+        <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">鉴权</span>
+          {PLANE_LABEL[endpoint.plane]}
+        </div>
+
+        {endpoint.params.map((section) => (
+          <ApiParamTable key={section.title} title={section.title} rows={section.rows} headingLevel={4} />
+        ))}
+        {endpoint.notes?.length ? (
+          <div className="mt-4 border-l-2 border-amber-500/70 pl-3 text-xs leading-relaxed text-muted-foreground">
+            {endpoint.notes.map((note) => (
+              <p key={note} className="mt-1 first:mt-0">{note}</p>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="mt-4 space-y-3">
+          <DocCodeTabs tabs={variants} />
+          {endpoint.response ? (
+            <DocCodeBlock language="json" title="Response 200" code={endpoint.response} />
+          ) : null}
+        </div>
+      </ApiEndpoint>
     )
   }
 
@@ -93,10 +149,15 @@ export default function ApiGuidePage() {
         </a>
       </div>
 
-      <section id="versioning" className="mt-8 scroll-m-36">
-        <DocHeading id="versioning-heading" level={2} className="mt-0">
-          版本说明
+      <section id="integration" className="mt-8 scroll-m-36">
+        <DocHeading id="integration-heading" level={2} className="mt-0">
+          接入基础
         </DocHeading>
+
+        <section id="versioning" className="mt-6 scroll-m-36">
+          <DocHeading id="versioning-heading" level={3} className="mt-0">
+          版本说明
+          </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           当前业务接口版本为 <code className="rounded bg-muted px-1 font-mono text-[11px]">{content.version}</code>，
           统一挂载在 <code className="rounded bg-muted px-1 font-mono text-[11px]">{content.versionPrefix}</code> 前缀下。
@@ -165,7 +226,7 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
       </section>
 
       <section id="planes" className="mt-10 scroll-m-36">
-        <DocHeading id="planes-heading" level={2} className="mt-0">
+        <DocHeading id="planes-heading" level={3} className="mt-0">
           控制面 / 数据面
         </DocHeading>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -217,7 +278,7 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
       </section>
 
       <section id="workflow" className="mt-10 scroll-m-36">
-        <DocHeading id="workflow-heading" level={2} className="mt-0">
+        <DocHeading id="workflow-heading" level={3} className="mt-0">
           推荐流程
         </DocHeading>
         <DocSteps
@@ -232,7 +293,7 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
       </section>
 
       <section id="minimal-demo" className="mt-10 scroll-m-36">
-        <DocHeading id="minimal-demo-heading" level={2} className="mt-0">
+        <DocHeading id="minimal-demo-heading" level={3} className="mt-0">
           最小可运行上传/下载 Demo
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
@@ -274,7 +335,7 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
       </section>
 
       <section id="client-setup" className="mt-10 scroll-m-36">
-        <DocHeading id="client-setup-heading" level={2} className="mt-0">
+        <DocHeading id="client-setup-heading" level={3} className="mt-0">
           App 后端公共请求封装
         </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
@@ -288,55 +349,26 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
         </div>
       </section>
 
-      {content.endpoints.map((endpoint) => {
-        const variants = VARIANT_ORDER
-          .filter((variant) => endpoint.examples[variant])
-          .map((variant) => ({
-            id: variant,
-            label: API_GUIDE_CODE_VARIANTS[variant].label,
-            language: API_GUIDE_CODE_VARIANTS[variant].fence,
-            code: endpoint.examples[variant]!,
-          }))
+      </section>
 
-        return (
-          <ApiEndpoint
-            key={endpoint.id}
-            id={endpoint.id}
-            method={endpoint.method}
-            path={endpoint.path}
-            summary={endpoint.summary}
-          >
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{endpoint.description}</p>
-            <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground">鉴权</span>
-              {PLANE_LABEL[endpoint.plane]}
-            </div>
+      {modules.map((module) => (
+        <section key={module.id} id={`module-${module.id}`} className="mt-12 scroll-m-36">
+          <DocHeading id={`module-${module.id}-heading`} level={2} className="mt-0">
+            {module.title}
+          </DocHeading>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{module.description}</p>
+          {module.endpoints.map(renderEndpoint)}
+        </section>
+      ))}
 
-            {endpoint.params.map((section) => (
-              <ApiParamTable key={section.title} title={section.title} rows={section.rows} />
-            ))}
-            {endpoint.notes?.length ? (
-              <div className="mt-4 border-l-2 border-amber-500/70 pl-3 text-xs leading-relaxed text-muted-foreground">
-                {endpoint.notes.map((note) => (
-                  <p key={note} className="mt-1 first:mt-0">{note}</p>
-                ))}
-              </div>
-            ) : null}
-
-            <div className="mt-4 space-y-3">
-              <DocCodeTabs tabs={variants} />
-              {endpoint.response ? (
-                <DocCodeBlock language="json" title="Response 200" code={endpoint.response} />
-              ) : null}
-            </div>
-          </ApiEndpoint>
-        )
-      })}
-
-      <section id="errors" className="mt-10 scroll-m-36 border-t border-border/70 pt-8">
-        <DocHeading id="errors-heading" level={2} className="mt-0">
-          错误与跨区域回退
+      <section id="reliability" className="mt-12 scroll-m-36">
+        <DocHeading id="reliability-heading" level={2} className="mt-0">
+          可靠性与错误处理
         </DocHeading>
+        <section id="errors" className="mt-6 scroll-m-36">
+          <DocHeading id="errors-heading" level={3} className="mt-0">
+          错误与跨区域回退
+          </DocHeading>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
           {version === "v2" ? "失败响应包含 error.code、retryable、details 与 request_id。调用侧应记录请求 ID，并仅在 retryable=true 时退避重试。" : "失败响应通常包含 msg、data 和稳定业务 code。调用侧应同时检查 HTTP 状态与业务码，并保留可恢复上下文。"}
         </p>
@@ -365,6 +397,7 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
             tabs={[{ id: "server-py", label: "App 后端", language: "python", code: content.errorExamples.python }]}
           />
         </div>
+        </section>
       </section>
     </div>
   )
