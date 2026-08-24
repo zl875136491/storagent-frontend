@@ -446,32 +446,56 @@ export interface ReplicationOperationsResponse {
   buckets: ReplicationBucketMetric[];
 }
 
-export type OrphanBucketKind =
-  | "orphan"
+export type UnmanagedBucketKind =
+  | "unmanaged"
   | "disabled_application"
   | "system";
 
-export interface OrphanBucketItem {
+export type UnmanagedBucketDisposition =
+  | "unreviewed"
+  | "retained"
+  | "deleting"
+  | "delete_failed"
+  | "not_applicable";
+
+export interface UnmanagedBucketItem {
   name: string;
-  kind: OrphanBucketKind;
+  kind: UnmanagedBucketKind;
   app_name: string;
   app_shown_name: string;
   servers: string[];
   missing_servers: string[];
+  unreachable_servers: string[];
+  coverage_status: "complete" | "partial" | "unreachable";
+  disposition: UnmanagedBucketDisposition;
+  disposition_reason: string;
+  disposition_updated_at: string | null;
 }
 
-export interface OrphanBucketOperationsResponse {
+export interface UnmanagedBucketOperationsResponse {
   generated_at: string;
   servers: string[];
   summary: {
-    orphan_count: number;
+    unmanaged_count: number;
     disabled_application_count: number;
     system_bucket_count: number;
     unavailable_server_count: number;
   };
-  buckets: OrphanBucketItem[];
+  buckets: UnmanagedBucketItem[];
   errors: Record<string, string>;
 }
+
+export interface UnmanagedBucketActionResponse {
+  message: string;
+  bucket: string;
+  disposition: UnmanagedBucketDisposition;
+  operation: StorageOperationItem | null;
+}
+
+// Kept only for older code paths that still compile against the former name.
+export type OrphanBucketKind = UnmanagedBucketKind;
+export type OrphanBucketItem = UnmanagedBucketItem;
+export type OrphanBucketOperationsResponse = UnmanagedBucketOperationsResponse;
 
 export interface ClusterDriveHealth {
   endpoint: string;
@@ -664,7 +688,7 @@ export interface EtcdTaskListResponse {
 
 export interface StorageOperationItem {
   id: string;
-  kind: "cluster_heal" | "replication_reconcile" | "replication_resync";
+  kind: "cluster_heal" | "replication_reconcile" | "replication_resync" | "unmanaged_bucket_delete";
   status: "queued" | "running" | "succeeded" | "failed";
   server: string;
   bucket: string;
@@ -1418,14 +1442,50 @@ export async function fetchReplicationOperationsApi(
   );
 }
 
-export async function fetchOrphanBucketOperationsApi(
+export async function fetchUnmanagedBucketOperationsApi(
   accessToken?: string,
-): Promise<OrphanBucketOperationsResponse> {
-  return apiGet<OrphanBucketOperationsResponse>(
-    "/api/v1/storage/operations/orphan-buckets",
+): Promise<UnmanagedBucketOperationsResponse> {
+  return apiGet<UnmanagedBucketOperationsResponse>(
+    "/api/v1/storage/operations/unmanaged-buckets",
     accessToken,
   );
 }
+
+export async function retainUnmanagedBucketApi(
+  bucket: string,
+  reason: string,
+  accessToken?: string,
+): Promise<UnmanagedBucketActionResponse> {
+  return apiPost<{ reason: string }, UnmanagedBucketActionResponse>(
+    `/api/v1/storage/operations/unmanaged-buckets/${encodeURIComponent(bucket)}/retain`,
+    { reason },
+    accessToken,
+  );
+}
+
+export async function releaseUnmanagedBucketRetentionApi(
+  bucket: string,
+  accessToken?: string,
+): Promise<UnmanagedBucketActionResponse> {
+  return apiDelete<UnmanagedBucketActionResponse>(
+    `/api/v1/storage/operations/unmanaged-buckets/${encodeURIComponent(bucket)}/retain`,
+    accessToken,
+  );
+}
+
+export async function deleteUnmanagedBucketApi(
+  bucket: string,
+  confirmation: string,
+  accessToken?: string,
+): Promise<UnmanagedBucketActionResponse> {
+  return apiPost<{ confirmation: string }, UnmanagedBucketActionResponse>(
+    `/api/v1/storage/operations/unmanaged-buckets/${encodeURIComponent(bucket)}/delete`,
+    { confirmation },
+    accessToken,
+  );
+}
+
+export const fetchOrphanBucketOperationsApi = fetchUnmanagedBucketOperationsApi;
 
 export async function reconcileReplicationApi(
   bucket: string,

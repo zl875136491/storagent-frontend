@@ -67,6 +67,16 @@ function LegacyDocsRedirect() {
   return <Navigate to={`/docs/${slug}${search ? `?${search}` : ""}`} replace />;
 }
 
+function LegacyUnmanagedBucketsRedirect() {
+  const location = useLocation();
+  return (
+    <Navigate
+      to={`/admin/storage-operations/unmanaged-buckets${location.search}${location.hash}`}
+      replace
+    />
+  );
+}
+
 // AI configuration and assistant routes are intentionally not registered.
 // Their source remains under pages/admin and features/ai for a later re-enable.
 
@@ -157,8 +167,12 @@ export function App() {
                     element={lazyElement(<StorageOperationsPage view="clusters" />)}
                   />
                   <Route
+                    path="unmanaged-buckets"
+                    element={lazyElement(<StorageOperationsPage view="unmanaged_buckets" />)}
+                  />
+                  <Route
                     path="orphan-buckets"
-                    element={lazyElement(<StorageOperationsPage view="orphan_buckets" />)}
+                    element={<LegacyUnmanagedBucketsRedirect />}
                   />
                 </Route>
                 <Route path="admin/service-operations">
