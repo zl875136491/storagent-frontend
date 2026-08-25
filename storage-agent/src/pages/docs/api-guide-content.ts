@@ -1486,6 +1486,7 @@ export const API_GUIDE_V2_ERROR_CODES: readonly ApiGuideErrorCode[] = [
   ["upload.part_too_large", "上传分片过大", "重新切分为不超过 64 MiB 的分片"],
   ["share.invalid", "分享链接无效或过期", "重新创建分享地址"],
   ["share.consumed", "分享地址已使用", "一次性链接不可重试，重新创建"],
+  ["storage.authentication_failed", "存储服务认证或授权失败", "检查 Storagent 侧 MinIO 凭证与桶权限；不要自动重试"],
   ["storage.unavailable", "存储依赖暂不可用", "可按 retryable=true 退避重试并保留 request_id"],
 ]
 
