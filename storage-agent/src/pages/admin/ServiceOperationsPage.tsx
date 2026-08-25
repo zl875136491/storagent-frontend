@@ -106,6 +106,18 @@ function DiagnosticRunStateIcon({ value }: { value: DiagnosticRun["overall_statu
   return value === "passed" ? <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" aria-label="通过" /> : <CircleAlert className={cn("mx-auto h-4 w-4", value === "partial" ? "text-amber-600" : "text-destructive")} aria-label={value === "partial" ? "部分通过" : "失败"} />
 }
 
+const diagnosticCheckLabels: Record<string, string> = {
+  dns: "DNS 解析",
+  gateway: "网关路径",
+  authentication: "认证与版本契约",
+  quota_capacity: "配额与容量预检",
+  storage: "存储读写",
+}
+
+function diagnosticCheckLabel(name: string) {
+  return diagnosticCheckLabels[name] ?? name
+}
+
 function parseDiagnosticDetail(detail: string) {
   const jsonStart = detail.indexOf("{")
   if (jsonStart < 0) return { message: detail }
@@ -137,6 +149,7 @@ function StructuredDiagnosticLog({ run }: { run: DiagnosticRun }) {
     overall_status: run.overall_status,
     checks: run.checks.map((check) => ({
       name: check.name,
+      stage: diagnosticCheckLabel(check.name),
       status: check.status,
       latency_ms: check.latency_ms,
       ...parseDiagnosticDetail(check.detail),
@@ -157,7 +170,15 @@ function DiagnosticWorkspace({ version, accessToken }: { version: "v1" | "v2"; a
     setLoading(true)
     try {
       const response = await fetchDiagnosticRunsApi(accessToken)
-      const visible = response.data.filter((item) => item.api_version === version)
+      const visible = response.data
+        .filter((item) => item.api_version === version)
+        .map((item) => ({
+          ...item,
+          checks: item.checks.map((check) => ({
+            ...check,
+            name: diagnosticCheckLabel(check.name),
+          })),
+        }))
       setRuns(visible)
       setSelected((current) => visible.find((item) => item.id === current?.id) ?? visible[0] ?? null)
     } finally {
@@ -195,7 +216,7 @@ function DiagnosticWorkspace({ version, accessToken }: { version: "v1" | "v2"; a
     <section className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(21rem,0.75fr)_minmax(0,1.25fr)]">
       <div className="flex min-h-0 flex-col gap-4">
         <Card className="shrink-0 rounded-lg shadow-none"><CardContent className="p-5">
-          <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><Terminal className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden /><div><h2 className="text-base font-semibold">{version.toUpperCase()} 调用方接入诊断</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">下载脚本，或复制命令后在调用方后端交互式执行。仅需基础地址与 APIKey；它会逐项检查 DNS、网关路径、认证、版本契约与存储读写，并回传脱敏诊断记录。</p></div></div><a href={scriptUrl} download title="下载自诊断脚本" className="mt-7 inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Download className="h-3.5 w-3.5" aria-hidden />下载</a></div>
+          <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><Terminal className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden /><div><h2 className="text-base font-semibold">{version.toUpperCase()} 调用方接入诊断</h2><p className="mt-1 text-xs leading-relaxed text-muted-foreground">下载脚本，或复制命令后在调用方后端交互式执行。仅需基础地址与 APIKey；它会逐项检查 DNS、网关路径、认证、版本契约、配额与容量预检、存储读写，并回传脱敏诊断记录。</p></div></div><a href={scriptUrl} download title="下载自诊断脚本" className="mt-7 inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Download className="h-3.5 w-3.5" aria-hidden />下载</a></div>
           <div className="mt-4 flex min-w-0 overflow-hidden rounded-md border border-border/70 bg-muted/30"><code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-3 py-2.5 font-mono text-[11px] leading-5 text-foreground">{executeCommand}</code><Button type="button" size="sm" variant="outline" className={cn("h-auto shrink-0 rounded-none border-y-0 border-r-0 px-3", copiedCommand && "text-emerald-600")} title={copiedCommand ? "复制成功" : "复制执行命令"} onClick={() => void copyExecuteCommand()}>{copiedCommand ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}{copiedCommand ? "复制成功" : "复制"}</Button></div>
         </CardContent></Card>
         <Card className="min-h-0 flex-1 rounded-lg shadow-none"><CardContent className="flex h-full min-h-0 flex-col p-0">
