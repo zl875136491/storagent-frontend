@@ -695,6 +695,85 @@ export interface EtcdTaskListResponse {
   data: EtcdTaskResponse[];
 }
 
+export interface CeleryBrokerStatus {
+  enabled: boolean;
+  reachable: boolean;
+  transport: string;
+  database: string;
+  message: string;
+}
+
+export interface CeleryWorkerStatus {
+  name: string;
+  hostname: string;
+  region: string;
+  status: string;
+  last_seen: string | null;
+  heartbeat_age_seconds: number | null;
+  active_count: number;
+  reserved_count: number;
+  scheduled_count: number;
+  processed_count: number;
+  concurrency: number | null;
+  registered_task_count: number;
+  source: string;
+}
+
+export interface CeleryQueueStatus {
+  name: string;
+  pending_count: number;
+  exchange: string;
+  routing_keys: string[];
+  worker_count: number;
+}
+
+export interface CeleryTaskExecution {
+  id: string;
+  name: string;
+  status: string;
+  worker: string;
+  region: string;
+  queue: string;
+  retries: number;
+  received_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  eta: string | null;
+  duration_ms: number | null;
+  result_summary: string;
+  error: string;
+  source: string;
+}
+
+export interface CeleryTaskCatalogItem {
+  name: string;
+  display_name: string;
+  trigger: string;
+  schedule_seconds: number | null;
+  execution_scope: string;
+  description: string;
+}
+
+export interface CeleryOverviewResponse {
+  generated_at: string;
+  broker: CeleryBrokerStatus;
+  workers: CeleryWorkerStatus[];
+  queues: CeleryQueueStatus[];
+  active_tasks: CeleryTaskExecution[];
+  reserved_tasks: CeleryTaskExecution[];
+  scheduled_tasks: CeleryTaskExecution[];
+  task_catalog: CeleryTaskCatalogItem[];
+  inspection_message: string;
+}
+
+export interface CeleryHistoryResponse {
+  generated_at: string;
+  available: boolean;
+  data: CeleryTaskExecution[];
+  legacy_record_count: number;
+  message: string;
+}
+
 export interface StorageOperationItem {
   id: string;
   kind: "cluster_heal" | "replication_reconcile" | "replication_resync" | "unmanaged_bucket_delete";
@@ -1541,6 +1620,22 @@ export async function fetchEtcdOperationsApi(
 ): Promise<EtcdClusterStatusResponse> {
   return apiGet<EtcdClusterStatusResponse>(
     "/api/v1/storage/operations/etcd" + (refresh ? "?refresh=true" : ""),
+    accessToken,
+  );
+}
+
+export async function fetchCeleryOverviewApi(
+  accessToken?: string,
+): Promise<CeleryOverviewResponse> {
+  return apiGet<CeleryOverviewResponse>("/api/v1/celery/overview", accessToken);
+}
+
+export async function fetchCeleryHistoryApi(
+  accessToken?: string,
+  limit = 80,
+): Promise<CeleryHistoryResponse> {
+  return apiGet<CeleryHistoryResponse>(
+    `/api/v1/celery/history?limit=${Math.min(Math.max(limit, 1), 200)}`,
     accessToken,
   );
 }

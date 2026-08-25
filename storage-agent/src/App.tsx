@@ -31,6 +31,7 @@ const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage"));
 const StorageOperationsPage = lazy(() => import("./pages/admin/StorageOperationsPage"));
 const ServiceOperationsPage = lazy(() => import("./pages/admin/ServiceOperationsPage"));
 const EtcdOperationsPage = lazy(() => import("./pages/admin/EtcdOperationsPage"));
+const CeleryOperationsPage = lazy(() => import("./pages/admin/CeleryOperationsPage"));
 
 /** 懒加载页面的统一加载占位；AppLayout 保持挂载，仅内容区显示加载态 */
 function lazyElement(node: ReactNode): ReactNode {
@@ -215,6 +216,10 @@ export function App() {
                     />
                   </Route>
                 </Route>
+                <Route
+                  path="admin/celery-operations"
+                  element={lazyElement(<CeleryOperationsPage />)}
+                />
                 <Route
                   path="admin/sync-storage-operations"
                   element={
