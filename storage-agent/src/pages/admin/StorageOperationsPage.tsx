@@ -32,6 +32,7 @@ import {
   fetchUnmanagedBucketOperationsApi,
   fetchReplicationOperationsApi,
   fetchStorageOperationsApi,
+  fetchStorageOperationApi,
   reconcileReplicationApi,
   releaseUnmanagedBucketRetentionApi,
   retainUnmanagedBucketApi,
@@ -574,6 +575,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   const [resyncTarget, setResyncTarget] = useState<LinkRow | null>(null)
   const [olderThan, setOlderThan] = useState("")
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null)
+  const [trackedOperationIds, setTrackedOperationIds] = useState<string[]>([])
   const loadInFlightRef = useRef<Promise<void> | null>(null)
 
   const load = useCallback((
@@ -589,9 +591,24 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
       try {
         const [response, operations] = await Promise.all([
           fetchReplicationOperationsApi(bucketFilter, accessToken),
-          fetchStorageOperationsApi(accessToken),
+          trackedOperationIds.length > 0
+            ? Promise.all(trackedOperationIds.map((operationId) => fetchStorageOperationApi(operationId, accessToken)))
+            : fetchStorageOperationsApi(accessToken).then((result) => result.data),
         ])
-        setJobs(operations.data)
+        const refreshedJobs = Array.isArray(operations) ? operations : []
+        setJobs((current) => {
+          const merged = new Map(current.map((job) => [job.id, job]))
+          refreshedJobs.forEach((job) => merged.set(job.id, job))
+          return Array.from(merged.values()).sort((left, right) => (
+            new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+          )).slice(0, 20)
+        })
+        if (trackedOperationIds.length > 0) {
+          setTrackedOperationIds((current) => current.filter((operationId) => {
+            const job = refreshedJobs.find((item) => item.id === operationId)
+            return !job || job.status === "queued" || job.status === "running"
+          }))
+        }
         setData((current) => {
           if (!bucketFilter || !current) return response
           const refreshedBucket = response.buckets[0]
@@ -618,7 +635,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
     })()
     loadInFlightRef.current = request
     return request
-  }, [accessToken])
+  }, [accessToken, trackedOperationIds])
 
   useEffect(() => {
     void load()
@@ -709,6 +726,9 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
     setReconciling(true)
     try {
       const response = await reconcileReplicationApi(bucket.bucket, accessToken)
+      if (response.operation_id) {
+        setTrackedOperationIds((current) => Array.from(new Set([...current, response.operation_id!])))
+      }
       setActionNotice({
         kind: "success",
         title: response.message,
@@ -739,6 +759,9 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
         },
         accessToken,
       )
+      if (response.operation_id) {
+        setTrackedOperationIds((current) => Array.from(new Set([...current, response.operation_id!])))
+      }
       const alreadyRunning = response.detail.already_running === true
       setActionNotice({
         kind: alreadyRunning ? "info" : "success",
@@ -1087,6 +1110,9 @@ function unmanagedBucketMeta(kind: UnmanagedBucketItem["kind"]) {
   if (kind === "system") {
     return { label: "系统归档桶", className: "text-sky-700 bg-sky-500/10 dark:text-sky-300" }
   }
+  if (kind === "needs_review") {
+    return { label: "归属待核验", className: "text-amber-700 bg-amber-500/10 dark:text-amber-300" }
+  }
   return { label: "未纳管", className: "text-rose-700 bg-rose-500/10 dark:text-rose-300" }
 }
 
@@ -1099,6 +1125,9 @@ function unmanagedBucketDispositionMeta(item: UnmanagedBucketItem) {
   }
   if (item.disposition === "delete_failed") {
     return { label: "清理失败", className: "text-rose-700 bg-rose-500/10 dark:text-rose-300" }
+  }
+  if (item.disposition === "needs_review") {
+    return { label: "待权威核验", className: "text-amber-700 bg-amber-500/10 dark:text-amber-300" }
   }
   if (item.disposition === "unreviewed") {
     return { label: "待处置", className: "text-muted-foreground bg-muted" }
@@ -1123,10 +1152,11 @@ function unmanagedBucketCoverageMeta(item: UnmanagedBucketItem) {
 }
 
 function unmanagedBucketCleanupBlockedReason(item: UnmanagedBucketItem): string | null {
+  if (item.kind === "needs_review") return item.ownership_reason || "应用权威归属尚未确认，禁止清理"
   if (item.disposition === "retained") return "已登记受控保留，取消保留后才能发起清理"
   if (item.disposition === "deleting") return "当前清理任务仍在执行"
   if (item.coverage_status === "unreachable") return "存在不可达 MinIO 节点，无法完成全站复核"
-  if (item.coverage_status === "partial") return "存储桶未覆盖全部 MinIO 节点，无法发起清理"
+  if (item.coverage_status === "partial" && item.cleanup_remaining_servers.length === 0) return "存储桶未覆盖全部 MinIO 节点，无法发起清理"
   return null
 }
 
@@ -1274,10 +1304,11 @@ function UnmanagedBucketWorkspace({ accessToken }: { accessToken?: string }) {
             <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden />
           </Button>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-5">
           <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">未纳管存储桶</div><div className="mt-1 text-lg font-semibold text-rose-600">{summary.unmanaged_count}</div></div>
           <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">停用应用桶</div><div className="mt-1 text-lg font-semibold text-amber-600">{summary.disabled_application_count}</div></div>
           <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">系统归档桶</div><div className="mt-1 text-lg font-semibold text-sky-600">{summary.system_bucket_count}</div></div>
+          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">归属待核验</div><div className="mt-1 text-lg font-semibold text-amber-600">{summary.needs_review_count}</div></div>
           <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="text-[10px] text-muted-foreground">不可达节点</div><div className="mt-1 text-lg font-semibold">{summary.unavailable_server_count}</div></div>
         </div>
         <div className="mt-2 text-[10px] text-muted-foreground">巡检节点：{data.servers.length ? data.servers.join("、") : "暂无"} · {formatDateTime(data.generated_at)}</div>
@@ -1343,10 +1374,12 @@ function UnmanagedBucketWorkspace({ accessToken }: { accessToken?: string }) {
                   <TableCell>
                     <div className={cn("text-xs", coverage.className)}>{coverage.label}</div>
                     <div className="mt-0.5 text-[10px] text-muted-foreground">已发现：{item.servers.length ? item.servers.join("、") : "—"}</div>
+                    {item.ownership_reason ? <div className="mt-0.5 max-w-52 truncate text-[10px] text-muted-foreground" title={item.ownership_reason}>{item.ownership_reason}</div> : null}
                   </TableCell>
                   <TableCell>
                     <span className={cn("inline-flex rounded-full px-2 py-1 text-[11px] font-medium", disposition.className)}>{disposition.label}</span>
                     {item.disposition_reason ? <div className="mt-1 max-w-52 truncate text-[10px] text-muted-foreground" title={item.disposition_reason}>{item.disposition_reason}</div> : null}
+                    {item.cleanup_remaining_servers.length > 0 ? <div className="mt-0.5 text-[10px] text-muted-foreground">待继续：{item.cleanup_remaining_servers.join("、")}</div> : null}
                     {item.disposition_updated_at ? <div className="mt-0.5 text-[10px] text-muted-foreground">{formatDateTime(item.disposition_updated_at)}</div> : null}
                   </TableCell>
                   <TableCell className="min-w-52 text-right">
@@ -1388,7 +1421,7 @@ function UnmanagedBucketWorkspace({ accessToken }: { accessToken?: string }) {
                           {item.disposition === "deleting" || (submitting === "delete" && actionBucket === item.name)
                             ? <LoaderCircle className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
                             : <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />}
-                          {item.disposition === "deleting" ? "清理中" : item.disposition === "delete_failed" ? "重新清理" : "清理空桶"}
+                          {item.disposition === "deleting" ? "清理中" : item.cleanup_remaining_servers.length > 0 ? "继续清理" : item.disposition === "delete_failed" ? "重新清理" : "清理空桶"}
                         </Button>
                       </div>
                     )}
@@ -1441,7 +1474,9 @@ function UnmanagedBucketWorkspace({ accessToken }: { accessToken?: string }) {
             <DialogHeader><DialogTitle>清理未纳管空桶</DialogTitle></DialogHeader>
             <DialogBody>
               <div className="rounded-md border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs leading-5 text-rose-800 dark:text-rose-200">
-                仅清理经所有 MinIO 站点复核为空的存储桶。系统不会递归删除对象；若任一站点发现对象或不可达，任务会失败并保留结果供复核。
+                {deleteTarget.cleanup_remaining_servers.length > 0
+                  ? `仅继续清理尚存于 ${deleteTarget.cleanup_remaining_servers.join("、")} 的空桶；已完成站点不会重复操作。`
+                  : "仅清理经所有 MinIO 站点复核为空的存储桶。系统不会递归删除对象；若任一站点发现对象或不可达，任务会失败并保留结果供复核。"}
               </div>
               <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs">
                 <div className="text-muted-foreground">待清理存储桶</div>

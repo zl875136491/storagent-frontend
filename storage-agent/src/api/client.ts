@@ -449,13 +449,15 @@ export interface ReplicationOperationsResponse {
 export type UnmanagedBucketKind =
   | "unmanaged"
   | "disabled_application"
-  | "system";
+  | "system"
+  | "needs_review";
 
 export type UnmanagedBucketDisposition =
   | "unreviewed"
   | "retained"
   | "deleting"
   | "delete_failed"
+  | "needs_review"
   | "not_applicable";
 
 export interface UnmanagedBucketItem {
@@ -470,6 +472,9 @@ export interface UnmanagedBucketItem {
   disposition: UnmanagedBucketDisposition;
   disposition_reason: string;
   disposition_updated_at: string | null;
+  ownership_source: "authoritative" | "system" | "unavailable";
+  ownership_reason: string;
+  cleanup_remaining_servers: string[];
 }
 
 export interface UnmanagedBucketOperationsResponse {
@@ -479,6 +484,7 @@ export interface UnmanagedBucketOperationsResponse {
     unmanaged_count: number;
     disabled_application_count: number;
     system_bucket_count: number;
+    needs_review_count: number;
     unavailable_server_count: number;
   };
   buckets: UnmanagedBucketItem[];
@@ -489,6 +495,9 @@ export interface UnmanagedBucketActionResponse {
   message: string;
   bucket: string;
   disposition: UnmanagedBucketDisposition;
+  accepted: boolean;
+  operation_id: string | null;
+  operation_status: StorageOperationItem["status"] | null;
   operation: StorageOperationItem | null;
 }
 
@@ -704,6 +713,9 @@ export interface StorageOperationItem {
 export interface ReplicationOperationResponse {
   message: string;
   bucket: string;
+  accepted: boolean;
+  operation_id: string | null;
+  operation_status: StorageOperationItem["status"] | null;
   source_server?: string | null;
   target_server?: string | null;
   detail: Record<string, unknown>;
@@ -1490,8 +1502,8 @@ export const fetchOrphanBucketOperationsApi = fetchUnmanagedBucketOperationsApi;
 export async function reconcileReplicationApi(
   bucket: string,
   accessToken?: string,
-): Promise<{ message: string }> {
-  return apiPost<Record<string, never>, { message: string }>(
+): Promise<ReplicationOperationResponse> {
+  return apiPost<Record<string, never>, ReplicationOperationResponse>(
     `/api/v1/storage/operations/replication/${encodeURIComponent(bucket)}/reconcile`,
     {},
     accessToken,
@@ -1668,6 +1680,16 @@ export async function fetchStorageOperationsApi(
 ): Promise<{ data: StorageOperationItem[] }> {
   return apiGet<{ data: StorageOperationItem[] }>(
     "/api/v1/storage/operations/jobs?limit=20",
+    accessToken,
+  );
+}
+
+export async function fetchStorageOperationApi(
+  operationId: string,
+  accessToken?: string,
+): Promise<StorageOperationItem> {
+  return apiGet<StorageOperationItem>(
+    `/api/v1/storage/operations/jobs/${encodeURIComponent(operationId)}`,
     accessToken,
   );
 }
