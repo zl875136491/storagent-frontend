@@ -689,6 +689,10 @@ export interface EtcdTaskResponse {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  origin_region: string;
+  celery_task_id: string;
+  dispatch_attempts: number;
+  dispatched_at: string | null;
 }
 
 export interface EtcdTaskListResponse {
@@ -701,6 +705,9 @@ export interface CeleryBrokerStatus {
   transport: string;
   database: string;
   message: string;
+  region: string;
+  expected_queue: string;
+  task_protocol: string;
 }
 
 export interface CeleryWorkerStatus {
@@ -716,6 +723,9 @@ export interface CeleryWorkerStatus {
   processed_count: number;
   concurrency: number | null;
   registered_task_count: number;
+  queue: string;
+  task_protocol: string;
+  beat_enabled: boolean;
   source: string;
 }
 
@@ -734,6 +744,8 @@ export interface CeleryTaskExecution {
   worker: string;
   region: string;
   queue: string;
+  origin_region: string;
+  task_protocol: string;
   retries: number;
   received_at: string | null;
   started_at: string | null;
@@ -754,6 +766,14 @@ export interface CeleryTaskCatalogItem {
   description: string;
 }
 
+export interface CeleryBeatLeader {
+  key: string;
+  owner: string;
+  expires_at: string | null;
+  updated_at: string | null;
+  active: boolean;
+}
+
 export interface CeleryOverviewResponse {
   generated_at: string;
   broker: CeleryBrokerStatus;
@@ -763,6 +783,7 @@ export interface CeleryOverviewResponse {
   reserved_tasks: CeleryTaskExecution[];
   scheduled_tasks: CeleryTaskExecution[];
   task_catalog: CeleryTaskCatalogItem[];
+  beat_leaders: CeleryBeatLeader[];
   inspection_message: string;
 }
 
@@ -784,6 +805,10 @@ export interface StorageOperationItem {
   actor: string;
   message: string;
   result: Record<string, unknown>;
+  origin_region: string;
+  celery_task_id: string;
+  dispatch_attempts: number;
+  dispatched_at: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
