@@ -446,6 +446,66 @@ export interface ReplicationOperationsResponse {
   buckets: ReplicationBucketMetric[];
 }
 
+export type UnmanagedBucketKind =
+  | "unmanaged"
+  | "disabled_application"
+  | "system"
+  | "needs_review";
+
+export type UnmanagedBucketDisposition =
+  | "unreviewed"
+  | "retained"
+  | "deleting"
+  | "delete_failed"
+  | "needs_review"
+  | "not_applicable";
+
+export interface UnmanagedBucketItem {
+  name: string;
+  kind: UnmanagedBucketKind;
+  app_name: string;
+  app_shown_name: string;
+  servers: string[];
+  missing_servers: string[];
+  unreachable_servers: string[];
+  coverage_status: "complete" | "partial" | "unreachable";
+  disposition: UnmanagedBucketDisposition;
+  disposition_reason: string;
+  disposition_updated_at: string | null;
+  ownership_source: "authoritative" | "system" | "unavailable";
+  ownership_reason: string;
+  cleanup_remaining_servers: string[];
+}
+
+export interface UnmanagedBucketOperationsResponse {
+  generated_at: string;
+  servers: string[];
+  summary: {
+    unmanaged_count: number;
+    disabled_application_count: number;
+    system_bucket_count: number;
+    needs_review_count: number;
+    unavailable_server_count: number;
+  };
+  buckets: UnmanagedBucketItem[];
+  errors: Record<string, string>;
+}
+
+export interface UnmanagedBucketActionResponse {
+  message: string;
+  bucket: string;
+  disposition: UnmanagedBucketDisposition;
+  accepted: boolean;
+  operation_id: string | null;
+  operation_status: StorageOperationItem["status"] | null;
+  operation: StorageOperationItem | null;
+}
+
+// Kept only for older code paths that still compile against the former name.
+export type OrphanBucketKind = UnmanagedBucketKind;
+export type OrphanBucketItem = UnmanagedBucketItem;
+export type OrphanBucketOperationsResponse = UnmanagedBucketOperationsResponse;
+
 export interface ClusterDriveHealth {
   endpoint: string;
   path: string;
@@ -629,21 +689,126 @@ export interface EtcdTaskResponse {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+  origin_region: string;
+  celery_task_id: string;
+  dispatch_attempts: number;
+  dispatched_at: string | null;
 }
 
 export interface EtcdTaskListResponse {
   data: EtcdTaskResponse[];
 }
 
+export interface CeleryBrokerStatus {
+  enabled: boolean;
+  reachable: boolean;
+  transport: string;
+  database: string;
+  message: string;
+  region: string;
+  expected_queue: string;
+  task_protocol: string;
+}
+
+export interface CeleryWorkerStatus {
+  name: string;
+  hostname: string;
+  region: string;
+  status: string;
+  last_seen: string | null;
+  heartbeat_age_seconds: number | null;
+  active_count: number;
+  reserved_count: number;
+  scheduled_count: number;
+  processed_count: number;
+  concurrency: number | null;
+  registered_task_count: number;
+  queue: string;
+  task_protocol: string;
+  beat_enabled: boolean;
+  source: string;
+}
+
+export interface CeleryQueueStatus {
+  name: string;
+  pending_count: number;
+  exchange: string;
+  routing_keys: string[];
+  worker_count: number;
+}
+
+export interface CeleryTaskExecution {
+  id: string;
+  name: string;
+  status: string;
+  worker: string;
+  region: string;
+  queue: string;
+  origin_region: string;
+  task_protocol: string;
+  retries: number;
+  received_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  eta: string | null;
+  duration_ms: number | null;
+  result_summary: string;
+  error: string;
+  source: string;
+}
+
+export interface CeleryTaskCatalogItem {
+  name: string;
+  display_name: string;
+  trigger: string;
+  schedule_seconds: number | null;
+  execution_scope: string;
+  description: string;
+}
+
+export interface CeleryBeatLeader {
+  key: string;
+  owner: string;
+  expires_at: string | null;
+  updated_at: string | null;
+  active: boolean;
+}
+
+export interface CeleryOverviewResponse {
+  generated_at: string;
+  broker: CeleryBrokerStatus;
+  workers: CeleryWorkerStatus[];
+  queues: CeleryQueueStatus[];
+  active_tasks: CeleryTaskExecution[];
+  reserved_tasks: CeleryTaskExecution[];
+  scheduled_tasks: CeleryTaskExecution[];
+  task_catalog: CeleryTaskCatalogItem[];
+  beat_leaders: CeleryBeatLeader[];
+  inspection_message: string;
+}
+
+export interface CeleryHistoryResponse {
+  generated_at: string;
+  available: boolean;
+  data: CeleryTaskExecution[];
+  legacy_record_count: number;
+  message: string;
+}
+
 export interface StorageOperationItem {
   id: string;
-  kind: "cluster_heal";
+  kind: "cluster_heal" | "replication_reconcile" | "replication_resync" | "unmanaged_bucket_delete";
   status: "queued" | "running" | "succeeded" | "failed";
   server: string;
   bucket: string;
+  target: string;
   actor: string;
   message: string;
   result: Record<string, unknown>;
+  origin_region: string;
+  celery_task_id: string;
+  dispatch_attempts: number;
+  dispatched_at: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -652,6 +817,9 @@ export interface StorageOperationItem {
 export interface ReplicationOperationResponse {
   message: string;
   bucket: string;
+  accepted: boolean;
+  operation_id: string | null;
+  operation_status: StorageOperationItem["status"] | null;
   source_server?: string | null;
   target_server?: string | null;
   detail: Record<string, unknown>;
@@ -1390,11 +1558,56 @@ export async function fetchReplicationOperationsApi(
   );
 }
 
+export async function fetchUnmanagedBucketOperationsApi(
+  accessToken?: string,
+): Promise<UnmanagedBucketOperationsResponse> {
+  return apiGet<UnmanagedBucketOperationsResponse>(
+    "/api/v1/storage/operations/unmanaged-buckets",
+    accessToken,
+  );
+}
+
+export async function retainUnmanagedBucketApi(
+  bucket: string,
+  reason: string,
+  accessToken?: string,
+): Promise<UnmanagedBucketActionResponse> {
+  return apiPost<{ reason: string }, UnmanagedBucketActionResponse>(
+    `/api/v1/storage/operations/unmanaged-buckets/${encodeURIComponent(bucket)}/retain`,
+    { reason },
+    accessToken,
+  );
+}
+
+export async function releaseUnmanagedBucketRetentionApi(
+  bucket: string,
+  accessToken?: string,
+): Promise<UnmanagedBucketActionResponse> {
+  return apiDelete<UnmanagedBucketActionResponse>(
+    `/api/v1/storage/operations/unmanaged-buckets/${encodeURIComponent(bucket)}/retain`,
+    accessToken,
+  );
+}
+
+export async function deleteUnmanagedBucketApi(
+  bucket: string,
+  confirmation: string,
+  accessToken?: string,
+): Promise<UnmanagedBucketActionResponse> {
+  return apiPost<{ confirmation: string }, UnmanagedBucketActionResponse>(
+    `/api/v1/storage/operations/unmanaged-buckets/${encodeURIComponent(bucket)}/delete`,
+    { confirmation },
+    accessToken,
+  );
+}
+
+export const fetchOrphanBucketOperationsApi = fetchUnmanagedBucketOperationsApi;
+
 export async function reconcileReplicationApi(
   bucket: string,
   accessToken?: string,
-): Promise<{ message: string }> {
-  return apiPost<Record<string, never>, { message: string }>(
+): Promise<ReplicationOperationResponse> {
+  return apiPost<Record<string, never>, ReplicationOperationResponse>(
     `/api/v1/storage/operations/replication/${encodeURIComponent(bucket)}/reconcile`,
     {},
     accessToken,
@@ -1432,6 +1645,22 @@ export async function fetchEtcdOperationsApi(
 ): Promise<EtcdClusterStatusResponse> {
   return apiGet<EtcdClusterStatusResponse>(
     "/api/v1/storage/operations/etcd" + (refresh ? "?refresh=true" : ""),
+    accessToken,
+  );
+}
+
+export async function fetchCeleryOverviewApi(
+  accessToken?: string,
+): Promise<CeleryOverviewResponse> {
+  return apiGet<CeleryOverviewResponse>("/api/v1/celery/overview", accessToken);
+}
+
+export async function fetchCeleryHistoryApi(
+  accessToken?: string,
+  limit = 80,
+): Promise<CeleryHistoryResponse> {
+  return apiGet<CeleryHistoryResponse>(
+    `/api/v1/celery/history?limit=${Math.min(Math.max(limit, 1), 200)}`,
     accessToken,
   );
 }
@@ -1571,6 +1800,16 @@ export async function fetchStorageOperationsApi(
 ): Promise<{ data: StorageOperationItem[] }> {
   return apiGet<{ data: StorageOperationItem[] }>(
     "/api/v1/storage/operations/jobs?limit=20",
+    accessToken,
+  );
+}
+
+export async function fetchStorageOperationApi(
+  operationId: string,
+  accessToken?: string,
+): Promise<StorageOperationItem> {
+  return apiGet<StorageOperationItem>(
+    `/api/v1/storage/operations/jobs/${encodeURIComponent(operationId)}`,
     accessToken,
   );
 }

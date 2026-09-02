@@ -13,6 +13,7 @@ import {
   LogOut,
   Network,
   ServerCog,
+  Workflow,
   UserRound,
   Users,
   Wrench,
@@ -335,6 +336,15 @@ function AppShell() {
                       {() => (
                         <SidebarMenuButton active={isInRouteArea("/admin/etcd-operations")} icon={<Network aria-hidden />}>
                           Etcd 运维
+                        </SidebarMenuButton>
+                      )}
+                    </NavLink>
+                  ) : null}
+                  {canOperateStorage ? (
+                    <NavLink to="/admin/celery-operations" onClick={handleNavClick}>
+                      {({ isActive }) => (
+                        <SidebarMenuButton active={isActive} icon={<Workflow aria-hidden />}>
+                          Celery 运维
                         </SidebarMenuButton>
                       )}
                     </NavLink>
