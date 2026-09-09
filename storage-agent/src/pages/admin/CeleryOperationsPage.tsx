@@ -196,7 +196,7 @@ function RegisteredTasksDrawer({
         onClick={() => onOpenChange(false)}
       />
       <aside
-        className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-background shadow-xl ring-1 ring-border/70"
+        className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-card shadow-xl ring-1 ring-border/70"
         role="dialog"
         aria-modal="true"
         aria-labelledby="celery-registered-tasks-title"
@@ -377,7 +377,7 @@ export default function CeleryOperationsPage() {
       {overview?.inspection_message ? <div className="mb-4 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{overview.inspection_message}</div> : null}
 
       <div className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-lg border border-border/80 bg-background px-4 py-3">
+        <div className="rounded-lg border border-border/80 bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><Database className="h-3.5 w-3.5" aria-hidden />Broker</div>
           <div className="mt-2 flex items-center gap-2 text-sm font-semibold">
             {broker?.enabled ? broker.reachable ? <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden /> : <CircleAlert className="h-4 w-4 text-rose-600" aria-hidden /> : <CircleAlert className="h-4 w-4 text-amber-600" aria-hidden />}
@@ -388,17 +388,17 @@ export default function CeleryOperationsPage() {
             {broker?.region || "-"} · v{broker?.task_protocol || "-"} · {broker?.expected_queue || "未配置队列"}
           </div>
         </div>
-        <div className="rounded-lg border border-border/80 bg-background px-4 py-3">
+        <div className="rounded-lg border border-border/80 bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><ServerCog className="h-3.5 w-3.5" aria-hidden />Worker</div>
           <div className="mt-2 text-sm font-semibold">{onlineWorkers} / {overview?.workers.length ?? 0} 在线</div>
           <div className="mt-1 text-[11px] text-muted-foreground">inspect 与心跳联合判定</div>
         </div>
-        <div className="rounded-lg border border-border/80 bg-background px-4 py-3">
+        <div className="rounded-lg border border-border/80 bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><ListTodo className="h-3.5 w-3.5" aria-hidden />队列积压</div>
           <div className="mt-2 text-sm font-semibold">{pendingTasks.toLocaleString("zh-CN")}</div>
           <div className="mt-1 text-[11px] text-muted-foreground">{overview?.queues.length ?? 0} 个任务队列</div>
         </div>
-        <div className="rounded-lg border border-border/80 bg-background px-4 py-3">
+        <div className="rounded-lg border border-border/80 bg-card px-4 py-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" aria-hidden />采样时间</div>
           <div className="mt-2 text-sm font-semibold">{formatDateTime(overview?.generated_at)}</div>
           <div className="mt-1 text-[11px] text-muted-foreground">手动刷新获取新快照</div>
@@ -410,7 +410,7 @@ export default function CeleryOperationsPage() {
         measureKey={`${overview?.workers.length ?? 0}:${overview?.queues.length ?? 0}:${overview?.beat_leaders.length ?? 0}`}
         top={(
           <div data-bounded-split-content className="grid h-full min-h-0 gap-4 lg:grid-cols-3">
-            <section data-bounded-split-card className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-background">
+            <section data-bounded-split-card className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-card">
               <div data-bounded-split-card-header className="shrink-0 border-b border-border/70 px-4 py-3"><h2 className="text-sm font-semibold">Worker 状态</h2></div>
               <div className="min-h-0 flex-1 overflow-auto">
                 <Table>
@@ -447,7 +447,7 @@ export default function CeleryOperationsPage() {
               </div>
             </section>
 
-            <section data-bounded-split-card className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-background">
+            <section data-bounded-split-card className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-card">
               <div data-bounded-split-card-header className="shrink-0 border-b border-border/70 px-4 py-3"><h2 className="text-sm font-semibold">任务队列</h2></div>
               <div className="min-h-0 flex-1 overflow-auto">
                 <Table>
@@ -479,7 +479,7 @@ export default function CeleryOperationsPage() {
               </div>
             </section>
 
-            <section data-bounded-split-card className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-background">
+            <section data-bounded-split-card className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/80 bg-card">
               <div data-bounded-split-card-header className="shrink-0 border-b border-border/70 px-4 py-3"><h2 className="text-sm font-semibold">Beat 领导者</h2></div>
               <div className="min-h-0 flex-1 overflow-auto">
                 <Table>
@@ -516,7 +516,7 @@ export default function CeleryOperationsPage() {
           </div>
         )}
         bottom={(
-      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/80 bg-background">
+      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/80 bg-card">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold">任务执行</h2>

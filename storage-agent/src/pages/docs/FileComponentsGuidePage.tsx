@@ -42,7 +42,7 @@ function ApiKeyBox({ value, onChange }: { value: string; onChange: (value: strin
   }, [accessToken, onChange, value])
 
   return (
-    <div className="rounded-lg border border-border/70 bg-card/40 p-4">
+    <div className="rounded-lg border border-border/70 bg-card p-4">
       <div className="flex items-start gap-3"><KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" aria-hidden /><div><h3 className="text-sm font-semibold text-foreground">演示鉴权</h3><p className="mt-1 text-xs leading-relaxed text-muted-foreground">选择本人有效 APIKey 对象；浏览器不会接触密钥明文。</p></div></div>
       <div className="mt-4 space-y-2"><Label htmlFor="demo-api-key">可用 APIKey</Label><select id="demo-api-key" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={value} disabled={loading} onChange={(event) => onChange(event.target.value)}><option value="">{loading ? "正在读取可用 APIKey..." : "选择 APIKey"}</option>{keys.map((item) => <option key={item.id} value={item.id}>{item.application.shown_name || item.application.name} · {item.key_hint}</option>)}</select></div>
     </div>
@@ -101,7 +101,7 @@ function ComponentsDemoContent() {
         </DocHeading>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <ApiKeyBox value={apiKeyId} onChange={selectApiKey} />
-          <div className="rounded-lg border border-border/70 bg-card/40 p-4">
+          <div className="rounded-lg border border-border/70 bg-card p-4">
             <div className="flex items-start gap-3">
               <Server className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden />
               <div className="min-w-0">

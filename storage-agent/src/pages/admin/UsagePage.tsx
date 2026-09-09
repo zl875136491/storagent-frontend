@@ -517,7 +517,7 @@ export default function UsagePage() {
         </p>
       </div>
 
-      <section className="shrink-0 rounded-lg border border-border/70 bg-card/45 p-3" aria-label="统计筛选条件">
+      <section className="shrink-0 rounded-lg border border-border/70 bg-card p-3" aria-label="统计筛选条件">
         <div className="grid gap-3 lg:grid-cols-[auto_minmax(12rem,1fr)_minmax(18rem,1.45fr)_auto_auto] lg:items-end">
           <div>
             <div className="mb-1.5 text-[11px] text-muted-foreground">统计维度</div>
@@ -586,7 +586,7 @@ export default function UsagePage() {
       ) : null}
 
       <section className={cn(
-        "flex flex-col rounded-lg border border-border/70 bg-card/45 lg:min-h-0",
+        "flex flex-col rounded-lg border border-border/70 bg-card lg:min-h-0",
         activePanel === "timeline" ? "min-h-[26rem] flex-1" : "shrink-0",
       )}>
         <div className={cn(
@@ -642,7 +642,7 @@ export default function UsagePage() {
       </section>
 
       <section className={cn(
-        "flex flex-col rounded-lg border border-border/70 bg-card/45 lg:min-h-0",
+        "flex flex-col rounded-lg border border-border/70 bg-card lg:min-h-0",
         activePanel === "region" ? "min-h-[26rem] flex-1" : "shrink-0",
       )}>
         <div className={cn(

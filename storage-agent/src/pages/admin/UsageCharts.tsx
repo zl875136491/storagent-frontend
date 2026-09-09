@@ -315,7 +315,7 @@ function TimelineSvg({
   const foreground = dark ? "#f4f4f5" : "#27272a"
   const muted = dark ? "#a1a1aa" : "#71717a"
   const grid = dark ? "rgba(113,113,122,.22)" : "rgba(113,113,122,.16)"
-  const glyphOutline = dark ? "#18181b" : "#ffffff"
+  const glyphOutline = dark ? "#09090b" : "#ffffff"
 
   const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
     if (innerWidth <= 0) return

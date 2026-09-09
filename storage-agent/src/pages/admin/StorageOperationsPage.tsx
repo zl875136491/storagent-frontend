@@ -952,7 +952,7 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
           ) : null}
           <div className="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto">
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
+              <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead>复制链路</TableHead>
                   <TableHead>目标状态</TableHead>
@@ -1349,7 +1349,7 @@ function UnmanagedBucketWorkspace({ accessToken }: { accessToken?: string }) {
           </div>
         ) : null}
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-background">
+          <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
               <TableHead>存储桶</TableHead>
               <TableHead>分类</TableHead>
@@ -1607,12 +1607,12 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground"><span className="inline-flex items-center gap-1.5"><Activity className="h-3.5 w-3.5" aria-hidden />自动跟踪 {data.auto_heal_enabled ? "已启用" : "已停用"}</span><span>权威区域 {data.auto_heal_authority_region}</span><Button variant="ghost" size="icon" className="h-7 w-7" title="刷新集群状态" aria-label="刷新集群状态" disabled={refreshing} onClick={() => void load(true)}><RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} aria-hidden /></Button></div>
         </div>
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-6">
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />集群在线</div><div className="mt-1 text-lg font-semibold">{summary.online_clusters} <span className="text-xs font-normal text-muted-foreground">/ {summary.cluster_count}</span></div><div className="text-[10px] text-muted-foreground">{summary.critical_clusters} 严重 · {summary.degraded_clusters} 降级 · {summary.offline_clusters} 离线</div></div>
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><HardDrive className="h-3.5 w-3.5 text-sky-600" aria-hidden />磁盘在线</div><div className="mt-1 text-lg font-semibold">{summary.online_disks}</div><div className="text-[10px] text-muted-foreground">{summary.critical_disks} 严重 · {summary.warning_disks} 预警 · {summary.offline_disks} 离线</div></div>
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Gauge className="h-3.5 w-3.5 text-amber-600" aria-hidden />物理容量</div><div className="mt-1 text-lg font-semibold">{summary.raw_capacity_bytes ? (summary.raw_used_bytes / summary.raw_capacity_bytes * 100).toFixed(1) : "0.0"}%</div><Progress className="mt-1.5 h-1.5" value={summary.raw_capacity_bytes ? summary.raw_used_bytes / summary.raw_capacity_bytes * 100 : 0} /><div className="mt-1 text-[10px] text-muted-foreground">{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</div></div>
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Box className="h-3.5 w-3.5 text-violet-600" aria-hidden />对象总量</div><div className="mt-1 text-lg font-semibold">{summary.object_count.toLocaleString("zh-CN")}</div><div className="text-[10px] text-muted-foreground">逻辑 {formatBytes(summary.logical_usage_bytes)}</div></div>
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Activity className="h-3.5 w-3.5 text-cyan-600" aria-hidden />节点响应</div><div className="mt-1 text-lg font-semibold">{data.clusters.filter((cluster) => cluster.reachable).length} <span className="text-xs font-normal text-muted-foreground">可达</span></div><div className="text-[10px] text-muted-foreground">自动探测与延迟监控</div></div>
-          <div className="rounded-md border border-border/70 bg-background px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Wrench className="h-3.5 w-3.5 text-orange-600" aria-hidden />自愈任务</div><div className="mt-1 text-lg font-semibold">{summary.healing_disks > 0 ? "进行中" : "已就绪"}</div><div className="text-[10px] text-muted-foreground">{summary.healing_disks} 个磁盘修复中</div></div>
+          <div className="rounded-md border border-border/70 bg-card px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />集群在线</div><div className="mt-1 text-lg font-semibold">{summary.online_clusters} <span className="text-xs font-normal text-muted-foreground">/ {summary.cluster_count}</span></div><div className="text-[10px] text-muted-foreground">{summary.critical_clusters} 严重 · {summary.degraded_clusters} 降级 · {summary.offline_clusters} 离线</div></div>
+          <div className="rounded-md border border-border/70 bg-card px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><HardDrive className="h-3.5 w-3.5 text-sky-600" aria-hidden />磁盘在线</div><div className="mt-1 text-lg font-semibold">{summary.online_disks}</div><div className="text-[10px] text-muted-foreground">{summary.critical_disks} 严重 · {summary.warning_disks} 预警 · {summary.offline_disks} 离线</div></div>
+          <div className="rounded-md border border-border/70 bg-card px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Gauge className="h-3.5 w-3.5 text-amber-600" aria-hidden />物理容量</div><div className="mt-1 text-lg font-semibold">{summary.raw_capacity_bytes ? (summary.raw_used_bytes / summary.raw_capacity_bytes * 100).toFixed(1) : "0.0"}%</div><Progress className="mt-1.5 h-1.5" value={summary.raw_capacity_bytes ? summary.raw_used_bytes / summary.raw_capacity_bytes * 100 : 0} /><div className="mt-1 text-[10px] text-muted-foreground">{formatBytes(summary.raw_used_bytes)} / {formatBytes(summary.raw_capacity_bytes)}</div></div>
+          <div className="rounded-md border border-border/70 bg-card px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Box className="h-3.5 w-3.5 text-violet-600" aria-hidden />对象总量</div><div className="mt-1 text-lg font-semibold">{summary.object_count.toLocaleString("zh-CN")}</div><div className="text-[10px] text-muted-foreground">逻辑 {formatBytes(summary.logical_usage_bytes)}</div></div>
+          <div className="rounded-md border border-border/70 bg-card px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Activity className="h-3.5 w-3.5 text-cyan-600" aria-hidden />节点响应</div><div className="mt-1 text-lg font-semibold">{data.clusters.filter((cluster) => cluster.reachable).length} <span className="text-xs font-normal text-muted-foreground">可达</span></div><div className="text-[10px] text-muted-foreground">自动探测与延迟监控</div></div>
+          <div className="rounded-md border border-border/70 bg-card px-3 py-2.5"><div className="flex items-center gap-1.5 text-[10px] text-muted-foreground"><Wrench className="h-3.5 w-3.5 text-orange-600" aria-hidden />自愈任务</div><div className="mt-1 text-lg font-semibold">{summary.healing_disks > 0 ? "进行中" : "已就绪"}</div><div className="text-[10px] text-muted-foreground">{summary.healing_disks} 个磁盘修复中</div></div>
         </div>
         <div className="mt-3 flex justify-end"><ServerStatusLegend /></div>
       </div>
@@ -1628,7 +1628,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
             const planning = capacityForCluster(cluster, capacity)
             const redundancyHealthy = planning ? planning.actual_replica_count >= planning.expected_replica_count : true
             return (
-              <article key={cluster.server} className="flex h-full flex-col rounded-md border border-border/80 bg-background">
+              <article key={cluster.server} className="flex h-full flex-col rounded-md border border-border/80 bg-card">
                 <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/60 px-3.5 py-3">
                   <div className="min-w-0">
                     <h2 className="truncate text-sm font-semibold">{cluster.shown_name}集群</h2>
@@ -1810,7 +1810,7 @@ export default function StorageOperationsPage({ view }: { view: OperationsView }
 
       <div className={cn(
         "flex min-h-0 flex-1 flex-col overflow-hidden",
-        (view === "replication" || view === "unmanaged_buckets") && "rounded-lg border border-border/80 bg-background",
+        (view === "replication" || view === "unmanaged_buckets") && "rounded-lg border border-border/80 bg-card",
       )}>
         {view === "replication"
           ? <ReplicationWorkspace accessToken={accessToken ?? undefined} />

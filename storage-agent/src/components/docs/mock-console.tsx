@@ -85,7 +85,7 @@ export function MockRows({
       {rows.map((row) => (
         <div
           key={row.primary}
-          className="flex items-center justify-between rounded-lg border border-border/60 bg-card/70 px-2 py-1.5"
+          className="flex items-center justify-between rounded-lg border border-border/60 bg-card px-2 py-1.5"
         >
           <div className="min-w-0">
             <div className="truncate text-[10px] font-medium text-foreground">{row.primary}</div>

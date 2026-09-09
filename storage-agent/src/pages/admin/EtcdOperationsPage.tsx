@@ -199,7 +199,7 @@ function JsonCode({ value }: { value: unknown }) {
     .replace(/\b-?\d+(?:\.\d+)?\b/g, '<span class="text-violet-300">$1</span>');
   return (
     <pre
-      className="h-full max-h-full overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-700 bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-200"
+      className="h-full max-h-full overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-muted/40 p-4 font-mono text-sm leading-6 text-foreground"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

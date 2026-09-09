@@ -190,7 +190,7 @@ export function DocNextCard({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full flex-col rounded-xl border border-border/80 bg-card/60 p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/30"
+      className="group flex w-full flex-col rounded-xl border border-border/80 bg-card p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent/30"
     >
       <span className="text-sm font-semibold text-foreground group-hover:text-primary">{title}</span>
       <span className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</span>

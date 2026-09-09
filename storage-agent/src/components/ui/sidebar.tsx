@@ -206,7 +206,7 @@ export function SidebarMenu({
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <nav className={cn("space-y-1", className)} {...props}>
+    <nav className={cn("space-y-1 [&_a]:block [&_a]:px-1", className)} {...props}>
       {children}
     </nav>
   )
@@ -234,9 +234,9 @@ export function SidebarMenuButton({
       type="button"
       data-active={active ? "true" : "false"}
       className={cn(
-        "my-2 flex h-11 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-[background-color,color,padding,gap] duration-200",
+        "my-2 flex h-11 w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-[background-color,color,padding,gap] duration-200",
         "text-sidebar-foreground/85 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-        "data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary",
+        "data-[active=true]:bg-sidebar-primary/10 data-[active=true]:text-sidebar-primary data-[active=true]:ring-1 data-[active=true]:ring-inset data-[active=true]:ring-sidebar-primary/50",
         railMode && "justify-center gap-0 px-0",
         className,
       )}
