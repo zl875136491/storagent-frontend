@@ -25,6 +25,7 @@ import {
   fetchEtcdTasksApi,
   fetchEtcdTrendApi,
   stageEtcdRestoreApi,
+  type EtcdAlert,
   type EtcdClusterStatusResponse,
   type EtcdEndpointStatus,
   type EtcdEventItem,
@@ -143,6 +144,38 @@ function formatBytes(value: number) {
   }
   return size.toFixed(index === 0 ? 0 : 1) + " " + units[index];
 }
+
+function formatRatio(value: number | undefined) {
+  if (!value) return "0%";
+  return (value * 100).toFixed(1) + "%";
+}
+
+function AlertsBanner({ alerts }: { alerts: EtcdAlert[] }) {
+  if (!alerts.length) return null;
+  const critical = alerts.some((item) => item.severity === "critical");
+  return (
+    <div
+      className={cn(
+        "mt-4 rounded-md border px-3 py-2.5 text-xs",
+        critical
+          ? "border-rose-500/30 bg-rose-500/10 text-rose-700"
+          : "border-amber-500/30 bg-amber-500/10 text-amber-700",
+      )}
+    >
+      <div className="flex items-center gap-1.5 font-medium">
+        <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+        Etcd 告警（配额 / NOSPACE / Raft / RSS）
+      </div>
+      <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+        {alerts.map((alert) => (
+          <li key={alert.code + alert.endpoint + alert.message}>
+            {alert.message}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 function JsonCode({ value }: { value: unknown }) {
   const text =
     typeof value === "string"
@@ -213,11 +246,31 @@ function MemberIssueDialog({
             <span className="text-muted-foreground">Raft 延迟</span>
             <div className="mt-1 font-mono font-medium">{member.raft_lag}</div>
           </div>
+          <div>
+            <span className="text-muted-foreground">配额占用</span>
+            <div className="mt-1 font-medium">
+              {formatRatio(member.quota_used_ratio)}
+              {member.quota_bytes
+                ? " / " + formatBytes(member.quota_bytes)
+                : ""}
+            </div>
+          </div>
+          <div>
+            <span className="text-muted-foreground">进程 RSS</span>
+            <div className="mt-1 font-medium">
+              {member.rss_bytes ? formatBytes(member.rss_bytes) : "暂无"}
+            </div>
+          </div>
         </div>
         {member.error ? (
           <div className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs leading-5 text-rose-700">
             <div className="font-medium">连接或检查错误</div>
             <div className="mt-1">{member.error}</div>
+          </div>
+        ) : null}
+        {member.nospace ? (
+          <div className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs leading-5 text-rose-700">
+            该节点已触发 NOSPACE，写入会被拒绝，需要 compact/defrag 或扩容配额。
           </div>
         ) : null}
         {member.alarms.length > 0 ? (
@@ -320,6 +373,12 @@ function MemberCard({
           </dd>
         </div>
         <div>
+          <dt className="text-muted-foreground">配额占用</dt>
+          <dd className="mt-1 font-medium">
+            {formatRatio(member.quota_used_ratio)}
+          </dd>
+        </div>
+        <div>
           <dt className="text-muted-foreground">Revision</dt>
           <dd className="mt-1 font-mono font-medium">
             {member.revision || "-"}
@@ -355,6 +414,7 @@ function ControlPlaneSummary({ data }: { data: EtcdClusterStatusResponse }) {
     ],
     ["Revision", String(data.revision || "-")],
     ["数据库大小", formatBytes(data.database_size_bytes)],
+    ["配额占用", formatRatio(data.quota_used_ratio)],
     ["版本", data.versions.join(", ") || "-"],
   ];
   return (
@@ -381,7 +441,8 @@ function ControlPlaneSummary({ data }: { data: EtcdClusterStatusResponse }) {
             {data.reasons.join("；")}
           </div>
         ) : null}
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <AlertsBanner alerts={data.alerts || []} />
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
           {values.map(([label, value]) => (
             <div key={label}>
               <div className="text-[11px] text-muted-foreground">{label}</div>

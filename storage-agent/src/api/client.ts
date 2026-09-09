@@ -593,6 +593,10 @@ export interface EtcdEndpointStatus {
   raft_applied_index: number;
   raft_lag: number;
   db_size_bytes: number;
+  quota_bytes: number;
+  quota_used_ratio: number;
+  rss_bytes: number;
+  nospace: boolean;
   revision: number;
   alarms: string[];
   error: string;
@@ -608,6 +612,13 @@ export interface EtcdSyncStatus {
   last_reconcile_failure_at: string | null;
 }
 
+export interface EtcdAlert {
+  severity: "warning" | "critical";
+  code: string;
+  message: string;
+  endpoint: string;
+}
+
 export interface EtcdClusterStatusResponse {
   status: EtcdStatus;
   checked_at: string;
@@ -618,9 +629,12 @@ export interface EtcdClusterStatusResponse {
   leader_endpoint: string;
   versions: string[];
   database_size_bytes: number;
+  quota_bytes: number;
+  quota_used_ratio: number;
   revision: number;
   alarms: string[];
   members: EtcdEndpointStatus[];
+  alerts: EtcdAlert[];
   sync: EtcdSyncStatus;
   reasons: string[];
   metadata: Record<string, unknown>;
@@ -740,6 +754,7 @@ export interface CeleryQueueStatus {
 export interface CeleryTaskExecution {
   id: string;
   name: string;
+  display_name?: string;
   status: string;
   worker: string;
   region: string;
@@ -791,6 +806,9 @@ export interface CeleryHistoryResponse {
   generated_at: string;
   available: boolean;
   data: CeleryTaskExecution[];
+  total?: number;
+  limit?: number;
+  offset?: number;
   legacy_record_count: number;
   message: string;
 }
@@ -1657,10 +1675,12 @@ export async function fetchCeleryOverviewApi(
 
 export async function fetchCeleryHistoryApi(
   accessToken?: string,
-  limit = 80,
+  options: { limit?: number; offset?: number } = {},
 ): Promise<CeleryHistoryResponse> {
+  const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+  const offset = Math.max(options.offset ?? 0, 0);
   return apiGet<CeleryHistoryResponse>(
-    `/api/v1/celery/history?limit=${Math.min(Math.max(limit, 1), 200)}`,
+    `/api/v1/celery/history?limit=${limit}&offset=${offset}`,
     accessToken,
   );
 }

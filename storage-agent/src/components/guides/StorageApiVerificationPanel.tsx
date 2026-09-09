@@ -216,7 +216,8 @@ export function StorageApiVerificationPanel({ version, baseURL, apiKeyId, access
         const responseDetail = { status: response.status, headers: recordHeaders(response.headers), body: describeResponseBody(body, responseMode) }
         if (!response.ok) {
           const bodyRecord = asRecord(body)
-          const errorMessage = String(bodyRecord.message ?? bodyRecord.msg ?? ("HTTP " + response.status))
+          const nested = asRecord(bodyRecord.error)
+          const errorMessage = String(nested.message ?? bodyRecord.message ?? bodyRecord.msg ?? ("HTTP " + response.status))
           update(id, { state: "failed", status: response.status, requestId, detail: errorMessage, exchange: { id, label: definitions(version).find((item) => item.id === id)?.label ?? id, path, state: "failed", status: response.status, requestId, result: errorMessage, capturedAt: new Date().toISOString(), request: requestDetail, response: responseDetail } })
           throw new Error(id + ": " + errorMessage)
         }
