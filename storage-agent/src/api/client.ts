@@ -302,7 +302,8 @@ export interface BucketInfo {
   name: string;
   total_size: number;
   created_at: string;
-  files: BucketFileItem[];
+  object_count?: number;
+  files?: BucketFileItem[];
 }
 
 export interface BucketsResponse {
@@ -311,7 +312,59 @@ export interface BucketsResponse {
   cached_at: string;
   expires_at: string;
   ttl_seconds: number;
+  object_count?: number;
+  total_size?: number;
 }
+
+export type InventoryNodeKind = "dir" | "file";
+
+export interface InventoryNode {
+  name: string;
+  kind: InventoryNodeKind;
+  bucket: string;
+  object_key: string;
+  parent: string;
+  size: number;
+  object_count: number;
+  child_count: number;
+  last_modified: string;
+}
+
+export interface InventoryChildrenResponse {
+  bucket: string;
+  prefix: string;
+  items: InventoryNode[];
+  offset: number;
+  limit: number;
+  total: number;
+  has_more: boolean;
+  remaining_count: number;
+  page_size_sum: number;
+  parent_size: number;
+  parent_object_count: number;
+  parent_child_count: number;
+  cache_hit: boolean;
+  cached_at: string;
+  expires_at: string;
+  ttl_seconds: number;
+}
+
+export interface InventorySearchResponse {
+  q: string;
+  bucket: string;
+  items: InventoryNode[];
+  page: number;
+  page_size: number;
+  total: number;
+  page_count: number;
+  cache_hit: boolean;
+  cached_at: string;
+  expires_at: string;
+  ttl_seconds: number;
+}
+
+export type InventorySortKey = "size" | "name" | "last_modified" | "object_key";
+export type InventorySortOrder = "asc" | "desc";
 
 export interface AdminObjectDownloadLinkRequest {
   bucket: string;
@@ -1169,7 +1222,7 @@ async function authorizedFetch(
   const timeoutMs =
     path.startsWith("/api/v1/ai/") ||
     path.startsWith("/api/v1/storage/operations/") ||
-    /^\/api\/v1\/storage\/[^/]+\/details/.test(path)
+    /^\/api\/v1\/storage\/[^/]+\/(details|inventory)/.test(path)
       ? 120_000
       : 30_000;
   const nodeLocalAuthRequest = [
@@ -1540,6 +1593,60 @@ export async function fetchBucketsApi(
   const suffix = refresh ? "?refresh=true" : "";
   return apiGet<BucketsResponse>(
     `/api/v1/storage/${minioServerId}/details${suffix}`,
+    accessToken,
+  );
+}
+
+export async function fetchInventoryChildrenApi(
+  minioServerId: string,
+  params: {
+    bucket?: string;
+    prefix?: string;
+    offset?: number;
+    limit?: number;
+    sort?: InventorySortKey;
+    order?: InventorySortOrder;
+    refresh?: boolean;
+  } = {},
+  accessToken?: string,
+): Promise<InventoryChildrenResponse> {
+  const query = new URLSearchParams();
+  if (params.bucket) query.set("bucket", params.bucket);
+  if (params.prefix) query.set("prefix", params.prefix);
+  query.set("offset", String(params.offset ?? 0));
+  query.set("limit", String(params.limit ?? 40));
+  query.set("sort", params.sort ?? "size");
+  query.set("order", params.order ?? "desc");
+  if (params.refresh) query.set("refresh", "true");
+  return apiGet<InventoryChildrenResponse>(
+    `/api/v1/storage/${encodeURIComponent(minioServerId)}/inventory/children?${query.toString()}`,
+    accessToken,
+  );
+}
+
+export async function fetchInventorySearchApi(
+  minioServerId: string,
+  params: {
+    q?: string;
+    bucket?: string;
+    page?: number;
+    page_size?: number;
+    sort?: InventorySortKey;
+    order?: InventorySortOrder;
+    refresh?: boolean;
+  } = {},
+  accessToken?: string,
+): Promise<InventorySearchResponse> {
+  const query = new URLSearchParams();
+  if (params.q) query.set("q", params.q);
+  if (params.bucket) query.set("bucket", params.bucket);
+  query.set("page", String(params.page ?? 1));
+  query.set("page_size", String(params.page_size ?? 50));
+  query.set("sort", params.sort ?? "object_key");
+  query.set("order", params.order ?? "asc");
+  if (params.refresh) query.set("refresh", "true");
+  return apiGet<InventorySearchResponse>(
+    `/api/v1/storage/${encodeURIComponent(minioServerId)}/inventory/search?${query.toString()}`,
     accessToken,
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -18,15 +18,16 @@ import {
 
 import {
   createAdminObjectDownloadLinkApi,
+  fetchInventorySearchApi,
   getApiBaseUrl,
-  type BucketFileItem,
   type BucketInfo,
+  type InventorySortKey,
 } from "../../api/client"
 import { showErrorToast, showSuccessToast } from "../../api/toast"
 import { useAuth } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
-import { formatBytes, formatDateTime, parseBackendDate } from "../../lib/format"
+import { formatBytes, formatDateTime } from "../../lib/format"
 import { Modal } from "../Modal"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
@@ -71,32 +72,22 @@ function displayBucketName(name: string): string {
   return name.replace(/^Bucket:\s*/i, "")
 }
 
-function flattenBucketFiles(buckets: BucketInfo[]): FlatBucketFile[] {
-  const rows: FlatBucketFile[] = []
-
-  const walk = (bucketName: string, items: BucketFileItem[], parentPath = "") => {
-    items.forEach((item) => {
-      const objectKey = parentPath ? `${parentPath}/${item.name}` : item.name
-      if (Array.isArray(item.children) && item.children.length > 0) {
-        walk(bucketName, item.children, objectKey)
-        return
-      }
-      rows.push({
-        id: `${bucketName}\u0000${objectKey}`,
-        bucketName,
-        name: item.name,
-        objectKey,
-        size: item.size || 0,
-        lastModified: item.last_modified,
-      })
-    })
+function nodeToRow(node: {
+  bucket: string
+  name: string
+  object_key: string
+  size: number
+  last_modified: string
+}): FlatBucketFile {
+  const bucketName = displayBucketName(node.bucket)
+  return {
+    id: `${bucketName}\u0000${node.object_key}`,
+    bucketName,
+    name: node.name,
+    objectKey: node.object_key,
+    size: node.size || 0,
+    lastModified: node.last_modified,
   }
-
-  buckets.forEach((bucket) => walk(displayBucketName(bucket.name), bucket.files))
-  return rows.sort((left, right) =>
-    left.bucketName.localeCompare(right.bucketName, "zh-CN")
-      || left.objectKey.localeCompare(right.objectKey, "zh-CN"),
-  )
 }
 
 function IconTooltip({ label, children }: { label: string; children: ReactNode }) {
@@ -228,21 +219,29 @@ export function CopyTextButton({ value, label }: { value: string; label: string 
 export function BucketFileInventory({
   buckets,
   serverId,
+  revision,
 }: {
   buckets: BucketInfo[]
   serverId: string
+  revision: number
 }) {
   const { accessToken, user } = useAuth()
   const isAdmin = hasPermission(user, PERMISSIONS.storageOperationsManage)
   const [selectedBucket, setSelectedBucket] = useState("all")
   const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
   const [sort, setSort] = useState<SortState | null>(null)
-  const [page, setPage] = useState(0)
+  const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<PageSize>(50)
+  const [rows, setRows] = useState<FlatBucketFile[]>([])
+  const [total, setTotal] = useState(0)
+  const [pageCount, setPageCount] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [detailTarget, setDetailTarget] = useState<FlatBucketFile | null>(null)
   const [generatingFileId, setGeneratingFileId] = useState<string | null>(null)
   const [downloadLink, setDownloadLink] = useState<DownloadLinkView | null>(null)
-  const files = useMemo(() => flattenBucketFiles(buckets), [buckets])
+  const requestSeq = useRef(0)
   const bucketNames = useMemo(
     () => buckets.map((bucket) => displayBucketName(bucket.name)),
     [buckets],
@@ -252,40 +251,53 @@ export function BucketFileInventory({
     ? selectedBucket
     : "all"
 
-  const filteredFiles = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase("zh-CN")
-    return files.filter((file) => {
-      if (activeBucket !== "all" && file.bucketName !== activeBucket) return false
-      if (!normalizedQuery) return true
-      return file.name.toLocaleLowerCase("zh-CN").includes(normalizedQuery)
-        || file.objectKey.toLocaleLowerCase("zh-CN").includes(normalizedQuery)
-        || file.bucketName.toLocaleLowerCase("zh-CN").includes(normalizedQuery)
-        || `${file.bucketName}/${file.objectKey}`.toLocaleLowerCase("zh-CN").includes(normalizedQuery)
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), 300)
+    return () => window.clearTimeout(handle)
+  }, [query])
+
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedQuery, activeBucket, pageSize, sort, revision, serverId])
+
+  useEffect(() => {
+    const seq = ++requestSeq.current
+    setLoading(true)
+    setLoadError(false)
+    const apiSort: InventorySortKey = sort?.key === "size"
+      ? "size"
+      : sort?.key === "lastModified"
+        ? "last_modified"
+        : "object_key"
+    const apiOrder = sort ? sort.direction : "asc"
+    void fetchInventorySearchApi(
+      serverId,
+      {
+        q: debouncedQuery || undefined,
+        bucket: activeBucket === "all" ? undefined : activeBucket,
+        page,
+        page_size: pageSize,
+        sort: apiSort,
+        order: apiOrder,
+      },
+      accessToken ?? undefined,
+    ).then((response) => {
+      if (seq !== requestSeq.current) return
+      setRows(response.items.map(nodeToRow))
+      setTotal(response.total)
+      setPageCount(Math.max(1, response.page_count))
+      if (response.page !== page) setPage(response.page)
+    }).catch(() => {
+      if (seq === requestSeq.current) setLoadError(true)
+    }).finally(() => {
+      if (seq === requestSeq.current) setLoading(false)
     })
-  }, [activeBucket, files, query])
+  }, [accessToken, activeBucket, debouncedQuery, page, pageSize, revision, serverId, sort])
 
-  const sortedFiles = useMemo(() => {
-    if (!sort) return filteredFiles
-
-    return [...filteredFiles].sort((left, right) => {
-      const leftValue = sort.key === "size"
-        ? left.size
-        : (parseBackendDate(left.lastModified)?.getTime() ?? 0)
-      const rightValue = sort.key === "size"
-        ? right.size
-        : (parseBackendDate(right.lastModified)?.getTime() ?? 0)
-      const difference = leftValue - rightValue
-      if (difference !== 0) return sort.direction === "asc" ? difference : -difference
-      return left.bucketName.localeCompare(right.bucketName, "zh-CN")
-        || left.objectKey.localeCompare(right.objectKey, "zh-CN")
-    })
-  }, [filteredFiles, sort])
-
-  const pageCount = Math.max(1, Math.ceil(sortedFiles.length / pageSize))
-  const safePage = Math.min(page, pageCount - 1)
-  const rows = sortedFiles.slice(safePage * pageSize, (safePage + 1) * pageSize)
-  const firstRow = sortedFiles.length === 0 ? 0 : safePage * pageSize + 1
-  const lastRow = Math.min((safePage + 1) * pageSize, sortedFiles.length)
+  const safePage = Math.min(page, pageCount)
+  const firstRow = total === 0 ? 0 : (safePage - 1) * pageSize + 1
+  const lastRow = Math.min(safePage * pageSize, total)
+  const maxRowSize = rows.reduce((max, file) => Math.max(max, file.size), 0)
 
   const changeSort = (key: SortKey) => {
     setSort((current) => {
@@ -294,7 +306,6 @@ export function BucketFileInventory({
       }
       return { key, direction: key === "lastModified" ? "desc" : "asc" }
     })
-    setPage(0)
   }
 
   const generateDownloadLink = async (file: FlatBucketFile) => {
@@ -347,7 +358,7 @@ export function BucketFileInventory({
           value={activeBucket}
           onChange={(event) => {
             setSelectedBucket(event.target.value)
-            setPage(0)
+            setPage(1)
           }}
           className="h-8 min-w-36 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="选择存储桶"
@@ -363,23 +374,32 @@ export function BucketFileInventory({
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
-              setPage(0)
+              setPage(1)
             }}
-            placeholder={activeBucket === "all" ? "搜索全部缓存文件" : `搜索 ${activeBucket}`}
+            placeholder={activeBucket === "all" ? "在全部对象中搜索" : `搜索 ${activeBucket}`}
             className="h-8 rounded-md pl-8"
-            aria-label="搜索缓存文件"
+            aria-label="搜索服务器文件"
           />
         </div>
         <span className="text-[11px] text-muted-foreground">
-          {filteredFiles.length.toLocaleString("zh-CN")} / {files.length.toLocaleString("zh-CN")} 个对象
+          {total.toLocaleString("zh-CN")} 个对象
         </span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden [&_[data-slot=table-container]]:h-full [&_[data-slot=table-container]]:overflow-auto">
-        {rows.length === 0 ? (
+        {loadError ? (
+          <div className="flex h-full min-h-72 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span>文件列表加载失败</span>
+          </div>
+        ) : loading && rows.length === 0 ? (
+          <div className="flex h-full min-h-72 items-center justify-center gap-2 text-xs text-muted-foreground">
+            <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />
+            正在搜索对象索引…
+          </div>
+        ) : rows.length === 0 ? (
           <div className="flex h-full min-h-72 flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
             <FolderSearch className="h-8 w-8 opacity-60" aria-hidden />
-            <span>{query ? "缓存中没有匹配的文件" : "当前范围内没有文件"}</span>
+            <span>{debouncedQuery ? "索引中没有匹配的文件" : "当前范围内没有文件"}</span>
           </div>
         ) : (
           <Table>
@@ -433,7 +453,17 @@ export function BucketFileInventory({
                     </span>
                   </TableCell>
                   <TableCell>{file.bucketName}</TableCell>
-                  <TableCell className="text-right font-mono text-[11px]">{formatBytes(file.size)}</TableCell>
+                  <TableCell className="text-right font-mono text-[11px]">
+                    <div className="flex flex-col items-end gap-1">
+                      <span>{formatBytes(file.size)}</span>
+                      <span className="h-1 w-16 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="block h-full rounded-full bg-primary/80"
+                          style={{ width: `${maxRowSize > 0 ? Math.max((file.size / maxRowSize) * 100, 4) : 0}%` }}
+                        />
+                      </span>
+                    </div>
+                  </TableCell>
                   <TableCell>{formatDateTime(file.lastModified)}</TableCell>
                   {isAdmin ? (
                     <TableCell className="pr-3">
@@ -479,7 +509,7 @@ export function BucketFileInventory({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-background/60 px-3 py-2 text-[11px] text-muted-foreground">
-        <span>显示 {firstRow.toLocaleString("zh-CN")}-{lastRow.toLocaleString("zh-CN")}，共 {filteredFiles.length.toLocaleString("zh-CN")} 个对象</span>
+        <span>显示 {firstRow.toLocaleString("zh-CN")}-{lastRow.toLocaleString("zh-CN")}，共 {total.toLocaleString("zh-CN")} 个对象</span>
         <div className="flex items-center gap-2">
           <label className="inline-flex items-center gap-1.5">
             每页
@@ -487,7 +517,7 @@ export function BucketFileInventory({
               value={pageSize}
               onChange={(event) => {
                 setPageSize(Number(event.target.value) as PageSize)
-                setPage(0)
+                setPage(1)
               }}
               className="h-7 rounded-md border border-input bg-background px-2 text-[11px] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="每页文件数"
@@ -500,23 +530,23 @@ export function BucketFileInventory({
             variant="outline"
             size="icon"
             className="h-7 w-7 rounded-md"
-            disabled={safePage === 0}
+            disabled={safePage <= 1}
             title="上一页"
             aria-label="上一页"
-            onClick={() => setPage((value) => Math.max(0, value - 1))}
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
           >
             <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
           </Button>
-          <span className="min-w-16 text-center text-foreground">{safePage + 1} / {pageCount}</span>
+          <span className="min-w-16 text-center text-foreground">{safePage} / {pageCount}</span>
           <Button
             type="button"
             variant="outline"
             size="icon"
             className="h-7 w-7 rounded-md"
-            disabled={safePage >= pageCount - 1}
+            disabled={safePage >= pageCount}
             title="下一页"
             aria-label="下一页"
-            onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
+            onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
           >
             <ChevronRight className="h-3.5 w-3.5" aria-hidden />
           </Button>
