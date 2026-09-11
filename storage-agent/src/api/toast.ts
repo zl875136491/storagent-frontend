@@ -11,7 +11,7 @@ const LONG_ERROR_DATA_THRESHOLD = 120
 /** 后端稳定业务码 → 用户可读补充说明 */
 const KNOWN_ERROR_HINTS: Record<number, string> = {
   404032: "对象不在本节点，可使用返回的跨区下载地址",
-  429041: "请求过于频繁，请稍后再试",
+  409061: "本区文件索引正在同步，请稍后再试",
   503040: "跨节点同步失败，请检查 Etcd 或稍后重试",
 }
 

@@ -8,7 +8,7 @@ import {
   type MinioServer,
 } from "../../api/client"
 import { Card, CardContent } from "../../components/ui/card"
-import { Database, LayoutGrid, RefreshCw, Table2 } from "lucide-react"
+import { Database, LayoutGrid, LoaderCircle, Play, Table2 } from "lucide-react"
 import { Button } from "../../components/ui/button"
 import { BucketFileInventory } from "../../components/storage/BucketFileInventory"
 import {
@@ -28,11 +28,77 @@ function formatCacheTime(value?: string): string {
   return formatDateTime(value, "—")
 }
 
+function TreemapAutoLoadButton({
+  hasBucket,
+  active,
+  onToggle,
+}: {
+  hasBucket: boolean
+  active: boolean
+  onToggle: () => void
+}) {
+  const [clickHint, setClickHint] = useState<string | null>(null)
+  const hoverLabel = active ? "停止自动加载" : "自动连续加载桶文件列表"
+
+  useEffect(() => {
+    if (!clickHint) return
+    const timer = window.setTimeout(() => setClickHint(null), 2000)
+    return () => window.clearTimeout(timer)
+  }, [clickHint])
+
+  const tooltip = hasBucket ? hoverLabel : (clickHint ?? hoverLabel)
+
+  return (
+    <span
+      className={cn("group relative inline-flex", !hasBucket && "cursor-not-allowed")}
+      onClick={() => {
+        if (!hasBucket) setClickHint("请先选择桶")
+      }}
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-md"
+        disabled={!hasBucket}
+        aria-label={hasBucket ? (active ? "停止自动加载" : "开始自动加载") : "自动连续加载桶文件列表"}
+        aria-pressed={active}
+        onClick={(event) => {
+          event.stopPropagation()
+          setClickHint(null)
+          onToggle()
+        }}
+      >
+        {active ? (
+          <span className="relative inline-flex h-5 w-5 items-center justify-center">
+            <LoaderCircle className="absolute h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+            <span className="relative h-2 w-2 rounded-[1.5px] bg-red-500" aria-hidden />
+          </span>
+        ) : (
+          <Play className="h-3.5 w-3.5" aria-hidden />
+        )}
+      </Button>
+      <span
+        role="tooltip"
+        className={cn(
+          "pointer-events-none absolute left-1/2 top-full z-30 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-[10px] text-popover-foreground shadow-sm",
+          clickHint && !hasBucket ? "block" : "hidden group-hover:block group-focus-within:block",
+        )}
+      >
+        {tooltip}
+      </span>
+    </span>
+  )
+}
+
 export default function BucketPage({ view }: { view: InventoryView }) {
   useDocumentTitle("服务器文件详情")
   const { accessToken } = useAuth()
   const location = useLocation()
   const [treemapSelection, setTreemapSelection] = useState<TreemapSelection | null>(null)
+  const [treemapAutoLoad, setTreemapAutoLoad] = useState(false)
+  const [treemapAutoLoadActive, setTreemapAutoLoadActive] = useState(false)
+  const [hasTreemapBucket, setHasTreemapBucket] = useState(false)
+  const hadTreemapBucketRef = useRef(false)
   const [servers, setServers] = useState<MinioServer[]>([])
   const [serversLoading, setServersLoading] = useState(true)
   const [serversLoadError, setServersLoadError] = useState(false)
@@ -46,6 +112,7 @@ export default function BucketPage({ view }: { view: InventoryView }) {
   const [objectCount, setObjectCount] = useState(0)
   const [cacheInfo, setCacheInfo] = useState<{
     hit: boolean
+    ready: boolean
     cachedAt: string
     expiresAt: string
     ttlSeconds: number
@@ -71,7 +138,7 @@ export default function BucketPage({ view }: { view: InventoryView }) {
     void loadServers()
   }, [loadServers])
 
-  const loadBuckets = useCallback(async (refresh = false) => {
+  const loadBuckets = useCallback(async () => {
     const requestSeq = ++bucketRequestSeq.current
     const serverId = selectedServerId
     if (!serverId) {
@@ -81,25 +148,24 @@ export default function BucketPage({ view }: { view: InventoryView }) {
       setBucketsLoading(false)
       return
     }
-    if (refresh) setTreemapSelection(null)
     setBucketsLoading(true)
     setBucketsLoadError(false)
     try {
       const resp = await fetchBucketsApi(
         serverId,
         accessToken ?? undefined,
-        refresh,
       )
       if (requestSeq !== bucketRequestSeq.current) return
       setBuckets(resp.data)
       setObjectCount(resp.object_count ?? resp.data.reduce((sum, item) => sum + (item.object_count || 0), 0))
       setCacheInfo({
         hit: Boolean(resp.cache_hit),
+        ready: resp.index_ready !== false && Boolean(resp.cached_at) && Date.parse(resp.cached_at) > 0,
         cachedAt: resp.cached_at,
         expiresAt: resp.expires_at,
         ttlSeconds: resp.ttl_seconds,
       })
-      if (refresh) setInventoryRevision((value) => value + 1)
+      setInventoryRevision((value) => value + 1)
     } catch {
       if (requestSeq === bucketRequestSeq.current) setBucketsLoadError(true)
     } finally {
@@ -130,13 +196,21 @@ export default function BucketPage({ view }: { view: InventoryView }) {
     setInventoryRevision((value) => value + 1)
   }
 
+  const handleTreemapBucketChange = useCallback((bucket: string) => {
+    const has = Boolean(bucket)
+    if (!has) setTreemapAutoLoad(false)
+    else if (!hadTreemapBucketRef.current) setTreemapAutoLoad(true)
+    hadTreemapBucketRef.current = has
+    setHasTreemapBucket(has)
+  }, [])
+
   return (
     <div className="mx-auto flex min-h-0 max-w-8xl flex-col lg:h-full">
       <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-foreground">服务器文件详情</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            按需展开目录、分页搜索对象。体积越大的目录和文件占的面积越大。
+            按需展开目录、分页搜索对象。对象索引由后台每 6 小时同步，也可在 Celery 运维手动发起。
           </p>
         </div>
       </div>
@@ -206,13 +280,13 @@ export default function BucketPage({ view }: { view: InventoryView }) {
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {bucketsLoading ? (
-            <BrandLoading label="正在同步对象索引..." className="min-h-0 flex-1" />
+            <BrandLoading label="正在读取对象索引..." className="min-h-0 flex-1" />
           ) : bucketsLoadError ? (
             <ListErrorState
               variant="plain"
               className="min-h-0 flex-1"
               message="存储桶摘要加载失败"
-              onRetry={() => void loadBuckets(true)}
+              onRetry={() => void loadBuckets()}
               retrying={bucketsLoading}
             />
           ) : !selectedServerId ? (
@@ -224,12 +298,12 @@ export default function BucketPage({ view }: { view: InventoryView }) {
               <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/70 bg-background/70 px-3 py-2 text-[11px]">
                 <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                   <Database className="h-3.5 w-3.5 text-primary" aria-hidden />
-                  {cacheInfo?.hit ? "Mongo 对象索引" : "已从 MinIO 重建索引"}
+                  {cacheInfo?.ready ? "Mongo 对象索引" : "索引尚未建立"}
                 </span>
-                <span className="text-muted-foreground">生成 {formatCacheTime(cacheInfo?.cachedAt)}</span>
+                <span className="text-muted-foreground">生成 {cacheInfo?.ready ? formatCacheTime(cacheInfo.cachedAt) : "—"}</span>
                 <span className="text-muted-foreground">
-                  建议刷新 {formatCacheTime(
-                    cacheInfo
+                  下次定时同步 {formatCacheTime(
+                    cacheInfo?.ready
                       ? new Date(Date.parse(cacheInfo.cachedAt) + cacheInfo.ttlSeconds * 1000).toISOString()
                       : undefined,
                   )}
@@ -237,48 +311,48 @@ export default function BucketPage({ view }: { view: InventoryView }) {
                 <span className="text-muted-foreground">
                   {objectCount.toLocaleString("zh-CN")} 个对象 · {formatBytes(totalSize)}
                 </span>
-                {cacheInfo && Date.parse(cacheInfo.cachedAt) + cacheInfo.ttlSeconds * 1000 < Date.now() ? (
-                  <span className="text-amber-600 dark:text-amber-400">索引已超过建议刷新时间，浏览仍走数据库；需要最新对象时再刷新</span>
+                {!cacheInfo?.ready ? (
+                  <span className="text-amber-600 dark:text-amber-400">请到 Celery 运维手动发起「文件索引同步」</span>
+                ) : cacheInfo && Date.parse(cacheInfo.cachedAt) + cacheInfo.ttlSeconds * 1000 < Date.now() ? (
+                  <span className="text-amber-600 dark:text-amber-400">索引已超过 6 小时，请到 Celery 运维手动同步</span>
                 ) : null}
-                <div
-                  className="ml-auto flex items-center rounded-md border border-border bg-muted/40 p-0.5"
-                  role="group"
-                  aria-label="文件详情视图"
-                >
-                  <NavLink
-                    to={{ pathname: "/data/storage/buckets/treemap", search: location.search }}
-                    className={cn(
-                      "inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                      view === "treemap" && "bg-background text-foreground shadow-sm hover:bg-background",
-                    )}
-                    aria-current={view === "treemap" ? "page" : undefined}
+                <div className="ml-auto flex items-center gap-1">
+                  {view === "treemap" ? (
+                    <TreemapAutoLoadButton
+                      hasBucket={hasTreemapBucket}
+                      active={treemapAutoLoadActive}
+                      onToggle={() => setTreemapAutoLoad((playing) => !playing)}
+                    />
+                  ) : null}
+                  <div
+                    className="flex items-center rounded-md border border-border bg-muted/40 p-0.5"
+                    role="group"
+                    aria-label="文件详情视图"
                   >
-                    <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
-                    树形图
-                  </NavLink>
-                  <NavLink
-                    to={{ pathname: "/data/storage/buckets/files", search: location.search }}
-                    className={cn(
-                      "inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-                      view === "files" && "bg-background text-foreground shadow-sm hover:bg-background",
-                    )}
-                    aria-current={view === "files" ? "page" : undefined}
-                  >
-                    <Table2 className="h-3.5 w-3.5" aria-hidden />
-                    文件列表
-                  </NavLink>
+                    <NavLink
+                      to={{ pathname: "/data/storage/buckets/treemap", search: location.search }}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                        view === "treemap" && "bg-background text-foreground shadow-sm hover:bg-background",
+                      )}
+                      aria-current={view === "treemap" ? "page" : undefined}
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" aria-hidden />
+                      树形图
+                    </NavLink>
+                    <NavLink
+                      to={{ pathname: "/data/storage/buckets/files", search: location.search }}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
+                        view === "files" && "bg-background text-foreground shadow-sm hover:bg-background",
+                      )}
+                      aria-current={view === "files" ? "page" : undefined}
+                    >
+                      <Table2 className="h-3.5 w-3.5" aria-hidden />
+                      文件列表
+                    </NavLink>
+                  </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 rounded-md"
-                  disabled={bucketsLoading}
-                  title="忽略索引并重新读取 MinIO"
-                  aria-label="刷新服务器文件详情"
-                  onClick={() => void loadBuckets(true)}
-                >
-                  <RefreshCw className={cn("h-3.5 w-3.5", bucketsLoading && "animate-spin")} aria-hidden />
-                </Button>
               </div>
               <div className="relative min-h-0 flex-1">
                 {view === "treemap" ? (
@@ -289,6 +363,9 @@ export default function BucketPage({ view }: { view: InventoryView }) {
                       serverId={selectedServerId}
                       accessToken={accessToken ?? undefined}
                       onSelect={setTreemapSelection}
+                      autoLoad={treemapAutoLoad}
+                      onBucketChange={handleTreemapBucketChange}
+                      onAutoLoadActiveChange={setTreemapAutoLoadActive}
                     />
                   </>
                 ) : (

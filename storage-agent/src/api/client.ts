@@ -314,6 +314,7 @@ export interface BucketsResponse {
   ttl_seconds: number;
   object_count?: number;
   total_size?: number;
+  index_ready?: boolean;
 }
 
 export type InventoryNodeKind = "dir" | "file";
@@ -832,6 +833,7 @@ export interface CeleryTaskCatalogItem {
   schedule_seconds: number | null;
   execution_scope: string;
   description: string;
+  manual_run_allowed?: boolean;
 }
 
 export interface CeleryBeatLeader {
@@ -1588,11 +1590,9 @@ export async function fetchMinioServersApi(
 export async function fetchBucketsApi(
   minioServerId: string,
   accessToken?: string,
-  refresh = false,
 ): Promise<BucketsResponse> {
-  const suffix = refresh ? "?refresh=true" : "";
   return apiGet<BucketsResponse>(
-    `/api/v1/storage/${minioServerId}/details${suffix}`,
+    `/api/v1/storage/${minioServerId}/details`,
     accessToken,
   );
 }
@@ -1606,7 +1606,6 @@ export async function fetchInventoryChildrenApi(
     limit?: number;
     sort?: InventorySortKey;
     order?: InventorySortOrder;
-    refresh?: boolean;
   } = {},
   accessToken?: string,
 ): Promise<InventoryChildrenResponse> {
@@ -1617,7 +1616,6 @@ export async function fetchInventoryChildrenApi(
   query.set("limit", String(params.limit ?? 40));
   query.set("sort", params.sort ?? "size");
   query.set("order", params.order ?? "desc");
-  if (params.refresh) query.set("refresh", "true");
   return apiGet<InventoryChildrenResponse>(
     `/api/v1/storage/${encodeURIComponent(minioServerId)}/inventory/children?${query.toString()}`,
     accessToken,
@@ -1633,7 +1631,6 @@ export async function fetchInventorySearchApi(
     page_size?: number;
     sort?: InventorySortKey;
     order?: InventorySortOrder;
-    refresh?: boolean;
   } = {},
   accessToken?: string,
 ): Promise<InventorySearchResponse> {
@@ -1644,7 +1641,6 @@ export async function fetchInventorySearchApi(
   query.set("page_size", String(params.page_size ?? 50));
   query.set("sort", params.sort ?? "object_key");
   query.set("order", params.order ?? "asc");
-  if (params.refresh) query.set("refresh", "true");
   return apiGet<InventorySearchResponse>(
     `/api/v1/storage/${encodeURIComponent(minioServerId)}/inventory/search?${query.toString()}`,
     accessToken,
@@ -1788,6 +1784,17 @@ export async function fetchCeleryHistoryApi(
   const offset = Math.max(options.offset ?? 0, 0);
   return apiGet<CeleryHistoryResponse>(
     `/api/v1/celery/history?limit=${limit}&offset=${offset}`,
+    accessToken,
+  );
+}
+
+export async function runCeleryTaskApi(
+  name: string,
+  accessToken?: string,
+): Promise<{ message: string; task_id: string; task_name: string; display_name: string; status: string }> {
+  return apiPost<{ name: string }, { message: string; task_id: string; task_name: string; display_name: string; status: string }>(
+    "/api/v1/celery/tasks/run",
+    { name },
     accessToken,
   );
 }

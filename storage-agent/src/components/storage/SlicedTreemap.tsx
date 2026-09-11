@@ -7,10 +7,14 @@ import {
 } from "../../api/client"
 import { formatBytes, formatDateTime } from "../../lib/format"
 import { squarify } from "../../lib/squarify"
+import { cn } from "../../lib/utils"
 import { CopyTextButton } from "./BucketFileInventory"
 import { ListErrorState } from "../ListErrorState"
 
 const PAGE_SIZE = 40
+const AUTO_LOAD_DELAY_MS = 320
+const MAX_AUTO_TILES = 4096
+const TILE_ANIMATION_LIMIT = 600
 
 export interface TreemapSelection {
   bucketName: string
@@ -47,7 +51,7 @@ function crumbKey(crumb: Crumb): string {
 }
 
 function nodeValue(node: InventoryNode): number {
-  return Math.sqrt(Math.max(node.size, 1))
+  return Math.max(node.size, 1)
 }
 
 const TILE_TONES = [
@@ -86,10 +90,16 @@ export function SlicedTreemap({
   serverId,
   accessToken,
   onSelect,
+  autoLoad = false,
+  onBucketChange,
+  onAutoLoadActiveChange,
 }: {
   serverId: string
   accessToken?: string
   onSelect: (selection: TreemapSelection) => void
+  autoLoad?: boolean
+  onBucketChange?: (bucket: string) => void
+  onAutoLoadActiveChange?: (active: boolean) => void
 }) {
   const frameRef = useRef<HTMLDivElement | null>(null)
   const requestSeq = useRef(0)
@@ -113,7 +123,13 @@ export function SlicedTreemap({
     return () => observer.disconnect()
   }, [])
 
-  const loadLevel = useCallback(async (crumb: Crumb, offset = 0, append = false) => {
+  const loadLevel = useCallback(async (
+    crumb: Crumb,
+    offset = 0,
+    append = false,
+    fromAuto = false,
+  ) => {
+    if (append && fromAuto && offset >= MAX_AUTO_TILES) return
     const seq = ++requestSeq.current
     if (append) setLoadingMore(true)
     else {
@@ -167,6 +183,49 @@ export function SlicedTreemap({
     void loadLevel(current, 0, false)
   }, [current, loadLevel])
 
+  useEffect(() => {
+    onBucketChange?.(current.bucket)
+  }, [current.bucket, onBucketChange])
+
+  useEffect(() => {
+    return () => onBucketChange?.("")
+  }, [onBucketChange])
+
+  const autoLoadActive = Boolean(
+    autoLoad
+    && current.bucket
+    && !error
+    && (loading || loadingMore || (level.hasMore && level.items.length < MAX_AUTO_TILES)),
+  )
+
+  useEffect(() => {
+    onAutoLoadActiveChange?.(autoLoadActive)
+  }, [autoLoadActive, onAutoLoadActiveChange])
+
+  useEffect(() => {
+    return () => onAutoLoadActiveChange?.(false)
+  }, [onAutoLoadActiveChange])
+
+  useEffect(() => {
+    if (!autoLoad || !current.bucket || error) return
+    if (loading || loadingMore) return
+    if (!level.hasMore) return
+    if (level.items.length >= MAX_AUTO_TILES) return
+    const timer = window.setTimeout(() => {
+      void loadLevel(current, level.items.length, true, true)
+    }, AUTO_LOAD_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [
+    autoLoad,
+    current,
+    error,
+    level.hasMore,
+    level.items.length,
+    loadLevel,
+    loading,
+    loadingMore,
+  ])
+
   const loadedSize = useMemo(
     () => level.items.reduce((sum, item) => sum + Math.max(item.size, 0), 0),
     [level.items],
@@ -187,6 +246,7 @@ export function SlicedTreemap({
     }))
     return squarify(entries, mapWidth, mapHeight, 0)
   }, [level.items, mapHeight, mapWidth])
+  const animateTiles = level.items.length <= TILE_ANIMATION_LIMIT
 
   const openNode = (node: InventoryNode) => {
     onSelect({
@@ -276,7 +336,10 @@ export function SlicedTreemap({
                     height: tile.height,
                     backgroundColor: paint.backgroundColor,
                   }}
-                  className="absolute box-border min-h-0 min-w-0 overflow-hidden rounded-none border-0 p-0 text-left leading-none outline-none transition-[filter] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                  className={cn(
+                    "absolute box-border min-h-0 min-w-0 overflow-hidden rounded-none border-0 p-0 text-left leading-none outline-none hover:brightness-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    animateTiles && "transition-[left,top,width,height,filter] duration-300 ease-out",
+                  )}
                   title={`${node.name}\n${formatBytes(node.size)}`}
                   aria-label={`${directory ? "目录" : "文件"} ${node.name}`}
                   onClick={() => openNode(node)}
@@ -315,7 +378,7 @@ export function SlicedTreemap({
                 className="absolute z-10 flex flex-col items-center justify-center gap-1 overflow-hidden rounded-none border border-dashed border-primary/25 bg-muted/70 px-1.5 text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset disabled:opacity-70"
                 title={`加载其余 ${remainingCount.toLocaleString("zh-CN")} 项`}
                 aria-label={`加载其余 ${remainingCount.toLocaleString("zh-CN")} 项`}
-                onClick={() => void loadLevel(current, level.items.length, true)}
+                onClick={() => void loadLevel(current, level.items.length, true, false)}
               >
                 {loadingMore ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />

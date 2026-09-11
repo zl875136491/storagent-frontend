@@ -9,6 +9,7 @@ import {
   Clock3,
   Database,
   ListTodo,
+  Play,
   RefreshCw,
   ServerCog,
   TimerReset,
@@ -19,6 +20,7 @@ import {
 import {
   fetchCeleryHistoryApi,
   fetchCeleryOverviewApi,
+  runCeleryTaskApi,
   type CeleryHistoryResponse,
   type CeleryOverviewResponse,
   type CeleryTaskCatalogItem,
@@ -78,6 +80,13 @@ function formatDuration(value: number | null): string {
   if (value < 1000) return `${value} ms`
   if (value < 60_000) return `${(value / 1000).toFixed(1)} 秒`
   return `${Math.floor(value / 60_000)} 分 ${Math.floor((value % 60_000) / 1000)} 秒`
+}
+
+function formatSchedule(seconds: number | null): string {
+  if (seconds == null) return "按事件"
+  if (seconds >= 3600 && seconds % 3600 === 0) return `${seconds / 3600} 小时`
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60} 分钟`
+  return `${seconds} 秒`
 }
 
 function formatAge(value: number | null): string {
@@ -171,10 +180,14 @@ function RegisteredTasksDrawer({
   open,
   onOpenChange,
   catalog,
+  runningName,
+  onRun,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   catalog: CeleryTaskCatalogItem[]
+  runningName: string | null
+  onRun: (item: CeleryTaskCatalogItem) => void
 }) {
   useEffect(() => {
     if (!open) return
@@ -216,8 +229,9 @@ function RegisteredTasksDrawer({
           {catalog.length ? (
             <ul className="space-y-3">
               {catalog.map((item) => {
-                const period = item.schedule_seconds == null ? "按事件" : `${item.schedule_seconds} 秒`
+                const period = formatSchedule(item.schedule_seconds)
                 const scheduled = item.schedule_seconds != null
+                const running = runningName === item.name
                 return (
                   <li key={item.name} className="overflow-hidden rounded-lg border border-primary/20 bg-primary/5">
                     <div className="flex">
@@ -237,6 +251,18 @@ function RegisteredTasksDrawer({
                           {item.execution_scope}
                           {item.description ? ` · ${item.description}` : ""}
                         </p>
+                        {item.manual_run_allowed ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="mt-3 gap-1.5"
+                            disabled={Boolean(runningName)}
+                            onClick={() => onRun(item)}
+                          >
+                            <Play className="h-3.5 w-3.5" aria-hidden />
+                            {running ? "正在发起…" : "立即执行"}
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   </li>
@@ -265,6 +291,7 @@ export default function CeleryOperationsPage() {
   const [tab, setTab] = useState<ExecutionTab>("history")
   const [page, setPage] = useState(1)
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const [runningName, setRunningName] = useState<string | null>(null)
   const pageRef = useRef(1)
   pageRef.current = page
 
@@ -314,6 +341,21 @@ export default function CeleryOperationsPage() {
     }
   }, [accessToken, loadHistory])
 
+  const runCatalogTask = useCallback(async (item: CeleryTaskCatalogItem) => {
+    if (!item.manual_run_allowed) return
+    if (!window.confirm(`确认立即执行「${item.display_name}」？本区正在同步时会拒绝重复发起。`)) return
+    setRunningName(item.name)
+    setError("")
+    try {
+      await runCeleryTaskApi(item.name, accessToken ?? undefined)
+      await load(true)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "无法发起任务")
+    } finally {
+      setRunningName(null)
+    }
+  }, [accessToken, load])
+
   useEffect(() => { void load() }, [load])
 
   const labels = useMemo(() => {
@@ -362,7 +404,6 @@ export default function CeleryOperationsPage() {
           <p className="mt-1 text-xs text-muted-foreground">区域队列、Worker、任务执行与历史记录。</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-border/80 bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground">只读</span>
           <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setCatalogOpen(true)}>
             <TimerReset className="h-3.5 w-3.5" aria-hidden />
             已注册任务
@@ -592,6 +633,8 @@ export default function CeleryOperationsPage() {
         open={catalogOpen}
         onOpenChange={setCatalogOpen}
         catalog={overview?.task_catalog ?? []}
+        runningName={runningName}
+        onRun={(item) => void runCatalogTask(item)}
       />
     </div>
   )

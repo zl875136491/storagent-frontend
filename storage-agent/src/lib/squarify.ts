@@ -102,6 +102,17 @@ function layout<T>(
   ]
 }
 
+function applyGap<T>(rects: Array<SquarifyRect<T>>, gap: number): Array<SquarifyRect<T>> {
+  if (gap <= 0) return rects
+  return rects.map((rect) => ({
+    ...rect,
+    x: rect.x + gap / 2,
+    y: rect.y + gap / 2,
+    width: Math.max(rect.width - gap, 0),
+    height: Math.max(rect.height - gap, 0),
+  }))
+}
+
 export function squarify<T>(
   items: Array<SquarifyInput<T>>,
   width: number,
@@ -114,13 +125,10 @@ export function squarify<T>(
     .sort((left, right) => right.value - left.value)
   const remaining = normalized.reduce((sum, item) => sum + item.value, 0)
   if (normalized.length === 0 || width <= 0 || height <= 0 || remaining <= 0) return []
-  const rects = layout(normalized, 0, 0, width, height, remaining)
-  if (gap <= 0) return rects
-  return rects.map((rect) => ({
-    ...rect,
-    x: rect.x + gap / 2,
-    y: rect.y + gap / 2,
-    width: Math.max(rect.width - gap, 0),
-    height: Math.max(rect.height - gap, 0),
+  const area = width * height
+  const scaled = normalized.map((item) => ({
+    value: (item.value / remaining) * area,
+    data: item.data,
   }))
+  return applyGap(layout(scaled, 0, 0, width, height, area), gap)
 }
