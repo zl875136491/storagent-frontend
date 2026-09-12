@@ -113,7 +113,7 @@ export function BoundedVerticalSplit({
     if (measured.max > 1) lastNaturalRef.current = measured
     const natural = measured.max > 1 ? measured : lastNaturalRef.current
     const available = Math.max(0, group.clientHeight - HANDLE_SIZE)
-    let nextMax = Math.round(clamp(natural.max, 0, available))
+    const nextMax = Math.round(clamp(natural.max, 0, available))
     let nextMin = Math.round(clamp(natural.min, 0, nextMax))
     if (nextMin >= nextMax && natural.max > natural.min) {
       nextMin = Math.round(clamp(nextMax - (natural.max - natural.min), 0, nextMax))
@@ -137,7 +137,7 @@ export function BoundedVerticalSplit({
     const group = groupRef.current
     const content = contentRef.current
     if (!group || !content) return
-    syncBounds()
+    syncBounds() // eslint-disable-line react-hooks/set-state-in-effect -- 读取 DOM 高度后写入滑杆上下限
     const observer = new ResizeObserver(() => syncBounds())
     observer.observe(group)
     observer.observe(content)
