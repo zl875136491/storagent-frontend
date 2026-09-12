@@ -61,7 +61,7 @@ function measureSplitHeights(root: HTMLElement): { min: number; max: number } {
     ? root
     : root.querySelector<HTMLElement>("[data-bounded-split-summary]")
   if (!summary) return { min: 0, max: tables }
-  return { min: tables, max: tables + outerBlockHeight(summary) }
+  return { min: 0, max: tables + outerBlockHeight(summary) }
 }
 
 export function BoundedVerticalSplit({
@@ -114,10 +114,7 @@ export function BoundedVerticalSplit({
     const natural = measured.max > 1 ? measured : lastNaturalRef.current
     const available = Math.max(0, group.clientHeight - HANDLE_SIZE)
     const nextMax = Math.round(clamp(natural.max, 0, available))
-    let nextMin = Math.round(clamp(natural.min, 0, nextMax))
-    if (nextMin >= nextMax && natural.max > natural.min) {
-      nextMin = Math.round(clamp(nextMax - (natural.max - natural.min), 0, nextMax))
-    }
+    const nextMin = Math.round(clamp(natural.min, 0, nextMax))
     minHeightRef.current = nextMin
     maxHeightRef.current = nextMax
     setMinHeight(nextMin)
@@ -137,7 +134,7 @@ export function BoundedVerticalSplit({
     const group = groupRef.current
     const content = contentRef.current
     if (!group || !content) return
-    syncBounds() // eslint-disable-line react-hooks/set-state-in-effect -- 读取 DOM 高度后写入滑杆上下限
+    syncBounds()
     const observer = new ResizeObserver(() => syncBounds())
     observer.observe(group)
     observer.observe(content)
@@ -209,9 +206,9 @@ export function BoundedVerticalSplit({
   return (
     <div ref={groupRef} className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       <div
-        className="flex min-h-0 shrink-0 flex-col justify-end overflow-hidden"
+        className="min-h-0 shrink-0 overflow-hidden"
         style={{ height: topHeight }}
-        aria-hidden={atMin && minHeight <= 0 ? true : undefined}
+        aria-hidden={atMin || undefined}
       >
         <div ref={contentRef} className="shrink-0">
           {top}
@@ -225,9 +222,7 @@ export function BoundedVerticalSplit({
         aria-valuemax={maxHeight}
         aria-valuenow={topHeight}
         aria-valuetext={
-          atMin
-            ? minHeight <= 0 ? "概览已收起" : "简要信息已收起"
-            : atMax ? "概览已完全展开" : `概览高度 ${topHeight} 像素`
+          atMin ? "概览已收起" : atMax ? "概览已完全展开" : `概览高度 ${topHeight} 像素`
         }
         tabIndex={0}
         onPointerDown={onPointerDown}
@@ -237,7 +232,7 @@ export function BoundedVerticalSplit({
         onLostPointerCapture={endDrag}
         onKeyDown={onKeyDown}
         className={cn(
-          "group relative z-10 flex shrink-0 cursor-row-resize items-center justify-center",
+          "group relative z-20 flex shrink-0 cursor-row-resize items-center justify-center",
           "touch-none select-none outline-none focus-visible:ring-2 focus-visible:ring-ring/70",
         )}
         style={{ height: HANDLE_SIZE }}
@@ -259,7 +254,7 @@ export function BoundedVerticalSplit({
           <GripHorizontal className="size-3.5" aria-hidden />
         </span>
       </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{bottom}</div>
+      <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">{bottom}</div>
     </div>
   )
 }
