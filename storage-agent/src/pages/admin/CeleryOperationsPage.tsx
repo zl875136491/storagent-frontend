@@ -645,7 +645,7 @@ export default function CeleryOperationsPage() {
             <p className="mt-1 text-xs text-muted-foreground">
               {tab === "history"
                 ? "历史记录保留最近 30 天，可分页查询全部未过期记录；不包含任务参数和密钥。"
-                : "实时视图不包含任务参数和密钥。执行中任务会合并 Worker inspect 与未完成历史记录。"}
+                : "实时视图不包含任务参数和密钥。执行中只合并 Worker inspect 与心跳窗口内仍在更新的历史记录。"}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
