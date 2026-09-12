@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { fetchStorageBucketsApi, type StorageBucketItem } from "../../api/client"
 import { BucketReplicateGraph } from "../../components/storage/BucketReplicateGraph"
 import { Card, CardContent } from "../../components/ui/card"
@@ -23,28 +23,25 @@ export default function StorageBucketManagePage() {
   const [buckets, setBuckets] = useState<StorageBucketItem[]>([])
   const [selectedName, setSelectedName] = useState<string | null>(null)
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        const resp = await fetchStorageBucketsApi(accessToken ?? undefined)
+  const load = () => {
+    setLoading(true)
+    return fetchStorageBucketsApi(accessToken ?? undefined)
+      .then((resp) => {
         setBuckets(resp.data ?? [])
-        if (resp.data && resp.data.length > 0) {
-          setSelectedName(resp.data[0].name)
-        } else {
-          setSelectedName(null)
-        }
-      } catch {
-        // 错误已由 api client toast 展示
+        setSelectedName(resp.data && resp.data.length > 0 ? resp.data[0].name : null)
+      })
+      .catch(() => {
         setBuckets([])
         setSelectedName(null)
-      } finally {
-        setLoading(false)
-      }
-    }
+      })
+      .finally(() => setLoading(false))
+  }
 
+  useEffect(() => {
     void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken])
+  useReloadOnBackendChange(() => { void load() })
 
   const selectedBucket = useMemo(
     () => buckets.find((b) => b.name === selectedName) ?? null,

@@ -22,7 +22,7 @@ import {
   Wrench,
   X,
 } from "lucide-react"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   fetchClusterHealthOperationsApi,
@@ -640,6 +640,10 @@ function ReplicationWorkspace({ accessToken }: { accessToken?: string }) {
   useEffect(() => {
     void load()
   }, [load])
+  useReloadOnBackendChange(() => {
+    loadInFlightRef.current = null
+    void load()
+  })
 
   const bucket = useMemo(
     () => data?.buckets.find((item) => item.bucket === selectedBucket) ?? null,
@@ -1190,6 +1194,7 @@ function UnmanagedBucketWorkspace({ accessToken }: { accessToken?: string }) {
   useEffect(() => {
     void load()
   }, [load])
+  useReloadOnBackendChange(() => { void load() })
 
   const hasActiveCleanup = useMemo(
     () => data?.buckets.some((item) => item.disposition === "deleting") ?? false,
@@ -1557,6 +1562,7 @@ function ClusterWorkspace({ accessToken }: { accessToken?: string }) {
   useEffect(() => {
     void load()
   }, [load])
+  useReloadOnBackendChange(() => { void load() })
 
   useEffect(() => {
     if (!selectedServer) {

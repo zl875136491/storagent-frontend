@@ -24,7 +24,7 @@ import {
   type UsageTotals,
 } from "../../api/client"
 import { showErrorToast } from "../../api/toast"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { Button } from "../../components/ui/button"
 import { Calendar } from "../../components/ui/calendar"
 import { Input } from "../../components/ui/input"
@@ -470,6 +470,20 @@ export default function UsagePage() {
     // 筛选条件由“查询”按钮提交；这里只在登录态变化时初始化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, user?.is_admin])
+  useReloadOnBackendChange(() => {
+    if (!user?.is_admin) return
+    void (async () => {
+      setOptionsLoading(true)
+      try {
+        setOptions(await fetchUsageOptionsApi(accessToken ?? undefined))
+      } catch {
+        setOptions({ applications: [], api_keys: [] })
+      } finally {
+        setOptionsLoading(false)
+      }
+      await loadUsage()
+    })()
+  })
 
   const totals = useMemo(
     () => responses.reduce<UsageTotals>((sum, response) => ({

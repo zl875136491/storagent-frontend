@@ -8,7 +8,7 @@ import {
   type AdminUserItem,
 } from "../../api/client"
 import { showSuccessToast } from "../../api/toast"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import { Modal } from "../../components/Modal"
 import { ListErrorState } from "../../components/ListErrorState"
@@ -105,6 +105,10 @@ export default function UserRolePage() {
     void loadUsers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, canManageUsers])
+  useReloadOnBackendChange(() => {
+    if (!canManageUsers) return
+    void loadUsers()
+  })
 
   if (!canManageUsers) {
     return <Navigate to="/data/basic/region" replace />

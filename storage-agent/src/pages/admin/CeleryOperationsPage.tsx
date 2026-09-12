@@ -26,7 +26,7 @@ import {
   type CeleryTaskCatalogItem,
   type CeleryTaskExecution,
 } from "../../api/client"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import { BrandLoading } from "../../components/BrandLoading"
 import { Modal } from "../../components/Modal"
@@ -433,6 +433,7 @@ export default function CeleryOperationsPage() {
   }
 
   useEffect(() => { void load() }, [load])
+  useReloadOnBackendChange(() => { void load() })
 
   const labels = useMemo(() => {
     const map = new Map<string, string>()
@@ -454,9 +455,6 @@ export default function CeleryOperationsPage() {
 
   if (!hasPermission(user, PERMISSIONS.storageOperationsManage)) {
     return <Navigate to="/data/basic/region" replace />
-  }
-  if (loading && !overview) {
-    return <div className="flex h-full min-h-80 items-center justify-center"><BrandLoading label="正在读取 Celery 运行状态..." /></div>
   }
 
   const broker = overview?.broker
@@ -496,10 +494,22 @@ export default function CeleryOperationsPage() {
       </div>
 
       {error ? <div className="mb-4 shrink-0 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">{error}</div> : null}
+      {loading && !overview ? (
+        <div className="flex min-h-80 flex-1 items-center justify-center">
+          <BrandLoading label="正在读取 Celery 运行状态..." />
+        </div>
+      ) : (
+      <>
       {overview?.inspection_message ? <div className="mb-4 shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">{overview.inspection_message}</div> : null}
 
+      <div className="relative mt-4 flex min-h-0 flex-1 flex-col">
+      {loading ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/70">
+          <BrandLoading label="正在读取 Celery 运行状态..." />
+        </div>
+      ) : null}
       <BoundedVerticalSplit
-        className="mt-4"
+        className="min-h-0"
         measureKey={`${overview?.workers.length ?? 0}:${overview?.queues.length ?? 0}:${overview?.beat_leaders.length ?? 0}`}
         top={(
           <div className="flex flex-col">
@@ -727,6 +737,9 @@ export default function CeleryOperationsPage() {
       </section>
         )}
       />
+      </div>
+      </>
+      )}
 
       <RegisteredTasksDrawer
         open={catalogOpen}

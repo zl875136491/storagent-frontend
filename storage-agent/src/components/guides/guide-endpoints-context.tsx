@@ -13,6 +13,7 @@ import {
 import type { PublicEndpointItem } from "@/api/backendResolver"
 import { normalizePublicApiBase, probePublicEndpointTest, sameOriginGatewayBaseForEndpoint } from "@/api/backendResolver"
 import { fetchPublicEndpointsApi } from "@/api/client"
+import { useReloadOnBackendChange } from "@/auth/AuthContext"
 
 export type GuideEndpointProbe = { status: "pending" } | { status: "ok"; latencyMs: number } | { status: "fail" }
 
@@ -91,6 +92,7 @@ export function GuideEndpointsProvider({ children }: { children: ReactNode }) {
     // load() 在首个 await 前同步置 loading，与全局后端列表加载一致
     void load() // eslint-disable-line react-hooks/set-state-in-effect -- 初始化拉取端点列表
   }, [load])
+  useReloadOnBackendChange(() => { void load() })
 
   const value = useMemo<GuideEndpointsContextValue>(
     () => ({

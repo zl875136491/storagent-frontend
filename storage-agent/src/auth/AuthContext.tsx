@@ -27,6 +27,11 @@ interface AuthContextValue {
   refreshToken: string | null
   user: UserProfile | null
   initializing: boolean
+  /**
+   * 顶栏切换 API 基址后递增。Token 通常不变，页面要用它触发重新拉取，
+   * 而不是整页 reload。
+   */
+  backendEpoch: number
   login: (payload: LoginRequest) => Promise<void>
   loginWithTokens: (tokens: TokenResponse) => Promise<void>
   logout: () => Promise<void>
@@ -46,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [refreshToken, setRefreshToken] = useState<string | null>(null)
   const [user, setUser] = useState<UserProfile | null>(null)
   const [initializing, setInitializing] = useState(true)
+  const [backendEpoch, setBackendEpoch] = useState(0)
   const refreshTokenRef = useRef<string | null>(null)
   const refreshingRef = useRef<Promise<boolean> | null>(null)
 
@@ -107,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onBackendChanged = () => {
+      // 先递增 epoch，让当前页立刻按新基址拉数；profile 校验并行进行。
+      setBackendEpoch((value) => value + 1)
       const token = localStorage.getItem(ACCESS_TOKEN_KEY)
       if (!token) {
         clearAuthState()
@@ -179,12 +187,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshToken,
       user,
       initializing,
+      backendEpoch,
       login,
       loginWithTokens: applyTokens,
       logout,
       refreshSession,
     }),
-    [accessToken, refreshToken, user, initializing, login, applyTokens, logout, refreshSession],
+    [accessToken, refreshToken, user, initializing, backendEpoch, login, applyTokens, logout, refreshSession],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -196,4 +205,21 @@ export function useAuth(): AuthContextValue {
     throw new Error("useAuth 必须在 AuthProvider 中使用")
   }
   return ctx
+}
+
+/** 顶栏切换后端后调用已有的数据加载；跳过首次挂载，避免与页面自己的初始化重复请求。 */
+export function useReloadOnBackendChange(reload: () => void | Promise<void>): void {
+  const { backendEpoch } = useAuth()
+  const reloadRef = useRef(reload)
+  const seenEpochRef = useRef(backendEpoch)
+
+  useEffect(() => {
+    reloadRef.current = reload
+  }, [reload])
+
+  useEffect(() => {
+    if (seenEpochRef.current === backendEpoch) return
+    seenEpochRef.current = backendEpoch
+    void reloadRef.current()
+  }, [backendEpoch])
 }

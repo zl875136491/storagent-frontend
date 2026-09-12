@@ -106,8 +106,10 @@ export function BackendEndpointSwitcher() {
       }
       // Keep the shell and current document mounted. A full reload briefly
       // blanked the whole page while the new backend was being probed again.
-      // AuthProvider listens for this event and refreshes the in-memory user.
+      // AuthProvider listens for this event, bumps backendEpoch, and pages
+      // re-fetch into their existing data panels.
       window.dispatchEvent(new CustomEvent("storagent:backend-changed", { detail: { base: next } }))
+      void loadEndpoints()
     } finally {
       setSwitching(false)
     }

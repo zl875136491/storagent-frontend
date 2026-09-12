@@ -20,7 +20,7 @@ import {
 import { useDocVersion } from "@/components/docs/version-switcher"
 import { Label } from "@/components/ui/label"
 import { fetchDemoApiKeysApi, type DemoAPIKey } from "@/api/client"
-import { useAuth } from "@/auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "@/auth/AuthContext"
 
 import { getComponentGuideContent } from "./file-components-content"
 
@@ -40,6 +40,15 @@ function ApiKeyBox({ value, onChange }: { value: string; onChange: (value: strin
       .finally(() => active && setLoading(false))
     return () => { active = false }
   }, [accessToken, onChange, value])
+  useReloadOnBackendChange(() => {
+    setLoading(true)
+    void fetchDemoApiKeysApi(accessToken ?? undefined)
+      .then((response) => {
+        setKeys(response.data)
+        if (value && !response.data.some((item) => item.id === value)) onChange("")
+      })
+      .finally(() => setLoading(false))
+  })
 
   return (
     <div className="rounded-lg border border-border/70 bg-card p-4">

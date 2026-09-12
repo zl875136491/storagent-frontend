@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Check, Pencil, X } from "lucide-react"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   fetchMinioServersApi,
@@ -45,6 +45,7 @@ export default function MinioPage() {
     void loadServers()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useReloadOnBackendChange(() => { void loadServers() })
 
   useEffect(() => {
     if (!isAdmin) {

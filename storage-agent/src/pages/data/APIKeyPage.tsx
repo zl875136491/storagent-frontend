@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import {
   createApiKeyApi,
   fetchApiKeysApi,
@@ -63,6 +63,7 @@ export default function APIKeyPage() {
     void loadApiKeys()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useReloadOnBackendChange(() => { void loadApiKeys() })
 
   const openCreateModal = () => {
     setShowCreateModal(true)

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { BellRing, Check, Circle, Expand, Gauge, Globe, Loader2, Plus, Settings2, Trash2, XCircle } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   addApplicationDomainApi,
@@ -302,6 +302,11 @@ export default function ApplicationPage() {
     if (canApprove) void loadQuotaRule()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canApprove])
+  useReloadOnBackendChange(() => {
+    void loadApplications()
+    void loadExpansionRequests()
+    if (canApprove) void loadQuotaRule()
+  })
 
   useEffect(() => {
     const targetId = searchParams.get("expand")

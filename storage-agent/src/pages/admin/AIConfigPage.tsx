@@ -10,7 +10,7 @@ import {
   type AIProviderUpdateRequest,
 } from "../../api/client"
 import { showErrorToast, showSuccessToast } from "../../api/toast"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card"
 import { Input } from "../../components/ui/input"
@@ -74,6 +74,20 @@ export default function AIConfigPage() {
       })
       .finally(() => setLoading(false))
   }, [accessToken, user?.is_admin])
+  useReloadOnBackendChange(() => {
+    if (!user?.is_admin) return
+    setLoading(true)
+    fetchAIProviderAdminConfigApi(accessToken ?? undefined)
+      .then((next) => {
+        setConfig(next)
+        setForm(formFromConfig(next))
+        setDirty(false)
+      })
+      .catch(() => {
+        // API client already displayed the error.
+      })
+      .finally(() => setLoading(false))
+  })
 
   const canSave = useMemo(() => {
     const models = form.models.map((item) => item.trim()).filter(Boolean)

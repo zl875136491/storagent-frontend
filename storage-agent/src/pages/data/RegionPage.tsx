@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import {
   createRegionApi,
@@ -50,6 +50,7 @@ export default function RegionPage() {
     void loadRegions()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useReloadOnBackendChange(() => { void loadRegions() })
 
   const handleCreate = async () => {
     if (!createForm.name || !createForm.shown_name) {

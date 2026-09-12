@@ -10,7 +10,7 @@ import {
   type AuditEventQueryParams,
 } from "../../api/client"
 import { showErrorToast } from "../../api/toast"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { BrandLoading } from "../../components/BrandLoading"
 import { DateTimePicker } from "../../components/ui/date-picker"
 import { Button } from "../../components/ui/button"
@@ -84,6 +84,11 @@ export default function AuditLogPage() {
   const initialLoad = useRef(false)
   useEffect(() => { if (!user?.is_admin) return; void fetchAuditEventOptionsApi(accessToken ?? undefined).then(setOptions).catch(() => undefined) }, [accessToken, user?.is_admin])
   useEffect(() => { if (!user?.is_admin || initialLoad.current) return; initialLoad.current = true; void Promise.resolve().then(() => query(1)) }, [query, user?.is_admin])
+  useReloadOnBackendChange(() => {
+    if (!user?.is_admin) return
+    void fetchAuditEventOptionsApi(accessToken ?? undefined).then(setOptions).catch(() => undefined)
+    void query(1)
+  })
   if (!user?.is_admin) return <Navigate to="/docs/overview" replace />
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const summary = total ? `共 ${total} 条，第 ${page} / ${totalPages} 页` : "暂无符合条件的审计事件"

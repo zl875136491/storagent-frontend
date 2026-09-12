@@ -24,6 +24,7 @@ import type {
   BucketReplicationPolicySummary,
 } from "../../api/client"
 import { fetchBucketReplicatesApi } from "../../api/client"
+import { useReloadOnBackendChange } from "../../auth/AuthContext"
 import { cn } from "../../lib/utils"
 import { BrandLoading } from "../BrandLoading"
 import { Button } from "../ui/button"
@@ -657,6 +658,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
       requestId.current += 1
     }
   }, [load])
+  useReloadOnBackendChange(() => { void load() })
 
   useEffect(() => {
     setSelectedNode(null)
@@ -740,7 +742,7 @@ export function BucketReplicateGraph({ bucketName, accessToken }: BucketReplicat
             {error}
           </div>
         </div>
-      ) : !response && loading ? (
+      ) : loading ? (
         <BrandLoading label="正在加载复制关系..." className="min-h-52 flex-1" compact />
       ) : servers.length === 0 ? (
         <div className="flex min-h-52 flex-1 items-center justify-center text-xs text-muted-foreground">

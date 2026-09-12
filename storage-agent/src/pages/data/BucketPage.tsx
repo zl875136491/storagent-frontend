@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useAuth } from "../../auth/AuthContext"
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { NavLink, useLocation } from "react-router-dom"
 import {
   fetchBucketsApi,
@@ -119,16 +119,25 @@ export default function BucketPage({ view }: { view: InventoryView }) {
   } | null>(null)
 
   const loadServers = useCallback(async () => {
+    bucketRequestSeq.current += 1
     setServersLoading(true)
     setServersLoadError(false)
+    setSelectedServerId(null)
+    setBuckets([])
+    setCacheInfo(null)
+    setObjectCount(0)
+    setBucketsLoading(true)
     try {
       const resp = await fetchMinioServersApi(accessToken ?? undefined)
       setServers(resp.data)
       if (resp.data.length > 0) {
         setSelectedServerId(resp.data[0].id)
+      } else {
+        setBucketsLoading(false)
       }
     } catch {
       setServersLoadError(true)
+      setBucketsLoading(false)
     } finally {
       setServersLoading(false)
     }
@@ -137,6 +146,7 @@ export default function BucketPage({ view }: { view: InventoryView }) {
   useEffect(() => {
     void loadServers()
   }, [loadServers])
+  useReloadOnBackendChange(() => { void loadServers() })
 
   const loadBuckets = useCallback(async () => {
     const requestSeq = ++bucketRequestSeq.current

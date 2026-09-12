@@ -35,7 +35,7 @@ import {
   type EtcdTrendResponse,
 } from "../../api/client";
 import { showErrorToast, showSuccessToast } from "../../api/toast";
-import { useAuth } from "../../auth/AuthContext";
+import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext";
 import { hasPermission, PERMISSIONS } from "../../auth/permissions";
 import { BrandLoading } from "../../components/BrandLoading";
 import { Button } from "../../components/ui/button";
@@ -1263,22 +1263,15 @@ export default function EtcdOperationsPage({
   useEffect(() => {
     if (view !== "status") void loadMaintenance();
   }, [loadMaintenance, view]);
+  useReloadOnBackendChange(() => {
+    void loadStatus();
+    if (view !== "status") void loadMaintenance();
+  });
   useEffect(() => {
     const timer = window.setInterval(() => void loadStatus(true), 30000);
     return () => window.clearInterval(timer);
   }, [loadStatus]);
   if (!canOperate) return <Navigate to="/data/basic/region" replace />;
-  if (loading && !data)
-    return <BrandLoading label="正在检查测试 Etcd 集群..." />;
-  if (error && !data)
-    return (
-      <Card className="rounded-lg shadow-none">
-        <CardContent className="p-6 text-sm text-destructive">
-          {error}
-        </CardContent>
-      </Card>
-    );
-  if (!data) return null;
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-8xl flex-col">
       <div className="mb-4 flex shrink-0 flex-wrap items-start justify-between gap-3">
@@ -1304,6 +1297,21 @@ export default function EtcdOperationsPage({
           </Button>
         </div>
       </div>
+      {loading && !data ? (
+        <BrandLoading label="正在检查测试 Etcd 集群..." className="min-h-80 flex-1" />
+      ) : error && !data ? (
+        <Card className="rounded-lg shadow-none">
+          <CardContent className="p-6 text-sm text-destructive">
+            {error}
+          </CardContent>
+        </Card>
+      ) : !data ? null : (
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {loading ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/70">
+              <BrandLoading label="正在检查测试 Etcd 集群..." />
+            </div>
+          ) : null}
       {view === "status" ? (
         <StatusPage data={data} onIssue={setIssueMember} />
       ) : (
@@ -1330,6 +1338,8 @@ export default function EtcdOperationsPage({
               </div>
             ) : null}
           </main>
+        </div>
+      )}
         </div>
       )}
       <Dialog
