@@ -25,6 +25,15 @@ function gridColumnCount(template: string) {
   return template.split(/\s+/).filter(Boolean).length || 1
 }
 
+function outerBlockHeight(element: HTMLElement): number {
+  const style = getComputedStyle(element)
+  return (
+    Math.max(element.offsetHeight, element.scrollHeight) +
+    (Number.parseFloat(style.marginTop) || 0) +
+    (Number.parseFloat(style.marginBottom) || 0)
+  )
+}
+
 function measureBoundedSplitContent(root: HTMLElement): number {
   const grid = root.matches("[data-bounded-split-content]")
     ? root
@@ -46,6 +55,15 @@ function measureBoundedSplitContent(root: HTMLElement): number {
   return Math.max(0, ...heights)
 }
 
+function measureSplitHeights(root: HTMLElement): { min: number; max: number } {
+  const tables = measureBoundedSplitContent(root)
+  const summary = root.matches("[data-bounded-split-summary]")
+    ? root
+    : root.querySelector<HTMLElement>("[data-bounded-split-summary]")
+  if (!summary) return { min: 0, max: tables }
+  return { min: tables, max: tables + outerBlockHeight(summary) }
+}
+
 export function BoundedVerticalSplit({
   top,
   bottom,
@@ -62,17 +80,21 @@ export function BoundedVerticalSplit({
   const groupRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const topHeightRef = useRef(defaultTopHeight)
+  const minHeightRef = useRef(0)
   const maxHeightRef = useRef(defaultTopHeight)
+  const userAdjustedRef = useRef(false)
   const dragRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null)
-  const lastNaturalRef = useRef(defaultTopHeight)
+  const lastNaturalRef = useRef({ min: 0, max: defaultTopHeight })
   const [topHeight, setTopHeight] = useState(defaultTopHeight)
+  const [minHeight, setMinHeight] = useState(0)
   const [maxHeight, setMaxHeight] = useState(defaultTopHeight)
   const [dragging, setDragging] = useState(false)
 
   useLayoutEffect(() => {
     topHeightRef.current = topHeight
+    minHeightRef.current = minHeight
     maxHeightRef.current = maxHeight
-  }, [maxHeight, topHeight])
+  }, [maxHeight, minHeight, topHeight])
 
   useLayoutEffect(() => {
     if (!dragging) return
@@ -87,14 +109,24 @@ export function BoundedVerticalSplit({
     const group = groupRef.current
     const content = contentRef.current
     if (!group || !content) return
-    const measured = measureBoundedSplitContent(content)
-    if (measured > 1) lastNaturalRef.current = measured
-    const natural = measured > 1 ? measured : lastNaturalRef.current
+    const measured = measureSplitHeights(content)
+    if (measured.max > 1) lastNaturalRef.current = measured
+    const natural = measured.max > 1 ? measured : lastNaturalRef.current
     const available = Math.max(0, group.clientHeight - HANDLE_SIZE)
-    const nextMax = Math.round(clamp(Math.min(natural, available), 0, available))
+    let nextMax = Math.round(clamp(natural.max, 0, available))
+    let nextMin = Math.round(clamp(natural.min, 0, nextMax))
+    if (nextMin >= nextMax && natural.max > natural.min) {
+      nextMin = Math.round(clamp(nextMax - (natural.max - natural.min), 0, nextMax))
+    }
+    minHeightRef.current = nextMin
     maxHeightRef.current = nextMax
+    setMinHeight(nextMin)
     setMaxHeight(nextMax)
-    const nextHeight = Math.round(clamp(topHeightRef.current, 0, nextMax))
+    const nextHeight = Math.round(
+      userAdjustedRef.current
+        ? clamp(topHeightRef.current, nextMin, nextMax)
+        : nextMax,
+    )
     if (nextHeight !== topHeightRef.current) {
       topHeightRef.current = nextHeight
       setTopHeight(nextHeight)
@@ -109,12 +141,15 @@ export function BoundedVerticalSplit({
     const observer = new ResizeObserver(() => syncBounds())
     observer.observe(group)
     observer.observe(content)
+    const summary = content.querySelector("[data-bounded-split-summary]")
+    if (summary) observer.observe(summary)
     for (const table of content.querySelectorAll("table")) observer.observe(table)
     return () => observer.disconnect()
   }, [measureKey, syncBounds])
 
   const assignHeight = useCallback((next: number) => {
-    const bounded = Math.round(clamp(next, 0, maxHeightRef.current))
+    userAdjustedRef.current = true
+    const bounded = Math.round(clamp(next, minHeightRef.current, maxHeightRef.current))
     topHeightRef.current = bounded
     setTopHeight(bounded)
   }, [])
@@ -160,25 +195,25 @@ export function BoundedVerticalSplit({
       assignHeight(topHeightRef.current + step)
     } else if (event.key === "Home") {
       event.preventDefault()
-      assignHeight(0)
+      assignHeight(minHeightRef.current)
     } else if (event.key === "End") {
       event.preventDefault()
       assignHeight(maxHeightRef.current)
     }
   }
 
-  const atMin = topHeight <= 0
-  const atMax = maxHeight <= 0 || topHeight >= maxHeight
+  const atMin = topHeight <= minHeight
+  const atMax = maxHeight <= minHeight || topHeight >= maxHeight
   const atBound = atMin || atMax
 
   return (
     <div ref={groupRef} className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       <div
-        className="min-h-0 shrink-0 overflow-hidden"
+        className="flex min-h-0 shrink-0 flex-col justify-end overflow-hidden"
         style={{ height: topHeight }}
-        aria-hidden={atMin || undefined}
+        aria-hidden={atMin && minHeight <= 0 ? true : undefined}
       >
-        <div ref={contentRef} className="h-full min-h-0">
+        <div ref={contentRef} className="shrink-0">
           {top}
         </div>
       </div>
@@ -186,11 +221,13 @@ export function BoundedVerticalSplit({
         role="slider"
         aria-orientation="horizontal"
         aria-label="调整概览与任务执行区域的高度"
-        aria-valuemin={0}
+        aria-valuemin={minHeight}
         aria-valuemax={maxHeight}
         aria-valuenow={topHeight}
         aria-valuetext={
-          atMin ? "概览已收起" : atMax ? "概览已完全展开" : `概览高度 ${topHeight} 像素`
+          atMin
+            ? minHeight <= 0 ? "概览已收起" : "简要信息已收起"
+            : atMax ? "概览已完全展开" : `概览高度 ${topHeight} 像素`
         }
         tabIndex={0}
         onPointerDown={onPointerDown}
