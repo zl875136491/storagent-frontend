@@ -22,7 +22,7 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
 
   /* 挂到 body：避免祖先的 backdrop-filter / transform 把 fixed 变成「相对局部容器」 */
   return createPortal(
-    <div className="fixed inset-0 z-[200]">
+    <div className="fixed inset-0 z-[220]">
       <div
         role="presentation"
         aria-hidden

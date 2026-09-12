@@ -29,8 +29,12 @@ import {
 import { useAuth } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
 import { BrandLoading } from "../../components/BrandLoading"
+import { Modal } from "../../components/Modal"
 import { Button } from "../../components/ui/button"
+import { DialogFooter } from "../../components/ui/dialog"
+import { Label } from "../../components/ui/label"
 import { BoundedVerticalSplit } from "../../components/ui/resizable"
+import { Switch } from "../../components/ui/switch"
 import {
   Table,
   TableBody,
@@ -39,7 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table"
-import { formatDateTime } from "../../lib/format"
+import { formatDateTime, parseBackendDate } from "../../lib/format"
 import { useDocumentTitle } from "../../lib/useDocumentTitle"
 import { cn } from "../../lib/utils"
 
@@ -75,11 +79,52 @@ function WorkerBadge({ status }: { status: string }) {
   return <span className={cn("inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-medium", meta.className)}>{meta.label}</span>
 }
 
-function formatDuration(value: number | null): string {
+const LIVE_STATUSES = new Set(["STARTED", "RETRY"])
+const FAILED_STATUS = "FAILURE"
+
+function isFailedTask(item: CeleryTaskExecution): boolean {
+  return item.status === FAILED_STATUS
+}
+
+function formatDuration(value: number | null, live = false): string {
   if (value == null || value < 0) return "-"
+  const hours = Math.floor(value / 3_600_000)
+  const minutes = Math.floor((value % 3_600_000) / 60_000)
+  const seconds = Math.floor((value % 60_000) / 1000)
+  if (hours > 0) return `${hours} 时 ${minutes} 分 ${seconds} 秒`
+  if (minutes > 0) return `${minutes} 分 ${seconds} 秒`
+  if (live) return `${seconds} 秒`
   if (value < 1000) return `${value} ms`
-  if (value < 60_000) return `${(value / 1000).toFixed(1)} 秒`
-  return `${Math.floor(value / 60_000)} 分 ${Math.floor((value % 60_000) / 1000)} 秒`
+  return `${(value / 1000).toFixed(1)} 秒`
+}
+
+function taskStartMs(item: CeleryTaskExecution): number | null {
+  const parsed = parseBackendDate(item.started_at || item.received_at)
+  return parsed ? parsed.getTime() : null
+}
+
+function taskElapsedMs(item: CeleryTaskExecution, now: number): number | null {
+  if (LIVE_STATUSES.has(item.status)) {
+    const started = taskStartMs(item)
+    if (started == null) return null
+    return Math.max(0, now - started)
+  }
+  return item.duration_ms
+}
+
+function useTickingNow(enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!enabled) return
+    const tick = () => setNow(Date.now())
+    const immediate = window.setTimeout(tick, 0)
+    const timer = window.setInterval(tick, 1000)
+    return () => {
+      window.clearTimeout(immediate)
+      window.clearInterval(timer)
+    }
+  }, [enabled])
+  return now
 }
 
 function formatSchedule(seconds: number | null): string {
@@ -105,14 +150,18 @@ function taskLabel(item: CeleryTaskExecution, labels: Map<string, string>): stri
 function ExecutionRows({
   data,
   labels,
+  emptyLabel = "当前没有对应任务。",
 }: {
   data: CeleryTaskExecution[]
   labels: Map<string, string>
+  emptyLabel?: string
 }) {
+  const live = data.some((item) => LIVE_STATUSES.has(item.status) && taskStartMs(item) != null)
+  const now = useTickingNow(live)
   if (!data.length) {
     return (
       <div className="flex min-h-40 flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
-        当前没有对应任务。
+        {emptyLabel}
       </div>
     )
   }
@@ -157,7 +206,16 @@ function ExecutionRows({
                   {formatDateTime(item.finished_at ?? item.started_at ?? item.received_at ?? item.eta)}
                   {item.eta ? <div className="mt-1">计划：{formatDateTime(item.eta)}</div> : null}
                 </TableCell>
-                <TableCell className="whitespace-nowrap align-middle text-xs">{formatDuration(item.duration_ms)}</TableCell>
+                <TableCell className="whitespace-nowrap align-middle text-xs tabular-nums">
+                  {LIVE_STATUSES.has(item.status) ? (
+                    <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
+                      <Clock3 className="h-3 w-3 shrink-0" aria-hidden />
+                      <span>{formatDuration(taskElapsedMs(item, now), true)}</span>
+                    </span>
+                  ) : (
+                    formatDuration(taskElapsedMs(item, now))
+                  )}
+                </TableCell>
                 <TableCell className="min-w-56 max-w-96 align-middle text-xs">
                   {item.error ? (
                     <div className="break-words text-rose-700 dark:text-rose-300">{item.error}</div>
@@ -181,22 +239,24 @@ function RegisteredTasksDrawer({
   onOpenChange,
   catalog,
   runningName,
+  lockDismiss,
   onRun,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   catalog: CeleryTaskCatalogItem[]
   runningName: string | null
+  lockDismiss?: boolean
   onRun: (item: CeleryTaskCatalogItem) => void
 }) {
   useEffect(() => {
-    if (!open) return
+    if (!open || lockDismiss) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onOpenChange(false)
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [open, onOpenChange])
+  }, [open, onOpenChange, lockDismiss])
 
   if (!open || typeof document === "undefined") return null
 
@@ -206,7 +266,9 @@ function RegisteredTasksDrawer({
         role="presentation"
         aria-hidden
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={() => onOpenChange(false)}
+        onClick={() => {
+          if (!lockDismiss) onOpenChange(false)
+        }}
       />
       <aside
         className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col bg-card shadow-xl ring-1 ring-border/70"
@@ -221,6 +283,7 @@ function RegisteredTasksDrawer({
           size="icon"
           className="absolute right-4 top-4 z-10 text-muted-foreground hover:text-foreground"
           aria-label="关闭已注册任务"
+          disabled={lockDismiss}
           onClick={() => onOpenChange(false)}
         >
           <X className="h-4 w-4" aria-hidden />
@@ -291,17 +354,22 @@ export default function CeleryOperationsPage() {
   const [tab, setTab] = useState<ExecutionTab>("history")
   const [page, setPage] = useState(1)
   const [catalogOpen, setCatalogOpen] = useState(false)
+  const [pendingRun, setPendingRun] = useState<CeleryTaskCatalogItem | null>(null)
   const [runningName, setRunningName] = useState<string | null>(null)
+  const [failuresOnly, setFailuresOnly] = useState(false)
   const pageRef = useRef(1)
+  const failuresOnlyRef = useRef(false)
   pageRef.current = page
+  failuresOnlyRef.current = failuresOnly
 
-  const loadHistory = useCallback(async (targetPage: number) => {
+  const loadHistory = useCallback(async (targetPage: number, failedOnly = failuresOnlyRef.current) => {
     setHistoryLoading(true)
     try {
       const offset = Math.max(targetPage - 1, 0) * PAGE_SIZE
       const nextHistory = await fetchCeleryHistoryApi(accessToken ?? undefined, {
         limit: PAGE_SIZE,
         offset,
+        failedOnly,
       })
       const total = nextHistory.total ?? nextHistory.data.length
       const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE) || 1)
@@ -309,6 +377,7 @@ export default function CeleryOperationsPage() {
         const clamped = await fetchCeleryHistoryApi(accessToken ?? undefined, {
           limit: PAGE_SIZE,
           offset: (totalPages - 1) * PAGE_SIZE,
+          failedOnly,
         })
         setHistory(clamped)
         setPage(totalPages)
@@ -343,18 +412,25 @@ export default function CeleryOperationsPage() {
 
   const runCatalogTask = useCallback(async (item: CeleryTaskCatalogItem) => {
     if (!item.manual_run_allowed) return
-    if (!window.confirm(`确认立即执行「${item.display_name}」？本区正在同步时会拒绝重复发起。`)) return
     setRunningName(item.name)
     setError("")
     try {
       await runCeleryTaskApi(item.name, accessToken ?? undefined)
       await load(true)
+      setPendingRun(null)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法发起任务")
     } finally {
       setRunningName(null)
     }
   }, [accessToken, load])
+
+  const handleFailuresOnlyChange = (checked: boolean) => {
+    failuresOnlyRef.current = checked
+    setFailuresOnly(checked)
+    setPage(1)
+    void loadHistory(1, checked)
+  }
 
   useEffect(() => { void load() }, [load])
 
@@ -368,11 +444,13 @@ export default function CeleryOperationsPage() {
 
   const execution = useMemo(() => {
     if (!overview) return []
-    if (tab === "active") return overview.active_tasks
-    if (tab === "reserved") return overview.reserved_tasks
-    if (tab === "scheduled") return overview.scheduled_tasks
-    return history?.data ?? []
-  }, [history?.data, overview, tab])
+    let rows: CeleryTaskExecution[]
+    if (tab === "active") rows = overview.active_tasks
+    else if (tab === "reserved") rows = overview.reserved_tasks
+    else if (tab === "scheduled") rows = overview.scheduled_tasks
+    else rows = history?.data ?? []
+    return failuresOnly && tab !== "history" ? rows.filter(isFailedTask) : rows
+  }, [failuresOnly, history?.data, overview, tab])
 
   if (!hasPermission(user, PERMISSIONS.storageOperationsManage)) {
     return <Navigate to="/data/basic/region" replace />
@@ -386,10 +464,13 @@ export default function CeleryOperationsPage() {
   const pendingTasks = overview?.queues.reduce((total, item) => total + item.pending_count, 0) ?? 0
   const historyTotal = history?.total ?? history?.data.length ?? 0
   const totalPages = Math.max(1, Math.ceil(historyTotal / PAGE_SIZE) || 1)
+  const failedActive = overview?.active_tasks.filter(isFailedTask).length ?? 0
+  const failedReserved = overview?.reserved_tasks.filter(isFailedTask).length ?? 0
+  const failedScheduled = overview?.scheduled_tasks.filter(isFailedTask).length ?? 0
   const tabs: Array<{ id: ExecutionTab; label: string; count: number }> = [
-    { id: "active", label: "执行中", count: overview?.active_tasks.length ?? 0 },
-    { id: "reserved", label: "待取任务", count: overview?.reserved_tasks.length ?? 0 },
-    { id: "scheduled", label: "定时任务", count: overview?.scheduled_tasks.length ?? 0 },
+    { id: "active", label: "执行中", count: failuresOnly ? failedActive : overview?.active_tasks.length ?? 0 },
+    { id: "reserved", label: "待取任务", count: failuresOnly ? failedReserved : overview?.reserved_tasks.length ?? 0 },
+    { id: "scheduled", label: "定时任务", count: failuresOnly ? failedScheduled : overview?.scheduled_tasks.length ?? 0 },
     { id: "history", label: "历史记录", count: historyTotal },
   ]
 
@@ -567,21 +648,34 @@ export default function CeleryOperationsPage() {
                 : "实时视图不包含任务参数和密钥。执行中任务会合并 Worker inspect 与未完成历史记录。"}
             </p>
           </div>
-          <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/40 p-1" aria-label="Celery 任务视图">
-            {tabs.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setTab(item.id)}
-                className={cn(
-                  "h-8 rounded px-3 text-xs",
-                  tab === item.id ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {item.label}
-                <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{item.count.toLocaleString("zh-CN")}</span>
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="celery-failures-only"
+                checked={failuresOnly}
+                onCheckedChange={handleFailuresOnlyChange}
+                aria-label="仅看失败"
+              />
+              <Label htmlFor="celery-failures-only" className="cursor-pointer text-xs text-foreground">
+                仅看失败
+              </Label>
+            </div>
+            <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/40 p-1" aria-label="Celery 任务视图">
+              {tabs.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTab(item.id)}
+                  className={cn(
+                    "h-8 rounded px-3 text-xs",
+                    tab === item.id ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {item.label}
+                  <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{item.count.toLocaleString("zh-CN")}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         {tab === "history" && history?.message ? (
@@ -590,7 +684,11 @@ export default function CeleryOperationsPage() {
         {historyLoading && tab === "history" && !history?.data.length ? (
           <div className="flex flex-1 items-center justify-center"><BrandLoading compact label="正在读取历史记录" /></div>
         ) : (
-          <ExecutionRows data={execution} labels={labels} />
+          <ExecutionRows
+            data={execution}
+            labels={labels}
+            emptyLabel={failuresOnly ? "没有失败任务。" : "当前没有对应任务。"}
+          />
         )}
         {tab === "history" ? (
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border/70 px-4 py-3">
@@ -634,8 +732,48 @@ export default function CeleryOperationsPage() {
         onOpenChange={setCatalogOpen}
         catalog={overview?.task_catalog ?? []}
         runningName={runningName}
-        onRun={(item) => void runCatalogTask(item)}
+        lockDismiss={Boolean(pendingRun)}
+        onRun={setPendingRun}
       />
+
+      {pendingRun ? (
+        <Modal
+          title="确认立即执行"
+          onClose={() => {
+            if (!runningName) setPendingRun(null)
+          }}
+          disableClose={Boolean(runningName)}
+        >
+          <div className="space-y-4 text-sm">
+            <p className="text-[13px] text-muted-foreground">
+              确认立即执行「{pendingRun.display_name}」？本区正在同步时会拒绝重复发起。
+            </p>
+            <div className="rounded-xl border border-border bg-muted/40 p-3 font-mono text-xs break-all">
+              {pendingRun.name}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={Boolean(runningName)}
+                onClick={() => setPendingRun(null)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={Boolean(runningName)}
+                onClick={() => void runCatalogTask(pendingRun)}
+              >
+                <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                {runningName ? "正在发起…" : "确定"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   )
 }

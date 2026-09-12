@@ -1778,12 +1778,17 @@ export async function fetchCeleryOverviewApi(
 
 export async function fetchCeleryHistoryApi(
   accessToken?: string,
-  options: { limit?: number; offset?: number } = {},
+  options: { limit?: number; offset?: number; failedOnly?: boolean } = {},
 ): Promise<CeleryHistoryResponse> {
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
   const offset = Math.max(options.offset ?? 0, 0);
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (options.failedOnly) query.set("failed_only", "true");
   return apiGet<CeleryHistoryResponse>(
-    `/api/v1/celery/history?limit=${limit}&offset=${offset}`,
+    `/api/v1/celery/history?${query.toString()}`,
     accessToken,
   );
 }
