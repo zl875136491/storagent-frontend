@@ -60,7 +60,7 @@ export default function UsageOverviewPage() {
               <tr><th className="px-3 py-2 font-medium">接入方式</th><th className="px-3 py-2 font-medium">网关基址</th><th className="px-3 py-2 font-medium">使用规则</th></tr>
             </thead>
             <tbody>
-              <tr><td className="px-3 py-2 text-foreground">默认</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">http://stor.1oa.com.cn/server/local</td><td className="px-3 py-2 text-muted-foreground">唯一默认基址。local 自动指向当前服务器后端。</td></tr>
+              <tr><td className="px-3 py-2 text-foreground">默认（推荐 HTTPS）</td><td className="px-3 py-2 font-mono text-[11px] text-foreground">https://stor.1oa.com.cn/server/local</td><td className="px-3 py-2 text-muted-foreground">推荐默认基址。local 自动指向当前服务器后端；HTTPS 不可用时可降级为 http://stor.1oa.com.cn/server/local。</td></tr>
             </tbody>
           </table>
         </div>

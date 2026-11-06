@@ -26,3 +26,7 @@ the script as root. It saves the prior container metadata and Nginx directory in
 `/opt/storagent-gateway/backups`, preserves the former frontend container under
 `storagent-frontend-legacy-20260808`, and rolls back automatically if the new
 frontend or Nginx health checks fail.
+
+## HTTPS dual-stack
+
+Production listens on both `:80` and `:443` with the company `*.1oa.com.cn` certificate under `/etc/nginx/ssl/`. Prefer HTTPS for clients; keep HTTP available as a degrade path during migration (no forced redirect / HSTS yet). On Ubuntu nginx 1.24 use `listen 443 ssl http2`, not `http2 on`.
