@@ -175,7 +175,7 @@ export default function ApiGuidePage() {
         </DocNote>
         <DocNote>
           <strong className="text-foreground">默认网关基址：</strong>所有业务系统默认配置
-          <code className="ml-1 font-mono text-[11px]">http://stor.1oa.com.cn/server/local</code>。
+          <code className="ml-1 font-mono text-[11px]">https://stor.1oa.com.cn/server/local</code>（优先 HTTPS；必要时可降级 HTTP）。
           <code className="ml-1 font-mono text-[11px]">local</code> 表示当前部署服务器的 Storagent 后端；无需按部署区域分别维护配置。将
           <code className="ml-1 font-mono text-[11px]">{content.versionPrefix}/...</code> 直接追加到该基址即可。
         </DocNote>
@@ -195,11 +195,11 @@ export default function ApiGuidePage() {
             </thead>
             <tbody>
               {[
-                ["北京", "http://stor.1oa.com.cn/server/bj", "受数据驻留或业务归属约束，必须落到北京区域"],
-                ["天津", "http://stor.1oa.com.cn/server/tj", "固定运行在天津的批处理、集成任务或区域服务"],
-                ["昆山", "http://stor.1oa.com.cn/server/ks", "需要将迁移、补偿或调度任务明确发往昆山"],
-                ["深圳", "http://stor.1oa.com.cn/server/sz", "对象定位或业务策略已明确要求深圳为目标区域"],
-                ["杭州", "http://stor.1oa.com.cn/server/hz", "区域运维、故障处置或受控验收需要访问杭州后端"],
+                ["北京", "https://stor.1oa.com.cn/server/bj", "受数据驻留或业务归属约束，必须落到北京区域"],
+                ["天津", "https://stor.1oa.com.cn/server/tj", "固定运行在天津的批处理、集成任务或区域服务"],
+                ["昆山", "https://stor.1oa.com.cn/server/ks", "需要将迁移、补偿或调度任务明确发往昆山"],
+                ["深圳", "https://stor.1oa.com.cn/server/sz", "对象定位或业务策略已明确要求深圳为目标区域"],
+                ["杭州", "https://stor.1oa.com.cn/server/hz", "区域运维、故障处置或受控验收需要访问杭州后端"],
               ].map(([region, baseUrl, description]) => (
                 <tr key={region} className="border-b border-border/50 last:border-b-0">
                   <td className="px-3 py-2 text-foreground">{region}</td>
@@ -215,7 +215,7 @@ export default function ApiGuidePage() {
           language="bash"
           title="App 后端环境变量与完整调用地址"
           code={`# 默认配置：local 表示当前机器的后端。
-export STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local
+export STORAGENT_BASE_URL=https://stor.1oa.com.cn/server/local
 
 # 所有接口都将 API 路径直接追加到该基址。
 curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
@@ -234,7 +234,7 @@ curl -X POST "$STORAGENT_BASE_URL${content.versionPrefix}/files/object/stat" \
             <Server className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
             <div className="mt-2 text-xs font-semibold text-foreground">Base URL</div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              App 后端默认设置 http://stor.1oa.com.cn/server/local；请求时追加 {content.versionPrefix}/...。
+              App 后端默认设置 https://stor.1oa.com.cn/server/local（优先 HTTPS；HTTPS 不可用时可降级 http://…）；请求时追加 {content.versionPrefix}/...。
             </p>
           </div>
           <div className="rounded-lg border border-border/70 p-3">

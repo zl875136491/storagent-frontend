@@ -269,8 +269,8 @@ from typing import Any
 
 import requests
 
-# 默认基址为 http://stor.1oa.com.cn/server/local，local 指向当前服务器后端。
-BASE_URL = os.getenv("STORAGENT_BASE_URL", "http://stor.1oa.com.cn/server/local").rstrip("/")
+# 推荐默认基址为 https://stor.1oa.com.cn/server/local（优先 HTTPS；必要时可降级 http://stor.1oa.com.cn/server/local）。
+BASE_URL = os.getenv("STORAGENT_BASE_URL", "https://stor.1oa.com.cn/server/local").rstrip("/")
 API_KEY = os.getenv("STORAGENT_API_KEY")
 
 
@@ -824,7 +824,7 @@ export const API_GUIDE_ENDPOINTS: ApiGuideEndpoint[] = [
           { name: "data[].shown_name", type: "string", required: true, description: "区域展示名称" },
           { name: "data[].master", type: "boolean", required: true, description: "是否为该区域主节点" },
           { name: "data[].domain", type: "string", required: true, description: "对外 Nginx 网关域名，例如 stor.1oa.com.cn；不含协议和路径" },
-          { name: "data[].endpoint", type: "string", required: true, description: "基于 domain 的 Storagent 网关基址，例如 http://stor.1oa.com.cn/server/bj" },
+          { name: "data[].endpoint", type: "string", required: true, description: "基于 domain 的 Storagent 网关基址，例如 https://stor.1oa.com.cn/server/bj（优先 HTTPS；可降级同路径 HTTP）" },
           { name: "data[].minio_endpoint", type: "string", required: true, description: "MinIO 内网地址，仅作拓扑和运维信息使用，不能作为浏览器 API 基址" },
         ],
       },
@@ -856,7 +856,7 @@ console.table(data.map(({ name, domain, endpoint, master }) => ({ name, domain, 
       "shown_name": "杭州",
       "master": true,
       "domain": "stor.1oa.com.cn",
-      "endpoint": "http://stor.1oa.com.cn/server/hz",
+      "endpoint": "https://stor.1oa.com.cn/server/hz",
       "minio_endpoint": "http://10.31.133.207:9000"
     }
   ]
@@ -875,7 +875,7 @@ console.table(data.map(({ name, domain, endpoint, master }) => ({ name, domain, 
     notes: ["响应类型为 application/octet-stream，不是 JSON。生产实现应设置超时，并定期重新探测。"],
     examples: {
       browser: `const startedAt = performance.now()
-const response = await fetch("http://stor.1oa.com.cn/server/local/api/v1/public/endpoints/test")
+const response = await fetch("https://stor.1oa.com.cn/server/local/api/v1/public/endpoints/test")
 const payload = new Uint8Array(await response.arrayBuffer())
 console.log({ bytes: payload.byteLength, elapsedMs: performance.now() - startedAt })`,
     },
@@ -1611,7 +1611,7 @@ export function generateApiGuideMarkdown() {
     "",
     "### 给开发者与 AI 的实施目标",
     "",
-    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。默认将 `STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local` 写入 App 后端环境变量，然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `POST /api/v1/files/object/stat` 的完整地址就是 `http://stor.1oa.com.cn/server/local/api/v1/files/object/stat`。只有明确需要指定区域时，才以区域短码替换 `local`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工：App 后端只做会话与鉴权，**上传和下载的文件字节由浏览器直连 Storagent**，不要经 App 后端中转；不要让浏览器前端持有 `x-api-key`。",
+    "使用本文为业务系统实现 Storagent 文件上传、断点续传、元信息查询、跨区域定位和流式下载。服务调用必须使用 Nginx 网关，不再使用区域 IP:6783 直连。推荐将 `STORAGENT_BASE_URL=https://stor.1oa.com.cn/server/local` 写入 App 后端环境变量（优先 HTTPS；HTTPS 不可用时可降级为 `http://stor.1oa.com.cn/server/local`），然后把本文的 `/api/v1/...` 路径直接追加到基址。例如 `POST /api/v1/files/object/stat` 的完整地址就是 `https://stor.1oa.com.cn/server/local/api/v1/files/object/stat`。只有明确需要指定区域时，才以区域短码替换 `local`。生成实现时必须保留这里给出的 HTTP 方法、路径、鉴权位置和字段名，并严格按“控制面 / 数据面”的角色边界分工：App 后端只做会话与鉴权，**上传和下载的文件字节由浏览器直连 Storagent**，不要经 App 后端中转；不要让浏览器前端持有 `x-api-key`。",
     "本文从 API 模块开始使用 `## 模块名`、`### 接口` 的稳定层级。开发者或 AI Agent 可以按需读取一个模块及其全部子接口，而不必扫描无关能力。",
     "",
     "### 可按需加载的 API 模块",
@@ -1620,12 +1620,12 @@ export function generateApiGuideMarkdown() {
     "",
     "### 默认网关基址",
     "",
-    "唯一默认基址为 `http://stor.1oa.com.cn/server/local`。每台服务器都把 `stor.1oa.com.cn` 解析到自身宿主 Nginx；`local` 永远表示发起请求的当前服务器。API 路径中的 `/server/{region}` 前缀会由 Nginx 移除，后端实际收到的仍是 `/api/v1/...`。",
+    "推荐默认基址为 `https://stor.1oa.com.cn/server/local`（优先 HTTPS；网关同时保留 HTTP，必要时可降级 `http://stor.1oa.com.cn/server/local`）。每台服务器都把 `stor.1oa.com.cn` 解析到自身宿主 Nginx；`local` 永远表示发起请求的当前服务器。API 路径中的 `/server/{region}` 前缀会由 Nginx 移除，后端实际收到的仍是 `/api/v1/...`。",
     "",
     markdownTable(
       ["接入方式", "STORAGENT_BASE_URL", "完整接口示例"],
       [
-        ["默认", "`http://stor.1oa.com.cn/server/local`", "`http://stor.1oa.com.cn/server/local/api/v1/public/endpoints`"],
+        ["默认（推荐 HTTPS）", "`https://stor.1oa.com.cn/server/local`", "`https://stor.1oa.com.cn/server/local/api/v1/public/endpoints`（可降级同路径 HTTP）"],
       ],
     ),
     "",
@@ -1636,15 +1636,15 @@ export function generateApiGuideMarkdown() {
     markdownTable(
       ["指定区域", "STORAGENT_BASE_URL", "典型使用场景"],
       [
-        ["北京（bj）", "`http://stor.1oa.com.cn/server/bj`", "数据驻留、业务归属或区域策略要求北京"],
-        ["天津（tj）", "`http://stor.1oa.com.cn/server/tj`", "固定在天津运行的区域服务与批处理"],
-        ["昆山（ks）", "`http://stor.1oa.com.cn/server/ks`", "迁移、补偿或调度任务定向到昆山"],
-        ["深圳（sz）", "`http://stor.1oa.com.cn/server/sz`", "对象定位或业务策略指定深圳"],
-        ["杭州（hz）", "`http://stor.1oa.com.cn/server/hz`", "区域运维、故障处置或受控验收"],
+        ["北京（bj）", "`https://stor.1oa.com.cn/server/bj`", "数据驻留、业务归属或区域策略要求北京"],
+        ["天津（tj）", "`https://stor.1oa.com.cn/server/tj`", "固定在天津运行的区域服务与批处理"],
+        ["昆山（ks）", "`https://stor.1oa.com.cn/server/ks`", "迁移、补偿或调度任务定向到昆山"],
+        ["深圳（sz）", "`https://stor.1oa.com.cn/server/sz`", "对象定位或业务策略指定深圳"],
+        ["杭州（hz）", "`https://stor.1oa.com.cn/server/hz`", "区域运维、故障处置或受控验收"],
       ],
     ),
     "",
-    "App 后端默认配置：`STORAGENT_BASE_URL=http://stor.1oa.com.cn/server/local`。随后请求 `POST ${BASE_URL}/api/v1/files/object/stat`，并仅在 App 后端附加 `x-api-key` 请求头。浏览器页面位于同一网关时可使用相对路径 `/server/local/api/v1/...`；浏览器不得持有 `x-api-key`。",
+    "App 后端推荐配置：`STORAGENT_BASE_URL=https://stor.1oa.com.cn/server/local`（优先 HTTPS；必要时可降级 `http://stor.1oa.com.cn/server/local`）。随后请求 `POST ${BASE_URL}/api/v1/files/object/stat`，并仅在 App 后端附加 `x-api-key` 请求头。浏览器页面位于同一网关时可使用相对路径 `/server/local/api/v1/...`；浏览器不得持有 `x-api-key`。",
     "",
     "### 控制面 / 数据面与能力令牌",
     "",
