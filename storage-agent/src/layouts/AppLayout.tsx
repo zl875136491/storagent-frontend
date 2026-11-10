@@ -245,6 +245,13 @@ function AppShell() {
                     </SidebarMenuButton>
                   )}
                 </NavLink>
+                <NavLink to="/data/basic/tenants" onClick={handleNavClick}>
+                  {({ isActive }) => (
+                    <SidebarMenuButton active={isActive} icon={<Users aria-hidden />}>
+                      租户管理
+                    </SidebarMenuButton>
+                  )}
+                </NavLink>
                 <NavLink to="/data/basic/api-key" onClick={handleNavClick}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon={<KeyRound aria-hidden />}>

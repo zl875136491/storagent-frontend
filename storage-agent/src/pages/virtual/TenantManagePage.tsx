@@ -2,10 +2,16 @@ import { useCallback, useMemo, useState } from "react"
 import { KeyRound, Loader2, Plus, RefreshCw, ShieldAlert } from "lucide-react"
 import {
   createVirtualTenant,
+  fetchTenantOperation,
   fetchVirtualAccount,
   fetchVirtualTenants,
+  issueTenantKey,
+  listTenantKeys,
+  listTenantObjects,
   postTenantAction,
+  revokeTenantKey,
   updateVirtualTenantQuota,
+  type TenantKeyMeta,
   VirtualStorageApiError,
   type TenantCreateResult,
   type VirtualAccountView,
@@ -42,7 +48,7 @@ function occupiedBytes(tenant: VirtualTenant): number {
 }
 
 function messageOf(error: unknown): string {
-  if (error instanceof VirtualStorageApiError) return error.message
+  if (error instanceof VirtualStorageApiError) return `HTTP ${error.status} ${error.message}`
   if (error instanceof Error) return error.message
   return "请求失败"
 }
@@ -57,6 +63,7 @@ export default function TenantManagePage() {
   const [error, setError] = useState("")
   const [creating, setCreating] = useState(false)
   const [issuedKey, setIssuedKey] = useState<TenantCreateResult | null>(null)
+  const [heldKey, setHeldKey] = useState("")
   const [quotaTarget, setQuotaTarget] = useState<VirtualTenant | null>(null)
   const [form, setForm] = useState({
     external_tenant_id: "",
@@ -65,8 +72,21 @@ export default function TenantManagePage() {
     quota_objects: "1000",
   })
   const [quotaForm, setQuotaForm] = useState({ quota_bytes: "", quota_objects: "" })
+  const [filter, setFilter] = useState("")
+  const [selectedId, setSelectedId] = useState("")
+  const [keys, setKeys] = useState<TenantKeyMeta[]>([])
+  const [progress, setProgress] = useState("")
 
   const signedIn = Boolean(account)
+  const visibleTenants = tenants.filter((tenant) => {
+    const query = filter.trim().toLowerCase()
+    if (!query) return true
+    return [tenant.logical_name, tenant.external_tenant_id, tenant.state, tenant.tenant_id]
+      .join(" ")
+      .toLowerCase()
+      .includes(query)
+  })
+  const selected = tenants.find((tenant) => tenant.tenant_id === selectedId) || null
 
   const load = useCallback(async (nextApp = appName, nextCredential = credential) => {
     setLoading(true)
@@ -96,6 +116,7 @@ export default function TenantManagePage() {
   function signOut() {
     sessionStorage.removeItem(CREDENTIAL_KEY)
     setCredential("")
+    setHeldKey("")
     setAccount(null)
     setTenants([])
   }
@@ -111,6 +132,7 @@ export default function TenantManagePage() {
         quota_objects: Number(form.quota_objects),
       })
       setIssuedKey(created)
+      if (created.api_key) setHeldKey(created.api_key)
       setForm((current) => ({ ...current, external_tenant_id: "", logical_name: "" }))
       await load()
     } catch (caught) {
@@ -122,9 +144,64 @@ export default function TenantManagePage() {
 
   async function runAction(tenant: VirtualTenant, action: "freeze" | "unfreeze" | "retire" | "cancel-retire") {
     setError("")
+    setProgress("")
     try {
-      await postTenantAction(appName.trim(), credential, tenant.tenant_id, action)
+      const result = await postTenantAction(appName.trim(), credential, tenant.tenant_id, action)
+      if (action === "retire" && "operation_id" in result && result.operation_id) {
+        setProgress(`注销已提交，操作 ${result.operation_id}`)
+        await load()
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          const operation = await fetchTenantOperation(appName.trim(), credential, result.operation_id)
+          setProgress(`注销进度：${operation.state}`)
+          if (operation.state === "succeeded" || operation.state === "cancelled") break
+          await new Promise((resolve) => window.setTimeout(resolve, 1000))
+        }
+      }
       await load()
+    } catch (caught) {
+      setError(messageOf(caught))
+    }
+  }
+
+  async function openTenant(tenant: VirtualTenant) {
+    setSelectedId(tenant.tenant_id)
+    setError("")
+    try {
+      setKeys(await listTenantKeys(appName.trim(), credential, tenant.tenant_id))
+    } catch (caught) {
+      setKeys([])
+      setError(messageOf(caught))
+    }
+  }
+
+  async function rotateKey(tenant: VirtualTenant) {
+    setError("")
+    try {
+      const issued = await issueTenantKey(appName.trim(), credential, tenant.tenant_id)
+      setIssuedKey(issued)
+      if (issued.api_key) setHeldKey(issued.api_key)
+      setKeys(await listTenantKeys(appName.trim(), credential, tenant.tenant_id))
+    } catch (caught) {
+      setError(messageOf(caught))
+    }
+  }
+
+  async function revokeKey(tenant: VirtualTenant, keyId: string) {
+    setError("")
+    try {
+      await revokeTenantKey(appName.trim(), credential, tenant.tenant_id, keyId)
+      setKeys(await listTenantKeys(appName.trim(), credential, tenant.tenant_id))
+    } catch (caught) {
+      setError(messageOf(caught))
+    }
+  }
+
+  async function checkDataPlane(tenant: VirtualTenant) {
+    setError("")
+    setProgress("")
+    try {
+      const listed = await listTenantObjects(tenant.tenant_id, heldKey)
+      setProgress(`数据面可访问，对象 ${listed.objects.length} 个`)
     } catch (caught) {
       setError(messageOf(caught))
     }
@@ -153,8 +230,25 @@ export default function TenantManagePage() {
     return account.quota_bytes_used + account.quota_bytes_reserved + account.quota_bytes_trashed
   }, [account])
 
+  if (window.location.protocol !== "https:") {
+    const httpsUrl = `https://${window.location.hostname}:18443/data/basic/tenants`
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8" data-testid="tenant-http-gate">
+        <h1 className="text-2xl font-semibold">租户管理</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          当前页面来自 HTTP 入口 {window.location.origin}。虚拟存储的管理凭据和租户 Key 只能通过 HTTPS 提交，因此这里不提供凭据输入框。
+        </p>
+        <Button className="mt-5" type="button" data-testid="tenant-https-link" onClick={() => { window.location.href = httpsUrl }}>
+          前往 HTTPS 租户管理
+        </Button>
+        <p className="mt-3 break-all font-mono text-xs text-muted-foreground">{httpsUrl}</p>
+        <p className="mt-3 text-xs text-muted-foreground">测试证书是自签名的，浏览器会提示不受信任。确认是本测试环境后再继续。旧控制台登录不会自动授予任何虚拟账号的管理权。</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground" data-testid="tenant-https-page">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -175,26 +269,28 @@ export default function TenantManagePage() {
           <CardContent className="grid gap-3 pb-5 md:grid-cols-[1fr_1fr_auto]">
             <div>
               <Label htmlFor="vs-app">应用名</Label>
-              <Input id="vs-app" value={appName} onChange={(event) => setAppName(event.target.value)} />
+              <Input id="vs-app" data-testid="vs-app" value={appName} onChange={(event) => setAppName(event.target.value)} />
             </div>
             <div>
               <Label htmlFor="vs-credential">管理凭据</Label>
               <Input
                 id="vs-credential"
+                data-testid="vs-credential"
                 type="password"
                 value={credential}
                 onChange={(event) => setCredential(event.target.value)}
               />
             </div>
-            <Button className="md:self-end" disabled={loading || !appName.trim() || !credential} onClick={() => void signIn()}>
+            <Button className="md:self-end" data-testid="vs-enter" disabled={loading || !appName.trim() || !credential} onClick={() => void signIn()}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               进入
             </Button>
           </CardContent>
         </Card>
 
+        {progress ? <p className="text-sm text-muted-foreground" data-testid="tenant-progress">{progress}</p> : null}
         {error ? (
-          <div className="flex items-start gap-2 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="flex items-start gap-2 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive" data-testid="tenant-error">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -222,6 +318,7 @@ export default function TenantManagePage() {
                 <Field label="对象数配额" value={form.quota_objects} onChange={(value) => setForm({ ...form, quota_objects: value })} />
                 <Button
                   className="md:col-span-4 md:justify-self-start"
+                  data-testid="vs-create-tenant"
                   disabled={creating || !form.external_tenant_id.trim() || !form.logical_name.trim()}
                   onClick={() => void createTenant()}
                 >
@@ -231,9 +328,33 @@ export default function TenantManagePage() {
               </CardContent>
             </Card>
 
+            {selected ? (
+              <Card data-testid="tenant-detail">
+                <div className="px-5 pt-5">
+                  <h2 className="text-sm font-semibold">{selected.logical_name} 的 Key</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">列表只有提示和状态，没有明文。签发成功后明文只出现一次。</p>
+                </div>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" data-testid="vs-rotate-key" onClick={() => void rotateKey(selected)}>签发新 Key</Button>
+                    {heldKey ? (
+                      <Button size="sm" variant="outline" data-testid="vs-data-plane" onClick={() => void checkDataPlane(selected)}>检查数据面</Button>
+                    ) : null}
+                  </div>
+                  {keys.length === 0 ? <p className="text-sm text-muted-foreground">还没有 Key 记录</p> : keys.map((item) => (
+                    <div key={item.key_id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/50 px-3 py-2 text-sm">
+                      <span className="font-mono text-xs">{item.key_hint} · {item.enabled ? "有效" : "已吊销"}</span>
+                      {item.enabled ? <Button size="sm" variant="destructive" onClick={() => void revokeKey(selected, item.key_id)}>吊销</Button> : null}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : null}
+
             <Card>
               <div className="flex items-center justify-between px-5 pt-5">
                 <h2 className="text-sm font-semibold">租户</h2>
+                <Input data-testid="tenant-filter" className="max-w-xs" placeholder="筛选名称、外部 ID 或状态" value={filter} onChange={(event) => setFilter(event.target.value)} />
                 <Button variant="outline" size="sm" onClick={() => void load()}>
                   <RefreshCw className="h-3.5 w-3.5" />
                   刷新
@@ -255,7 +376,7 @@ export default function TenantManagePage() {
                       <tr>
                         <td colSpan={5} className="py-6 text-muted-foreground">还没有租户</td>
                       </tr>
-                    ) : tenants.map((tenant) => (
+                    ) : visibleTenants.map((tenant) => (
                       <tr key={tenant.tenant_id} className="border-t border-border/70">
                         <td className="py-3 pr-3">
                           <div className="font-medium">{tenant.logical_name}</div>
@@ -274,6 +395,7 @@ export default function TenantManagePage() {
                         </td>
                         <td className="py-3">
                           <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="outline" onClick={() => void openTenant(tenant)}>详情</Button>
                             {tenant.state === "active" ? (
                               <>
                                 <Button size="sm" variant="outline" onClick={() => { setQuotaTarget(tenant); setQuotaForm({ quota_bytes: String(tenant.quota_bytes_total), quota_objects: String(tenant.quota_objects_total) }) }}>配额</Button>
@@ -312,6 +434,7 @@ export default function TenantManagePage() {
               <p>交付窗口已结束，响应里没有明文。</p>
             )}
             <div className="text-xs text-muted-foreground">Key ID：{issuedKey.key_id || "未返回"}</div>
+            <Button data-testid="vs-key-dismiss" onClick={() => setIssuedKey(null)}>我已保存，关闭明文</Button>
             <Button
               variant="outline"
               disabled={!issuedKey.api_key}
@@ -351,7 +474,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
   return (
     <div>
       <Label>{label}</Label>
-      <Input value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input data-testid={`field-${label}`} value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   )
 }

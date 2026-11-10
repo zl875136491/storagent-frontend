@@ -98,7 +98,7 @@ export function App() {
               element={<OAPasswordRequestPage mode="reset" />}
             />
             <Route path="/login_by_code" element={<LoginByCodePage />} />
-            <Route path="/virtual-storage" element={lazyElement(<TenantManagePage />)} />
+            <Route path="/virtual-storage" element={<Navigate to="/data/basic/tenants" replace />} />
 
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
@@ -110,6 +110,7 @@ export function App() {
                   <Route path="basic">
                     <Route path="region" element={lazyElement(<RegionPage />)} />
                     <Route path="application" element={lazyElement(<ApplicationPage />)} />
+                    <Route path="tenants" element={lazyElement(<TenantManagePage />)} />
                     <Route path="api-key" element={lazyElement(<APIKeyPage />)} />
                   </Route>
                   <Route path="minio" element={lazyElement(<MinioPage />)} />

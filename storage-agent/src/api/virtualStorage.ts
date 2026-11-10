@@ -119,6 +119,49 @@ export function updateVirtualTenantQuota(
   })
 }
 
+export interface TenantKeyMeta {
+  key_id: string
+  key_hint: string
+  purpose: string
+  enabled: boolean
+  expires_at: string
+}
+
+export function listTenantKeys(appName: string, credential: string, tenantId: string) {
+  return request<TenantKeyMeta[]>(`${accountPath(appName)}/tenants/${tenantId}/api-keys`, credential)
+}
+
+export function issueTenantKey(appName: string, credential: string, tenantId: string) {
+  return request<TenantCreateResult>(`${accountPath(appName)}/tenants/${tenantId}/api-keys`, credential, {
+    method: "POST",
+    headers: { "Idempotency-Key": crypto.randomUUID() },
+    body: JSON.stringify({}),
+  })
+}
+
+export function revokeTenantKey(appName: string, credential: string, tenantId: string, keyId: string) {
+  return request<{ key_id: string; enabled: boolean }>(
+    `${accountPath(appName)}/tenants/${tenantId}/api-keys/${keyId}`,
+    credential,
+    { method: "DELETE" },
+  )
+}
+
+export async function listTenantObjects(tenantId: string, apiKey: string) {
+  const response = await fetch(`/api/virtual-storage/v1/tenants/${encodeURIComponent(tenantId)}/objects`, {
+    headers: { "X-API-Key": apiKey },
+  })
+  if (!response.ok) throw await parseError(response)
+  return response.json() as Promise<{ objects: unknown[] }>
+}
+
+export function fetchTenantOperation(appName: string, credential: string, operationId: string) {
+  return request<{ operation_id: string; state: string; tenant_id: string }>(
+    `${accountPath(appName)}/operations/${operationId}`,
+    credential,
+  )
+}
+
 export function postTenantAction(
   appName: string,
   credential: string,
