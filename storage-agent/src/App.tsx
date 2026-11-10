@@ -32,6 +32,7 @@ const StorageOperationsPage = lazy(() => import("./pages/admin/StorageOperations
 const ServiceOperationsPage = lazy(() => import("./pages/admin/ServiceOperationsPage"));
 const EtcdOperationsPage = lazy(() => import("./pages/admin/EtcdOperationsPage"));
 const CeleryOperationsPage = lazy(() => import("./pages/admin/CeleryOperationsPage"));
+const TenantManagePage = lazy(() => import("./pages/virtual/TenantManagePage"));
 
 /** 懒加载页面的统一加载占位；AppLayout 保持挂载，仅内容区显示加载态 */
 function lazyElement(node: ReactNode): ReactNode {
@@ -97,6 +98,7 @@ export function App() {
               element={<OAPasswordRequestPage mode="reset" />}
             />
             <Route path="/login_by_code" element={<LoginByCodePage />} />
+            <Route path="/virtual-storage" element={lazyElement(<TenantManagePage />)} />
 
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
