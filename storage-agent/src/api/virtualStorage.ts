@@ -1,4 +1,7 @@
+import { getApiBaseUrl } from "./client"
+
 export interface VirtualAccountView {
+  account_id: string
   app_name: string
   display_name: string
   home_region: string
@@ -159,6 +162,91 @@ export function fetchTenantOperation(appName: string, credential: string, operat
   return request<{ operation_id: string; state: string; tenant_id: string }>(
     `${accountPath(appName)}/operations/${operationId}`,
     credential,
+  )
+}
+
+async function sessionRequest<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers)
+  headers.set("Authorization", `Bearer ${token}`)
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json")
+  const response = await fetch(`${getApiBaseUrl()}${path}`, { ...init, headers })
+  if (!response.ok) throw await parseError(response)
+  if (response.status === 204) return undefined as T
+  return response.json() as Promise<T>
+}
+
+export interface ConsoleAccount extends VirtualAccountView {
+  occupied_bytes: number
+}
+
+export interface ConsoleSession {
+  role: "admin" | "virtual" | "none"
+  accounts: ConsoleAccount[]
+}
+
+export function fetchConsoleSession(token: string) {
+  return sessionRequest<ConsoleSession>("/api/v1/virtual-accounts", token)
+}
+
+export function fetchConsoleTenants(token: string, accountId: string) {
+  return sessionRequest<VirtualTenant[]>(`/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/tenants`, token)
+}
+
+export function createConsoleTenant(token: string, accountId: string, payload: {
+  logical_name: string
+  tenant_credential?: string
+  quota_bytes: number
+  quota_objects: number
+  idempotency_key: string
+}) {
+  return sessionRequest<TenantCreateResult>(`/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/tenants`, token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function updateConsoleQuota(token: string, accountId: string, tenant: VirtualTenant, quotaBytes: number, quotaObjects: number) {
+  return sessionRequest<VirtualTenant>(`/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/tenants/${tenant.tenant_id}`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ quota_bytes: quotaBytes, quota_objects: quotaObjects, revision: tenant.revision }),
+  })
+}
+
+export function consoleTenantAction(token: string, accountId: string, tenantId: string, action: "freeze" | "unfreeze" | "retire" | "cancel-retire") {
+  return sessionRequest<VirtualTenant & { operation_id?: string; state: string }>(
+    `/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/tenants/${encodeURIComponent(tenantId)}/${action}`,
+    token,
+    { method: "POST" },
+  )
+}
+
+export function fetchConsoleKeys(token: string, accountId: string, tenantId: string) {
+  return sessionRequest<TenantKeyMeta[]>(
+    `/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/tenants/${encodeURIComponent(tenantId)}/api-keys`,
+    token,
+  )
+}
+
+export function issueConsoleKey(token: string, accountId: string, tenantId: string) {
+  return sessionRequest<TenantCreateResult>(
+    `/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/tenants/${encodeURIComponent(tenantId)}/api-keys`,
+    token,
+    { method: "POST", body: JSON.stringify({ idempotency_key: crypto.randomUUID() }) },
+  )
+}
+
+export function revokeConsoleKey(token: string, accountId: string, tenantId: string, keyId: string) {
+  return sessionRequest<{ key_id: string; enabled: boolean }>(
+    `/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/tenants/${encodeURIComponent(tenantId)}/api-keys/${encodeURIComponent(keyId)}`,
+    token,
+    { method: "DELETE" },
+  )
+}
+
+export function fetchConsoleOperation(token: string, accountId: string, operationId: string) {
+  return sessionRequest<{ operation_id: string; state: string }>(
+    `/api/v1/virtual-accounts/${encodeURIComponent(accountId)}/operations/${encodeURIComponent(operationId)}`,
+    token,
   )
 }
 

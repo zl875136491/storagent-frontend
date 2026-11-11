@@ -139,6 +139,8 @@ export interface Application {
   quota_usage_ratio: number;
   quota_usage_updated_at: string | null;
   domains: string[];
+  virtual_account?: boolean;
+  virtual_account_name?: string;
   provisioning_status?:
     "pending" | "provisioning" | "ready" | "failed" | "degraded";
   provisioning_error?: string;

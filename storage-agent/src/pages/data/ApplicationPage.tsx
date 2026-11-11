@@ -773,6 +773,12 @@ export default function ApplicationPage() {
                       {formatDateTime(app.enabled_at)}
                     </div>
                   </div>
+                  <div data-testid="application-virtual-account">
+                    <div className="text-muted-foreground/70">虚拟账号管控</div>
+                    <div className="mt-0.5 text-xs text-foreground/80">
+                      {app.virtual_account ? `是 · ${app.virtual_account_name}` : "否"}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-3 border-t border-dashed border-border/70 pt-3">
