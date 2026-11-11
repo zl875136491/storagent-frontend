@@ -245,6 +245,13 @@ function AppShell() {
                     </SidebarMenuButton>
                   )}
                 </NavLink>
+                <NavLink to="/data/basic/virtual-accounts" onClick={handleNavClick}>
+                  {({ isActive }) => (
+                    <SidebarMenuButton active={isActive} icon={<Users aria-hidden />}>
+                      虚拟账号申请
+                    </SidebarMenuButton>
+                  )}
+                </NavLink>
                 <NavLink to="/data/basic/tenants" onClick={handleNavClick}>
                   {({ isActive }) => (
                     <SidebarMenuButton active={isActive} icon={<Users aria-hidden />}>

@@ -6,6 +6,7 @@ export const PERMISSIONS = {
   regionManage: "region_manage",
   storageOperationsManage: "storage_operations_manage",
   userManage: "user_manage",
+  virtualAccountReview: "virtual_account_review",
 } as const
 
 export function hasPermission(

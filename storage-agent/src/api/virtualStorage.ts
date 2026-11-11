@@ -250,6 +250,93 @@ export function fetchConsoleOperation(token: string, accountId: string, operatio
   )
 }
 
+export interface AccountApplication {
+  application_id: string
+  public_account_id: string
+  purpose: string
+  requested_quota_bytes: number
+  requested_quota_objects: number
+  approved_quota_bytes: number
+  approved_quota_objects: number
+  status: string
+  init_status: string
+  owner_username: string
+  revision: number
+  reject_reason: string
+  account_id: string
+  init_error: string
+}
+
+export interface ApplicationPageResult {
+  items: AccountApplication[]
+  page: number
+  page_size: number
+  total: number
+}
+
+export function listAccountApplications(token: string, mine: boolean, page = 1) {
+  const query = `mine=${mine ? 1 : 0}&page=${page}&page_size=20`
+  return sessionRequest<ApplicationPageResult>(`/api/v1/virtual-account-applications?${query}`, token)
+}
+
+export function createAccountApplication(token: string, payload: {
+  public_account_id: string
+  purpose: string
+  requested_quota_bytes: number
+  requested_quota_objects: number
+  idempotency_key: string
+}) {
+  return sessionRequest<AccountApplication>("/api/v1/virtual-account-applications", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function withdrawAccountApplication(token: string, item: AccountApplication) {
+  return sessionRequest<AccountApplication>(`/api/v1/virtual-account-applications/${item.application_id}/withdraw`, token, {
+    method: "POST",
+    body: JSON.stringify({ revision: item.revision }),
+  })
+}
+
+export function approveAccountApplication(token: string, item: AccountApplication, quotaBytes: number, quotaObjects: number) {
+  return sessionRequest<AccountApplication>(`/api/v1/virtual-account-applications/${item.application_id}/approve`, token, {
+    method: "POST",
+    body: JSON.stringify({ revision: item.revision, quota_bytes: quotaBytes, quota_objects: quotaObjects }),
+  })
+}
+
+export function rejectAccountApplication(token: string, item: AccountApplication, reason: string) {
+  return sessionRequest<AccountApplication>(`/api/v1/virtual-account-applications/${item.application_id}/reject`, token, {
+    method: "POST",
+    body: JSON.stringify({ revision: item.revision, reason }),
+  })
+}
+
+export function advanceAccountApplication(token: string, applicationId: string) {
+  return sessionRequest<AccountApplication>(`/api/v1/virtual-account-applications/${applicationId}/advance`, token, { method: "POST" })
+}
+
+export function retryAccountInit(token: string, applicationId: string) {
+  return sessionRequest<AccountApplication>(`/api/v1/virtual-account-applications/${applicationId}/retry-init`, token, { method: "POST" })
+}
+
+export function deliverAccountSecret(token: string, publicId: string) {
+  return sessionRequest<{ public_account_id: string; client_secret: string; credential_version: number }>(
+    `/api/v1/virtual-accounts/${encodeURIComponent(publicId)}/secret-delivery`,
+    token,
+    { method: "POST" },
+  )
+}
+
+export function rotateAccountSecret(token: string, publicId: string, revision: number) {
+  return sessionRequest<{ public_account_id: string; client_secret: string; credential_version: number; revision: number }>(
+    `/api/v1/virtual-accounts/${encodeURIComponent(publicId)}/rotate-secret`,
+    token,
+    { method: "POST", body: JSON.stringify({ revision }) },
+  )
+}
+
 export function postTenantAction(
   appName: string,
   credential: string,
