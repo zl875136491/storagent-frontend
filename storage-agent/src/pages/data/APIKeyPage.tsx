@@ -20,7 +20,16 @@ import { Label } from "../../components/ui/label"
 import { DatePicker } from "../../components/ui/date-picker"
 import { CheckIcon } from "lucide-react"
 import { copyTextToClipboard } from "../../lib/copy-to-clipboard"
-import { formatDateTime } from "../../lib/format"
+import { formatDateTime, parseBackendDate } from "../../lib/format"
+
+function formatApiKeyExpiry(value?: string | null) {
+  const date = parseBackendDate(value)
+  if (!date) return "永久有效"
+  const yearsAhead = (date.getTime() - Date.now()) / (365.25 * 24 * 60 * 60 * 1000)
+  // 未选择日期时，后端写入大约 100 年后的时间，界面仍显示为永久有效。
+  if (yearsAhead > 50) return "永久有效"
+  return formatDateTime(value, "永久有效")
+}
 import { BrandLoading } from "../../components/BrandLoading"
 import { useDocumentTitle } from "../../lib/useDocumentTitle"
 
@@ -214,7 +223,7 @@ export default function APIKeyPage() {
                     </span>
                     <div className="text-[10px] text-muted-foreground/80">失效时间</div>
                     <div className="mt-0.5 text-[11px] font-medium text-primary">
-                      {formatDateTime(item.expired_at, "永久有效")}
+                      {formatApiKeyExpiry(item.expired_at)}
                     </div>
                   </div>
                 </div>
@@ -386,7 +395,7 @@ export default function APIKeyPage() {
               <div>
                 <div className="text-muted-foreground/70">失效时间</div>
                 <div className="mt-0.5 text-foreground/90">
-                  {formatDateTime(createdApiKey.expired_at, "永久有效")}
+                  {formatApiKeyExpiry(createdApiKey.expired_at)}
                 </div>
               </div>
             </div>
