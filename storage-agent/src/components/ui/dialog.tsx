@@ -12,7 +12,10 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
   useEffect(() => {
     if (!open) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onOpenChange?.(false)
+      if (e.key !== "Escape" || e.defaultPrevented) return
+      // 日期弹层也挂在 document 上。它还开着时，Escape 只关弹层，不关外层 Modal。
+      if (document.querySelector("[data-radix-popper-content-wrapper]")) return
+      onOpenChange?.(false)
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)

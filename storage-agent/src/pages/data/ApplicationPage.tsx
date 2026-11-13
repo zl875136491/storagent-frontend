@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { BellRing, Check, Circle, Expand, Gauge, Globe, Loader2, Plus, Settings2, Trash2, XCircle } from "lucide-react"
+import { BellRing, Check, Circle, Expand, Gauge, Globe, Info, Loader2, Plus, Settings2, Trash2, XCircle } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
 import { hasPermission, PERMISSIONS } from "../../auth/permissions"
@@ -387,6 +387,11 @@ export default function ApplicationPage() {
 
     if (!createForm.name.trim()) {
       showErrorToast("请填写 APPID")
+      return
+    }
+
+    if (/[A-Z]/.test(createForm.name)) {
+      showErrorToast("APPID 会作为 MinIO 存储桶名，不能包含大写字母")
       return
     }
 
@@ -936,9 +941,26 @@ export default function ApplicationPage() {
                 />
               </div>
               <div className="md:col-span-2">
-                <Label className="mb-1 block text-xs">
-                  浏览器来源（可选）
-                </Label>
+                <div className="mb-1 flex items-center gap-1">
+                  <Label className="text-xs">
+                    浏览器来源（可选）
+                  </Label>
+                  <span className="group relative inline-flex">
+                    <button
+                      type="button"
+                      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="浏览器来源说明"
+                    >
+                      <Info className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                    <span
+                      role="tooltip"
+                      className="pointer-events-none absolute left-0 bottom-full z-30 mb-1 hidden w-72 rounded-md border border-border bg-popover px-2 py-1.5 text-left text-[11px] leading-5 text-popover-foreground shadow-sm group-hover:block group-focus-within:block"
+                    >
+                      这是浏览器页面的 Origin，用来判断跨域请求能否从该网页发出。它不是 APIKey，也不代替 APIKey 认证。填写 http 或 https 加主机（域名或 IP），端口可写可不写，例如 https://app.example.com:8443。不能带路径、查询、用户名或密码；末尾单独的斜杠会被去掉。可以添加多个，最多 32 个，重复的只保留一次。留空表示这个应用不额外登记来源。这里没有通配符，* 不会代表任意网站。
+                    </span>
+                  </span>
+                </div>
                 <OriginRows
                   origins={createForm.domains}
                   draft={createDomainDraft}
