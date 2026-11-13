@@ -66,7 +66,13 @@ export function DatePicker({
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[210] w-auto p-0">
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        collisionPadding={12}
+        className="z-[260] w-auto p-0"
+        style={{ zIndex: 260 }}
+      >
         <Calendar
           mode="single"
           selected={selected}
@@ -77,6 +83,20 @@ export function DatePicker({
             setOpen(false)
           }}
         />
+        <div className="flex justify-end border-t border-border px-3 py-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              onChange("")
+              setOpen(false)
+            }}
+          >
+            清除日期
+          </Button>
+        </div>
       </PopoverContent>
     </Popover>
   )
@@ -123,7 +143,13 @@ export function DateTimePicker({
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="z-[210] w-auto p-0">
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        collisionPadding={12}
+        className="z-[260] w-auto p-0"
+        style={{ zIndex: 260 }}
+      >
         <Calendar
           mode="single"
           selected={selected}
