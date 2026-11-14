@@ -3,6 +3,13 @@ FROM node:22-alpine AS build
 WORKDIR /app/storage-agent
 
 COPY storage-agent/package.json storage-agent/package-lock.json ./
+# Build-time only. These names are excluded from the committed image config.
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy
 RUN npm ci
 
 COPY storage-agent/ ./
