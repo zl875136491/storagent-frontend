@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { BellRing, Check, Circle, Expand, Gauge, Globe, Info, Loader2, Plus, Settings2, Trash2, XCircle } from "lucide-react"
 import { useSearchParams } from "react-router-dom"
 import { useAuth, useReloadOnBackendChange } from "../../auth/AuthContext"
@@ -112,6 +113,49 @@ function StatusGlyph({
     return <XCircle className="h-3.5 w-3.5 shrink-0 text-destructive" aria-hidden />
   }
   return null
+}
+
+function OriginHint() {
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+  const [box, setBox] = useState<{ top: number; left: number; width: number } | null>(null)
+  const place = () => {
+    const button = buttonRef.current
+    if (!button) return
+    const rect = button.getBoundingClientRect()
+    const width = Math.min(288, window.innerWidth - 16)
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8)
+    const top = Math.min(rect.bottom + 8, window.innerHeight - 88)
+    setBox({ top, left, width })
+  }
+  return (
+    <span
+      className="inline-flex"
+      onMouseEnter={() => { place(); setOpen(true) }}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        ref={buttonRef}
+        type="button"
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="浏览器来源说明"
+        onFocus={() => { place(); setOpen(true) }}
+        onBlur={() => setOpen(false)}
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      {open && box ? createPortal(
+        <span
+          role="tooltip"
+          style={{ position: "fixed", top: box.top, left: box.left, width: box.width, zIndex: 280 }}
+          className="rounded-md border border-border bg-popover px-2 py-1.5 text-left text-[11px] leading-5 text-popover-foreground shadow-sm"
+        >
+          浏览器网页要跨域调用本系统时，把该网页地址登记在这里，浏览器才会放行这类请求。这只处理浏览器跨域，不是 APIKey，也不能代替服务端的访问权限。例如 https://app.example.com:8443。留空表示不额外允许任何浏览器网页来源。
+        </span>,
+        document.body,
+      ) : null}
+    </span>
+  )
 }
 
 function OriginRows({
@@ -945,21 +989,7 @@ export default function ApplicationPage() {
                   <Label className="text-xs">
                     浏览器来源（可选）
                   </Label>
-                  <span className="group relative inline-flex">
-                    <button
-                      type="button"
-                      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-label="浏览器来源说明"
-                    >
-                      <Info className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                    <span
-                      role="tooltip"
-                      className="pointer-events-none absolute left-0 bottom-full z-30 mb-1 hidden w-72 rounded-md border border-border bg-popover px-2 py-1.5 text-left text-[11px] leading-5 text-popover-foreground shadow-sm group-hover:block group-focus-within:block"
-                    >
-                      这是浏览器页面的 Origin，用来判断跨域请求能否从该网页发出。它不是 APIKey，也不代替 APIKey 认证。填写 http 或 https 加主机（域名或 IP），端口可写可不写，例如 https://app.example.com:8443。不能带路径、查询、用户名或密码；末尾单独的斜杠会被去掉。可以添加多个，最多 32 个，重复的只保留一次。留空表示这个应用不额外登记来源。这里没有通配符，* 不会代表任意网站。
-                    </span>
-                  </span>
+                  <OriginHint />
                 </div>
                 <OriginRows
                   origins={createForm.domains}
