@@ -12,14 +12,23 @@ if (import.meta.env.VITE_STORAGENT_ENV === "test") {
   document.title = "Storagent[Test]"
 }
 
+const virtualConsole = window.location.pathname.startsWith("/virtual-storage")
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider>
       <ErrorBoundary>
-        <BackendGate>
-          <App />
-          <Toaster />
-        </BackendGate>
+        {virtualConsole ? (
+          <>
+            <App />
+            <Toaster />
+          </>
+        ) : (
+          <BackendGate>
+            <App />
+            <Toaster />
+          </BackendGate>
+        )}
       </ErrorBoundary>
     </ThemeProvider>
   </StrictMode>,

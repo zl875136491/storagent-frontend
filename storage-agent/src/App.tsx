@@ -32,6 +32,8 @@ const StorageOperationsPage = lazy(() => import("./pages/admin/StorageOperations
 const ServiceOperationsPage = lazy(() => import("./pages/admin/ServiceOperationsPage"));
 const EtcdOperationsPage = lazy(() => import("./pages/admin/EtcdOperationsPage"));
 const CeleryOperationsPage = lazy(() => import("./pages/admin/CeleryOperationsPage"));
+const TenantManagePage = lazy(() => import("./pages/virtual/TenantManagePage"));
+const VirtualAccountApplyPage = lazy(() => import("./pages/virtual/VirtualAccountApplyPage"));
 
 /** 懒加载页面的统一加载占位；AppLayout 保持挂载，仅内容区显示加载态 */
 function lazyElement(node: ReactNode): ReactNode {
@@ -97,6 +99,7 @@ export function App() {
               element={<OAPasswordRequestPage mode="reset" />}
             />
             <Route path="/login_by_code" element={<LoginByCodePage />} />
+            <Route path="/virtual-storage" element={<Navigate to="/data/basic/tenants" replace />} />
 
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
@@ -108,6 +111,8 @@ export function App() {
                   <Route path="basic">
                     <Route path="region" element={lazyElement(<RegionPage />)} />
                     <Route path="application" element={lazyElement(<ApplicationPage />)} />
+                    <Route path="tenants" element={lazyElement(<TenantManagePage />)} />
+                    <Route path="virtual-accounts" element={lazyElement(<VirtualAccountApplyPage />)} />
                     <Route path="api-key" element={lazyElement(<APIKeyPage />)} />
                   </Route>
                   <Route path="minio" element={lazyElement(<MinioPage />)} />
