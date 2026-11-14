@@ -22,7 +22,16 @@ pipeline {
         IMAGE_REPOSITORY = '10.17.158.118/storagent/storagent_frontend'
         // Registry token requests must use the proxied Docker daemon network path.
         BUILDKIT_NO_CLIENT_TOKEN = 'true'
-        NO_PROXY = 'localhost,127.0.0.1,::1,10.17.158.118,10.17.158.156,10.41.102.223,10.32.129.241,10.17.158.115,10.8.136.107,10.31.133.207'
+        // One outbound proxy for npm. Both spellings are set because Docker and
+        // npm do not agree on case. Direct hosts stay off the proxy.
+        OUTBOUND_PROXY = 'http://proxy.1oa.com.cn:3128'
+        DIRECT_HOSTS = 'localhost,127.0.0.1,::1,10.17.158.118,10.17.158.156,10.41.102.223,10.32.129.241,10.17.158.115,10.8.136.107,10.31.133.207,.1oa.com.cn'
+        HTTP_PROXY = "${OUTBOUND_PROXY}"
+        HTTPS_PROXY = "${OUTBOUND_PROXY}"
+        http_proxy = "${OUTBOUND_PROXY}"
+        https_proxy = "${OUTBOUND_PROXY}"
+        NO_PROXY = "${DIRECT_HOSTS}"
+        no_proxy = "${DIRECT_HOSTS}"
     }
 
     stages {
@@ -54,73 +63,19 @@ pipeline {
             }
         }
 
-        stage('Select Build Proxy') {
-            steps {
-                sh(label: 'Probe package registries through available proxies', script: '''#!/usr/bin/env bash
-set -euo pipefail
-
-mapfile -t targets < <(
-  grep -Eho 'https?://[^"[:space:]]+' storage-agent/package.json storage-agent/package-lock.json 2>/dev/null |
-  sed 's/[),;].*$//' | sort -u | head -6
-)
-[ "${#targets[@]}" -gt 0 ] || { echo 'No package registry URLs found' >&2; exit 1; }
-
-mapfile -t candidates < <(
-  for file in /opt/set_proxy_*.sh; do
-    grep -Eho 'https?://[[:alnum:].:-]+:[0-9]+' "$file" 2>/dev/null || true
-  done | sort -u
-)
-candidates+=(DIRECT)
-
-probe() {
-  local proxy="$1" target="$2" code
-  if [ "$proxy" = DIRECT ]; then
-    code=$(env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy curl --noproxy '*' -sS -L --connect-timeout 3 --max-time 8 -o /dev/null -w '%{http_code}' "$target" 2>/dev/null || true)
-  else
-    code=$(env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy curl --proxy "$proxy" -sS -L --connect-timeout 3 --max-time 8 -o /dev/null -w '%{http_code}' "$target" 2>/dev/null || true)
-  fi
-  [[ "$code" =~ ^[234][0-9][0-9]$ ]]
-}
-
-best=''
-best_elapsed=999999
-for proxy in "${candidates[@]}"; do
-  started=$SECONDS
-  passed=0
-  for target in "${targets[@]}"; do
-    probe "$proxy" "$target" && passed=$((passed + 1)) || true
-  done
-  elapsed=$((SECONDS - started))
-  echo "Proxy $proxy: $passed/${#targets[@]} targets passed in $elapsed s"
-  if [ "$passed" -eq "${#targets[@]}" ] && [ "$elapsed" -lt "$best_elapsed" ]; then
-    best="$proxy"
-    best_elapsed="$elapsed"
-  fi
-done
-
-[ -n "$best" ] || { echo 'No proxy passed all package registry probes' >&2; exit 1; }
-if [ "$best" = DIRECT ]; then
-  printf 'export HTTP_PROXY=\nexport HTTPS_PROXY=\nexport http_proxy=\nexport https_proxy=\n' > .selected-build-proxy.env
-else
-  printf 'export HTTP_PROXY=%q\nexport HTTPS_PROXY=%q\nexport http_proxy=%q\nexport https_proxy=%q\n' "$best" "$best" "$best" "$best" > .selected-build-proxy.env
-fi
-echo "Selected build proxy: $best"
-''')
-            }
-        }
-
         stage('Frontend CI') {
             steps {
                 sh(label: 'Run frontend CI in Node 22', script: '''#!/usr/bin/env bash
 set -euo pipefail
 
-. ./.selected-build-proxy.env
-
 docker build \
   --target build \
-  --build-arg HTTP_PROXY \
-  --build-arg HTTPS_PROXY \
-  --build-arg NO_PROXY \
+  --build-arg "HTTP_PROXY=${HTTP_PROXY}" \
+  --build-arg "HTTPS_PROXY=${HTTPS_PROXY}" \
+  --build-arg "http_proxy=${http_proxy}" \
+  --build-arg "https_proxy=${https_proxy}" \
+  --build-arg "NO_PROXY=${NO_PROXY}" \
+  --build-arg "no_proxy=${no_proxy}" \
   --build-arg STORAGENT_API_SERVERS \
   --tag "${CI_IMAGE_REF}" \
   .
@@ -136,14 +91,15 @@ docker build \
                 sh(label: 'Build frontend runtime image', script: '''#!/usr/bin/env bash
 set -euo pipefail
 
-. ./.selected-build-proxy.env
-
 docker build \
   --provenance=false \
   --platform linux/amd64 \
-  --build-arg HTTP_PROXY \
-  --build-arg HTTPS_PROXY \
-  --build-arg NO_PROXY \
+  --build-arg "HTTP_PROXY=${HTTP_PROXY}" \
+  --build-arg "HTTPS_PROXY=${HTTPS_PROXY}" \
+  --build-arg "http_proxy=${http_proxy}" \
+  --build-arg "https_proxy=${https_proxy}" \
+  --build-arg "NO_PROXY=${NO_PROXY}" \
+  --build-arg "no_proxy=${no_proxy}" \
   --build-arg STORAGENT_API_SERVERS \
   --build-arg "VCS_REF=${FRONTEND_GIT_COMMIT}" \
   --tag "${IMAGE_REF}" \
@@ -151,6 +107,10 @@ docker build \
 
 test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.component" }}' "${IMAGE_REF}")" = "frontend"
 test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${IMAGE_REF}")" = "${FRONTEND_GIT_COMMIT}"
+if docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE_REF}" | grep -Eiq '^(HTTP_PROXY|HTTPS_PROXY|http_proxy|https_proxy|NO_PROXY|no_proxy)='; then
+  echo 'Proxy settings leaked into the runtime image environment.' >&2
+  exit 1
+fi
 ''')
             }
         }
@@ -179,6 +139,8 @@ cleanup_registry_session() {
 }
 trap cleanup_registry_session EXIT
 
+# Harbor is on the direct list and is reached without the outbound proxy.
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
 printf '%s' "${HARBOR_PASSWORD}" | docker login "${HARBOR_REGISTRY}" --username "${HARBOR_USERNAME}" --password-stdin
 docker push "${IMAGE_REF}" 2>&1 | tee docker-push.log
 awk '/digest: sha256:/{for (i = 1; i <= NF; i++) if ($i ~ /^sha256:/) {print $i; exit}}' docker-push.log > frontend-image.digest
