@@ -24,14 +24,10 @@ pipeline {
         BUILDKIT_NO_CLIENT_TOKEN = 'true'
         // One outbound proxy for npm. Both spellings are set because Docker and
         // npm do not agree on case. Direct hosts stay off the proxy.
+        // Jenkins stores environment names case-insensitively, so the shell
+        // exports both spellings itself. Defining both here would drop one.
         OUTBOUND_PROXY = 'http://proxy.1oa.com.cn:3128'
         DIRECT_HOSTS = 'localhost,127.0.0.1,::1,10.17.158.118,10.17.158.156,10.41.102.223,10.32.129.241,10.17.158.115,10.8.136.107,10.31.133.207,.1oa.com.cn'
-        HTTP_PROXY = "${OUTBOUND_PROXY}"
-        HTTPS_PROXY = "${OUTBOUND_PROXY}"
-        http_proxy = "${OUTBOUND_PROXY}"
-        https_proxy = "${OUTBOUND_PROXY}"
-        NO_PROXY = "${DIRECT_HOSTS}"
-        no_proxy = "${DIRECT_HOSTS}"
     }
 
     stages {
@@ -67,6 +63,12 @@ pipeline {
             steps {
                 sh(label: 'Run frontend CI in Node 22', script: '''#!/usr/bin/env bash
 set -euo pipefail
+export HTTP_PROXY="$OUTBOUND_PROXY"
+export HTTPS_PROXY="$OUTBOUND_PROXY"
+export http_proxy="$OUTBOUND_PROXY"
+export https_proxy="$OUTBOUND_PROXY"
+export NO_PROXY="$DIRECT_HOSTS"
+export no_proxy="$DIRECT_HOSTS"
 
 docker build \
   --target build \
@@ -90,6 +92,12 @@ docker build \
             steps {
                 sh(label: 'Build frontend runtime image', script: '''#!/usr/bin/env bash
 set -euo pipefail
+export HTTP_PROXY="$OUTBOUND_PROXY"
+export HTTPS_PROXY="$OUTBOUND_PROXY"
+export http_proxy="$OUTBOUND_PROXY"
+export https_proxy="$OUTBOUND_PROXY"
+export NO_PROXY="$DIRECT_HOSTS"
+export no_proxy="$DIRECT_HOSTS"
 
 docker build \
   --provenance=false \
